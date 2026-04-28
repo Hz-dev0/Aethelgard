@@ -5815,24 +5815,26 @@ function toggleTask(id) {
     state.done = state.tasks.filter(x => x.done).length;
     showCelebration(t);
     checkRewardUnlocks();
+    // If interval-recurring, schedule next occurrence BEFORE onTaskCompleted
+    // so the 💎 碎片 toast from onTaskCompleted is the last one shown (not overwritten by 🔁 toast)
+    if (t.recurring && t.recurMode === 'interval') {
+      const cloneId = scheduleIntervalTask(t);
+      // Mark with clone id so undo can remove the future clone
+      t._intervalCompleted = true;
+      t._intervalCloneId = cloneId;
+    }
     onTaskCompleted(t);
     if (t.reward) { setTimeout(() => showInstantRewardPopup(t.reward), 2900); }
-    // If interval-recurring, schedule next occurrence then remove the completed original
-    if (t.recurring && t.recurMode === 'interval') {
-      // Archive to doneHistory BEFORE removing so it appears in completed records
-      if (!state.doneHistory) state.doneHistory = [];
-      const archiveKey = t.id + '_' + t.completedAt;
-      if (!state.doneHistory.some(h => h.id === archiveKey)) {
-        state.doneHistory.push({ id: archiveKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: true });
-      }
-      scheduleIntervalTask(t);
-      // Remove the completed original — the clone is the new single instance
-      state.tasks = state.tasks.filter(x => x.id !== t.id);
-      // 移除後以實際陣列重算，避免 done 計數與任務列表不同步
-      state.done = state.tasks.filter(x => x.done).length;
-    }
+    // Recalculate done count (interval task stays in array as done)
+    state.done = state.tasks.filter(x => x.done).length;
   } else {
     t.completedAt = null; // clear completion date when unchecking
+    // ── 間隔重複任務撤銷：刪除已排好的下次 clone，還原本任務為未完成 ──
+    if (t._intervalCompleted && t._intervalCloneId) {
+      state.tasks = state.tasks.filter(x => x.id !== t._intervalCloneId);
+    }
+    t._intervalCompleted = false;
+    t._intervalCloneId = null;
     state.done = state.tasks.filter(x => x.done).length;
     state.doneOpen = true;
     onTaskUncompleted(t);
@@ -5840,6 +5842,8 @@ function toggleTask(id) {
   renderTasks();
   renderStats();
   renderTree();
+  renderTodayPanel();
+  saveStateLocal(); // 確保 wishPoints 等狀態在 cloud sync 前已寫入本地
   syncToCloud();
 }
 
@@ -5974,6 +5978,7 @@ function scheduleIntervalTask(t) {
   } else {
     showToast(`🔁 ${days} 天後「${t.name}」將自動出現在今日任務`);
   }
+  return clone.id; // return clone id so caller can store it for undo
 }
 
 // ── Auto-schedule tasks by taskDate or interval scheduledFor ──
@@ -6213,6 +6218,7 @@ function onTaskCompleted(task) {
     // 碎片 (wishPoints) 一律+1（充電任務除外）
     if (state.wishPoints === undefined) state.wishPoints = 0;
     state.wishPoints++;
+    saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
     renderRewards();
 
     if (!isDaily) {
@@ -6222,7 +6228,7 @@ function onTaskCompleted(task) {
       if (available > 0 && available === lotteryState.todayDone) {
         // 有獎池才提示抽卡
         const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
-        showToast(hasWishes ? '🎫 獲得抽卡機會！去抽獎區翻牌吧' : '💎 獲得願望碎片！');
+        showToast(hasWishes ? '🎫 獲得抽卡機會！去抽獎區翻牌吧' : '💎 +1 願望碎片！');
       }
       // 𖦏專注任務 20% 機率額外多一張
       if (isFocus && Math.random() < 0.2) {
@@ -6266,6 +6272,7 @@ function onTaskUncompleted(task) {
   if (!isCharge) {
     if (state.wishPoints === undefined) state.wishPoints = 0;
     state.wishPoints = Math.max(0, state.wishPoints - 1);
+    saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
     renderRewards();
     if (!isDaily) {
       const minDone = (lotteryState.todayFlipped || 0);
@@ -6385,6 +6392,7 @@ function flipCard(i) {
     // 格言牌（含格言和 placeholder）
     if (state.wishPoints === undefined) state.wishPoints = 0;
     state.wishPoints++;
+    saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
     renderRewards();
     syncToCloud();
     showToast('💎 +1 願望碎片（格言牌安慰獎）');
@@ -6749,16 +6757,24 @@ function undoneTask(id) {
     showToast('⚠ 只能取消當日完成的任務');
     return;
   }
+  // ── 間隔重複任務撤銷：刪除已排好的下次 clone，還原本任務為未完成 ──
+  if (t._intervalCompleted && t._intervalCloneId) {
+    state.tasks = state.tasks.filter(x => x.id !== t._intervalCloneId);
+  }
   t.done = false;
   t.completedAt = null;
+  t._intervalCompleted = false;
+  t._intervalCloneId = null;
   state.done = state.tasks.filter(x => x.done).length;
   onTaskUncompleted(t);
   renderStats();
   renderTasks();
   renderTree();
+  renderTodayPanel();
   checkAchievements();
   renderRewards();
   showToast('↩ 已恢復為未完成');
+  saveStateLocal();
   syncToCloud();
 }
 
