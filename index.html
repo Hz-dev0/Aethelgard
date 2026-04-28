@@ -1329,6 +1329,13 @@
     color: var(--text-dim);
   }
   .cal-day.empty { opacity: 0; pointer-events: none; }
+  .cal-day.goal-achieved {
+    background: rgba(201,162,39,0.18) !important;
+    border: 1.5px solid rgba(201,162,39,0.55) !important;
+    box-shadow: inset 0 0 0 1px rgba(201,162,39,0.25);
+  }
+  .cal-day.goal-achieved .cal-day-date { color: #b8901e; font-weight: 700; }
+  .cal-day.goal-achieved.today .cal-day-date { color: #b8901e; }
   /* heatmap levels */
   .cal-day.heat-0 { background: transparent; }
   .cal-day.heat-1 { background: rgba(100,170,230,0.15); border-color: rgba(100,170,230,0.2); color: var(--text); cursor: pointer; }
@@ -2213,8 +2220,9 @@
       width: 26px; height: 26px;
       font-size: 12px;
       padding: 10px;
-      margin: -10px;
-      margin-left: 4px;
+      margin-top: -10px;
+      margin-bottom: -10px;
+      margin-right: -10px;
     }
   }
   .routine-item.done-routine .routine-check { background: var(--green); border-color: var(--green); }
@@ -2435,7 +2443,7 @@
           <div class="lottery-info">
             <div class="lottery-ticket">🎫 抽卡券 <strong id="lotteryTickets">0</strong> 張</div>
             <span id="todayDone" style="display:none">0</span>
-            <button class="lottery-draw-btn" id="lotteryDrawBtn">✦ 洗牌</button>
+
           </div>
           <div class="lottery-grid" id="lotteryGrid"></div>
           <div style="font-size:11px;color:var(--text-faint);margin-top:12px;text-align:center">核心任務完成得抽卡券 · 日常維運得💎碎片 · 𖦏專注任務20%機率多一券 · ⚡充電任務不計入</div>
@@ -4594,7 +4602,7 @@ async function init() {
       } else {
         // 同一天：reconcile todayDone
         // 計算「目前仍在 tasks 裡的今日完成數」＋「已從 tasks 移除但計入 doneHistory 的今日完成數」
-        // 後者涵蓋：非重複任務被 daily reset 刪除、interval 任務完成後立即移除
+        // 後者涵蓋：非重複任務被 daily reset 刪除（interval 任務完成後保留在 tasks，換日才清除）
         const _activeDoneToday = state.tasks.filter(t => t.done && t.completedAt === _today).length;
         const _historyDoneToday = (state.doneHistory || []).filter(h => h.completedAt === _today).length;
         const _trueDoneToday = _activeDoneToday + _historyDoneToday;
@@ -5255,7 +5263,11 @@ function clearGoalFilter() {
 function _isFutureIntervalTask(t, todayStr) {
   if (!t._intervalScheduled && !(t.recurring && t.recurMode === 'interval')) return false;
   if (!t.scheduledFor) return false;
-  return t.scheduledFor > todayStr;
+  if (t.scheduledFor > todayStr) return true;
+  // Clone scheduled for today: hide it if the original task is still alive and marked _intervalCompleted
+  // (original and clone coexist until daily reset — avoid showing duplicate task names)
+  const originalStillAlive = state.tasks.some(x => x._intervalCloneId === t.id && x._intervalCompleted);
+  return originalStillAlive;
 }
 
 // ── Tasks ──
@@ -6138,8 +6150,14 @@ function getTodayKey() {
 }
 
 function generateRandomMission() {
-  // Pick 1–3 random undone tasks (no taskDate) as mission targets — called only when gold card is flipped
-  const undone = state.tasks.filter(t => !t.done && !t.taskDate);
+  // Pick 1–3 random undone tasks as mission targets — called only when gold card is flipped
+  // Exclude: done/completed tasks, future-only taskDate tasks, cancelled, future interval clones
+  const todayStr = localDateStr();
+  const undone = state.tasks.filter(t =>
+    !t.done &&
+    !t.taskDate &&                                          // 無固定日期（未來才到）
+    !_isFutureIntervalTask(t, todayStr)                     // 排除未來才出現的 interval clone
+  );
   if (undone.length === 0) return null;
   const shuffled = [...undone].sort(() => Math.random() - 0.5);
   const count = Math.min(Math.floor(Math.random() * 3) + 1, shuffled.length); // 1–3
@@ -6224,11 +6242,13 @@ function onTaskCompleted(task) {
     if (!isDaily) {
       // 核心任務：給抽卡機會
       lotteryState.todayDone++;
+      // 永遠顯示碎片 toast；若有翻牌機會且有獎池，額外提示抽卡
+      const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
       const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
-      if (available > 0 && available === lotteryState.todayDone) {
-        // 有獎池才提示抽卡
-        const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
-        showToast(hasWishes ? '🎫 獲得抽卡機會！去抽獎區翻牌吧' : '💎 +1 願望碎片！');
+      if (available > 0 && hasWishes) {
+        showToast('🎫 +1 碎片！獲得翻牌機會，去抽獎區翻吧');
+      } else {
+        showToast('💎 +1 願望碎片！');
       }
       // 𖦏專注任務 20% 機率額外多一張
       if (isFocus && Math.random() < 0.2) {
@@ -6281,7 +6301,6 @@ function onTaskUncompleted(task) {
   }
   checkRandomMissionProgress();
   saveLottery();
-  syncToCloud();
   renderLottery();
 }
 
@@ -6357,12 +6376,51 @@ function drawLottery() {
   } else {
     renderLottery();
   }
-  showToast('🔀 已洗牌');
 }
 
 function flipCard(i) {
+  // 每次翻牌都先洗牌，播特效後翻開選的那張
+  const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
+  if (available <= 0) {
+    showToast('🎫 還沒有翻牌機會，完成任務來獲得！');
+    return;
+  }
+  // Shuffle
+  lotteryState.randomMission = null;
+  const deck = buildCardPool();
+  lotteryState.cards = deck.map(item => ({
+    revealed: false,
+    text: item.text || '',
+    icon: item.icon || '',
+    isWish: item.isWish || false,
+    wishId: item.wishId || null,
+    isRandomMission: item.isRandomMission || false,
+  }));
+  saveLottery();
+  syncToCloud();
+  const grid = document.getElementById('lotteryGrid');
+  if (grid) {
+    grid.classList.add('shuffling');
+    grid.innerHTML = Array.from({length:9}, (_, idx) => `
+      <div class="lottery-card shuffle-anim" id="lcard-${idx}" style="animation-delay:${idx * 40}ms">
+        <div class="lottery-card-back">
+          <div class="card-face-icon">✦</div>
+          <div class="card-face-hint">洗牌中…</div>
+        </div>
+      </div>`).join('');
+    setTimeout(() => {
+      grid.classList.remove('shuffling');
+      renderLottery();
+      setTimeout(() => _doFlipCard(i), 80);
+    }, 480);
+  } else {
+    renderLottery();
+    setTimeout(() => _doFlipCard(i), 80);
+  }
+}
+
+function _doFlipCard(i) {
   if (!lotteryState.cards[i] || lotteryState.cards[i].revealed) return;
-  // Available flips = floor(todayDone/3) - todayFlipped
   const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
   if (available <= 0) {
     showToast('🎫 還沒有翻牌機會，完成任務來獲得！');
@@ -6376,7 +6434,16 @@ function flipCard(i) {
 
   // 翻到金色牌當下才指定隨機任務
   if (card.isRandomMission) {
-    if (!lotteryState.randomMission || lotteryState.randomMission.awarded) {
+    // 重新 generate 的條件：
+    // 1. 沒有 randomMission，或上次已 awarded
+    // 2. 現有任務裡，所有指派的 taskId 都已完成（今日完成前就被指派的情況）
+    const existingRm = lotteryState.randomMission;
+    const allAlreadyDone = existingRm && !existingRm.awarded && existingRm.taskIds &&
+      existingRm.taskIds.every(id => {
+        const t = state.tasks.find(x => x.id === id);
+        return !t || t.done; // 找不到（已刪）或已完成
+      });
+    if (!existingRm || existingRm.awarded || allAlreadyDone) {
       lotteryState.randomMission = generateRandomMission();
     }
     card.missionSnapshot = lotteryState.randomMission
@@ -6467,21 +6534,12 @@ function flipCard(i) {
 function renderLottery() {
   const ticketEl = document.getElementById('lotteryTickets');
   const progressEl = document.getElementById('todayDone');
-  const drawBtn = document.getElementById('lotteryDrawBtn');
   const rm = lotteryState.randomMission;
   if (!ticketEl) return;
   // available flips today
   const availableFlips = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
   ticketEl.textContent = Math.max(0, availableFlips);
-  if (drawBtn) {
-    drawBtn.disabled = false;
-    drawBtn.title = '重新洗牌（不消耗券）';
-    // Re-wire each render to fix mobile onclick issues
-    const newBtn = drawBtn.cloneNode(true);
-    drawBtn.parentNode.replaceChild(newBtn, drawBtn);
-    newBtn.addEventListener('click', drawLottery);
-    newBtn.addEventListener('touchend', function(e){ e.preventDefault(); drawLottery(); });
-  }
+
 
   // lotteryProgress 已移除，不顯示碎片於抽獎區
 
@@ -6740,6 +6798,10 @@ function deletePastDoneTask(id) {
   if (!alreadyInHistory) {
     state.doneHistory.push({ id: histKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: t.recurring || false });
   }
+  // 間隔重複任務：同時刪除已排好的下次 clone
+  if (t._intervalCompleted && t._intervalCloneId) {
+    state.tasks = state.tasks.filter(x => x.id !== t._intervalCloneId);
+  }
   state.tasks = state.tasks.filter(x => x.id !== id);
   state.done = state.tasks.filter(x => x.done).length;
   renderStats();
@@ -6789,6 +6851,10 @@ function deleteTaskFromStats(id) {
         state.doneHistory.push({ id: histKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: t.recurring || false });
       }
       if (state.done > 0) state.done--;
+    }
+    // 間隔重複任務：同時刪除已排好的下次 clone，避免孤立的 clone 留在任務列表
+    if (t._intervalCompleted && t._intervalCloneId) {
+      state.tasks = state.tasks.filter(x => x.id !== t._intervalCloneId);
     }
     state.tasks = state.tasks.filter(x => x.id !== id);
     renderStats();
@@ -7435,6 +7501,18 @@ function renderDoneCalendar(doneTasks, container) {
     byDate[d].push(t);
   });
 
+  // Build date → goalAchieved map: true if ALL treeNode goals met that day
+  const goalAchievedDates = new Set();
+  const allDates = Object.keys(byDate);
+  allDates.forEach(dateStr => {
+    const tasks = byDate[dateStr];
+    const allMet = treeNodes.every(n => {
+      const cnt = tasks.filter(t => t.goal === n.key).length;
+      return cnt >= Math.max(1, n.dailyGoal || 1);
+    });
+    if (allMet) goalAchievedDates.add(dateStr);
+  });
+
   const today = localDateStr();
   const firstDay = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
@@ -7470,9 +7548,10 @@ function renderDoneCalendar(doneTasks, container) {
     const heat = heatLevel(n);
     const isToday = dateStr === today;
     const clickable = n > 0;
-    html += `<div class="cal-day heat-${heat}${isToday ? ' today' : ''}"
+    const isGoalDay = goalAchievedDates.has(dateStr);
+    html += `<div class="cal-day heat-${heat}${isToday ? ' today' : ''}${isGoalDay ? ' goal-achieved' : ''}"
       ${clickable ? `onclick="showCalPopup(event,'${dateStr}')"` : ''}
-      title="${n > 0 ? n + ' 件完成' : ''}"
+      title="${isGoalDay ? '🏆 達成每日目標！' : ''}${n > 0 ? n + ' 件完成' : ''}"
     >
       <span class="cal-day-date">${day}</span>
       ${n > 0 ? `<span class="cal-day-count">${n}</span>` : ''}
@@ -7486,6 +7565,9 @@ function renderDoneCalendar(doneTasks, container) {
     <div class="cal-legend-box" style="background:rgba(60,130,200,0.32);border:1px solid rgba(60,130,200,0.4)"></div>
     <div class="cal-legend-box" style="background:rgba(30,90,170,0.55);border:1px solid rgba(30,90,170,0.6)"></div>
     <span>多</span>
+    <span style="margin-left:10px;color:var(--text-faint)">│</span>
+    <div class="cal-legend-box" style="background:rgba(201,162,39,0.18);border:1.5px solid rgba(201,162,39,0.55)"></div>
+    <span style="font-size:11px;color:var(--text-faint)">達成每日目標</span>
   </div>`;
   container.innerHTML = html;
 }
