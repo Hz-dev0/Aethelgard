@@ -3788,7 +3788,8 @@ const treeNodes = [
 function renderTree() {
   const grid = document.getElementById('treeGrid');
   if (!grid) return;
-  const todayStr = localDateStr();
+  // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
+  const todayStr = localDateStr(new Date(getLastResetTimestamp()));
   const r = 28, circ = 2 * Math.PI * r;
   // Load persisted dailyGoals if available
   const savedGoals = JSON.parse(localStorage.getItem('innerflow_dailyGoals') || '{}');
@@ -4351,6 +4352,18 @@ function isScheduledInCurrentCycle(task) {
   return task.scheduledAt >= getLastResetTimestamp();
 }
 
+// 判斷任務是否為「預排」狀態：
+// 在 00:00~重置時間 之間被標記為今日（時鐘已是新的一天，但週期還未重置）
+// 這類任務是使用者預排給下一個週期用的，用銀色條區分，重置後自動變正常今日
+function isPreScheduled(task) {
+  if (!task.scheduledAt || task.done) return false;
+  const lastReset = getLastResetTimestamp();
+  const clockMidnight = new Date();
+  clockMidnight.setHours(0, 0, 0, 0);
+  // 預排條件：上次重置點在今天 00:00 之前（重置還沒到），且標記時間在 00:00 之後
+  return lastReset < clockMidnight.getTime() && task.scheduledAt >= clockMidnight.getTime();
+}
+
 let _resetRunning = false;
 function runDailyReset() {
   if (_resetRunning) return;
@@ -4592,7 +4605,8 @@ async function init() {
     state._initDone = true;
     if (ok) {
       // 雲端資料載入後：確保 lotteryState 日期正確（可能跨日），並對齊實際完成數
-      const _today = localDateStr();
+      // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
+      const _today = localDateStr(new Date(getLastResetTimestamp()));
       if (lotteryState.todayDate !== _today) {
         // 跨日：重置當日計數
         lotteryState.todayDate = _today;
@@ -5309,7 +5323,7 @@ function renderTasks() {
   }
 
   // Done section — only show today's completed tasks; past completed tasks belong in 成長軌跡
-  const todayDoneTasks = doneTasks.filter(t => t.completedAt === localDateStr());
+  const todayDoneTasks = doneTasks.filter(t => t.completedAt === localDateStr(new Date(getLastResetTimestamp())));
   if (todayDoneTasks.length > 0) {
     const isOpen = state.doneOpen;
     html += `
@@ -5399,25 +5413,34 @@ function taskHTML(t) {
 
   // Due date / status logic
   const todayStr = localDateStr();
+  // 有效今日：重置時間決定，00:00~重置時間之間仍屬上個週期
+  const effectiveTodayStr = localDateStr(new Date(getLastResetTimestamp()));
   const isToday = t.scheduledFor === todayStr;
   const isCancelled = t.status === 'cancelled';
-  // 若任務的 scheduledFor 是昨天，但 scheduledAt（標記時間）是在上次重置之後
-  // 代表是 00:00~重置時間 之間預先安排的，不算逾期
-  const isOverdue = t.scheduledFor && t.scheduledFor < todayStr && !t.done && !isCancelled
-    && !isScheduledInCurrentCycle(t);
+  // 逾期：scheduledFor 比有效今日舊（即上個重置週期之前的），且非預排
+  // 上個週期標記的任務（4/30的任務在4/30 04:00前都不算逾期，過了才算）
+  const isOverdue = t.scheduledFor && t.scheduledFor < effectiveTodayStr && !t.done && !isCancelled
+    && !isPreScheduled(t);
 
-  // Side stripe color: overdue = red, today-marked = gold, default = blue
+  // 預排：在 00:00~重置時間 之間標記的任務，銀色條提示「等待重置後生效」
+  const isPreSched = !t.done && !isCancelled && isPreScheduled(t);
+
+  // Side stripe color: overdue = red, pre-scheduled = silver, today-marked = gold, default = blue
   let stripeColor, stripeTitle, stripeOnClick;
   if (t.done) {
     stripeColor = 'rgba(130,154,177,0.25)';
     stripeOnClick = '';
     stripeTitle = '';
   } else if (isOverdue) {
-    // Overdue: red stripe, click to un-mark (remove scheduledFor)
     stripeColor = 'var(--rose)';
     stripeTitle = '逾期 — 點擊取消標記';
     stripeOnClick = `onclick="setTaskStatus(${t.id},'none');event.stopPropagation()"`;
-  } else if (isToday) {
+  } else if (isPreSched) {
+    // 預排（00:00~重置時間）：銀色條，重置後自動變金黃
+    stripeColor = 'rgba(160,170,185,0.75)';
+    stripeTitle = '預排於重置後執行 — 點擊取消';
+    stripeOnClick = `onclick="setTaskStatus(${t.id},'none');event.stopPropagation()"`;
+  } else if (isToday || isScheduledInCurrentCycle(t)) {
     // Marked today: gold stripe, click to un-mark
     stripeColor = '#C9A227';
     stripeTitle = '今日處理中 — 點擊取消';
@@ -5613,8 +5636,11 @@ function renderTodayPanel() {
   const countBadge = document.getElementById('todayPanelCount');
   if (!list) return;
   const todayStr = localDateStr();
+  // 有效今日：重置時間決定，00:00~重置時間之間仍屬上個週期
+  const effectiveTodayStr = localDateStr(new Date(getLastResetTimestamp()));
   const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && !t.done && t.status !== 'cancelled');
-  // Also include overdue tasks that are still pending
+  // 上個週期標記但未完成的任務（scheduledFor >= effectiveTodayStr 代表還在本週期，正常顯示）
+  // scheduledFor < effectiveTodayStr 才是真正的跨週期逾期，但仍顯示在面板讓使用者處理
   const overdueTasks = state.tasks.filter(t =>
     t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled'
   );
@@ -5639,10 +5665,14 @@ function renderTodayPanel() {
   const goalIconMap = { 技能:'🌟', 自我:'🌿', 日常:'🏠', 任意:'🌈' };
   list.innerHTML = allToday.map((t, idx) => {
     const gIcon = goalIconMap[t.goal] || '●';
-    const isOverdue = t.scheduledFor < todayStr && !isScheduledInCurrentCycle(t);
-    const overdueStyle = isOverdue && !t.done ? 'border-color:rgba(192,86,90,0.3);background:rgba(192,86,90,0.04);' : '';
-    const stripeColor = isOverdue && !t.done ? 'var(--rose)' : '#C9A227';
-    const stripeTitle = isOverdue && !t.done ? '逾期 — 點擊取消標記' : '今日處理中 — 點擊取消標記';
+    // 逾期：scheduledFor 比有效今日（重置時間）舊，且非預排
+    // 4/30的任務在4/30 04:00重置前不算逾期，重置後才顯示逾期
+    const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;
+    // 預排：00:00~重置時間之間標記，銀色條
+    const isPreSched = isPreScheduled(t) && !t.done;
+    const overdueStyle = isOverdue ? 'border-color:rgba(192,86,90,0.3);background:rgba(192,86,90,0.04);' : '';
+    const stripeColor = isOverdue ? 'var(--rose)' : isPreSched ? 'rgba(160,170,185,0.75)' : '#C9A227';
+    const stripeTitle = isOverdue ? '逾期 — 點擊取消標記' : isPreSched ? '預排於重置後執行 — 點擊取消' : '今日處理中 — 點擊取消標記';
     return `<div class="today-task-chip${t.done ? ' done-chip' : ''}"
       style="${overdueStyle}cursor:grab;position:relative;padding-left:18px;overflow:hidden"
       data-idx="${idx}" data-id="${t.id}"
@@ -5657,8 +5687,9 @@ function renderTodayPanel() {
       <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序">⠿</span>
       <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id});renderTodayPanel()">${t.done ? '✓' : ''}</div>
       <span class="today-chip-goal">${gIcon}</span>
-      <span class="today-chip-name" style="${isOverdue && !t.done ? 'color:var(--rose)' : ''}">${escHtml(t.name)}</span>
-      ${isOverdue && !t.done ? '<span style="font-size:10px;color:var(--rose);flex-shrink:0;font-weight:600">逾期</span>' : ''}
+      <span class="today-chip-name" style="${isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(t.name)}</span>
+      ${isOverdue ? '<span style="font-size:10px;color:var(--rose);flex-shrink:0;font-weight:600">逾期</span>' : ''}
+      ${isPreSched ? '<span style="font-size:10px;color:var(--text-faint);flex-shrink:0">預排</span>' : ''}
       ${!t.done ? `<span class="btn-del-icon" style="font-size:12px;flex-shrink:0;padding:1px 5px;border-radius:4px" onclick="event.stopPropagation();deleteTodayTask(${t.id})" title="刪除此任務">🗑</span>` : ''}
     </div>`;
   }).join('');
@@ -6146,7 +6177,8 @@ let lotteryState = {
 };
 
 function getTodayKey() {
-  return localDateStr();
+  // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
+  return localDateStr(new Date(getLastResetTimestamp()));
 }
 
 function generateRandomMission() {
@@ -6616,7 +6648,8 @@ function renderLottery() {
 
 // ── Stats ──
 function renderStats() {
-  const todayStr = localDateStr();
+  // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
+  const todayStr = localDateStr(new Date(getLastResetTimestamp()));
   const allDoneTasks = state.tasks.filter(t => t.done);
   const historyTasks = state.doneHistory || [];
   // Recalculate state.done to stay in sync with actual task data
