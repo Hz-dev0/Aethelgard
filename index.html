@@ -9076,11 +9076,25 @@ window.addEventListener('load', () => {
 });
 
 // 頁面隱藏（切分頁、關閉）時，若有待推的筆記變更，立刻觸發同步
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && _notesSyncTimer !== null) {
-    clearTimeout(_notesSyncTimer);
-    _notesSyncTimer = null;
+// 頁面重新顯示時，從雲端拉最新資料（解決多裝置不自動更新問題）
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'hidden') {
+    // 隱藏：推送待同步的筆記變更
+    if (_notesSyncTimer !== null) {
+      clearTimeout(_notesSyncTimer);
+      _notesSyncTimer = null;
+    }
     if (typeof syncToCloud === 'function') syncToCloud();
+  } else if (document.visibilityState === 'visible' && state._initDone && typeof getApiUrl === 'function' && getApiUrl()) {
+    // 重新顯示：拉雲端最新資料並重新渲染
+    const ok = await loadFromCloud();
+    if (ok) {
+      renderEnergyDots();
+      renderSandbox();
+      renderAll();
+      checkTaskDates();
+      initRoutines();
+    }
   }
 });
 
