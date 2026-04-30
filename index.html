@@ -7964,6 +7964,7 @@ function confirmRecurMorning() {
   // 確認後標記本週期已顯示（存時間戳字串），不再重複詢問
   document.getElementById('recurMorningOverlay').classList.remove('open');
   state.morningDialogShownDate = String(getLastResetTimestamp());
+  saveStateLocal();   // 立即寫 localStorage，確保重整後任務仍在今日清單
   syncToCloud();
   if (count > 0) {
     renderTodayPanel();
