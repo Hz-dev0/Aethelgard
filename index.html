@@ -3039,6 +3039,7 @@ async function saveApiUrl(fragment) {
       state._initDone = true; // 允許 saveStateLocal / syncToCloud 正常運作
       saveStateLocal();
       checkMissedReset();
+      if (typeof maybeShowRecurMorningDialog === 'function') maybeShowRecurMorningDialog();
     }
     return true;
   } catch (e) {
@@ -4464,9 +4465,10 @@ function runDailyReset() {
     _routineResetDate = String(thisCycleResetTs);
   }
 
+  // 無條件寫本地：cancelled 解除、scheduledFor 修正等變動即使 resetCount=0 也需要持久化
+  saveStateLocal();
   if (resetCount > 0 || toDelete.length > 0) {
     showToast(`🔁 ${resetCount} 個重複任務已重置，新的一天開始！`);
-    saveStateLocal();
     syncToCloud();
   }
   // Always re-render so interval clones scheduled for today appear in today panel
@@ -9138,11 +9140,13 @@ document.addEventListener('visibilitychange', async () => {
     // 重新顯示：拉雲端最新資料並重新渲染
     const ok = await loadFromCloud();
     if (ok) {
+      checkMissedReset();   // 回到前台時補跑可能錯過的換日重置
       renderEnergyDots();
       renderSandbox();
       renderAll();
       checkTaskDates();
       initRoutines();
+      maybeShowRecurMorningDialog(); // 若重置後尚未詢問早晨重複任務，補顯示
     }
   }
 });
