@@ -2980,6 +2980,31 @@ async function saveApiUrl(fragment) {
     if (sb) { sb.classList.add('connected'); sb.textContent = '☁ Connected'; }
     if (data && Array.isArray(data.tasks)) {
       state.tasks   = data.tasks;
+      // ── Task merge：保留本地比雲端新的排程狀態（scheduledFor/scheduledAt/status）──
+      // 場景：confirmRecurMorning 後 syncToCloud 失敗，重開 app 從雲端載入舊資料，
+      // 本地已排好的今日任務會被蓋掉。用本地排程狀態補丁回雲端資料，避免任務「消失」。
+      {
+        const _localSnap = (function() {
+          try { return JSON.parse(localStorage.getItem('innerflow_state_local') || 'null'); } catch(e) { return null; }
+        })();
+        if (_localSnap && Array.isArray(_localSnap.tasks)) {
+          const _localMap = {};
+          _localSnap.tasks.forEach(lt => { _localMap[lt.id] = lt; });
+          state.tasks.forEach(ct => {
+            const lt = _localMap[ct.id];
+            if (!lt) return;
+            // 若本地任務有 scheduledFor 而雲端沒有（或本地的 scheduledAt 更新）→ 採用本地排程
+            const localSched = lt.scheduledFor;
+            const localSchedAt = lt.scheduledAt || 0;
+            const cloudSchedAt = ct.scheduledAt || 0;
+            if (localSched && !ct.scheduledFor && localSchedAt >= cloudSchedAt) {
+              ct.scheduledFor = lt.scheduledFor;
+              ct.scheduledAt  = lt.scheduledAt || null;
+              ct.status       = lt.status || null;
+            }
+          });
+        }
+      }
       state.sandbox = data.sandbox || [];
       state.done    = data.done    || 0;
       state.rewards = data.rewards || [];
@@ -3162,6 +3187,31 @@ async function loadFromCloud() {
         return true;
       }
       state.tasks   = data.tasks;
+      // ── Task merge：保留本地比雲端新的排程狀態（scheduledFor/scheduledAt/status）──
+      // 場景：confirmRecurMorning 後 syncToCloud 失敗，重開 app 從雲端載入舊資料，
+      // 本地已排好的今日任務會被蓋掉。用本地排程狀態補丁回雲端資料，避免任務「消失」。
+      {
+        const _localSnap = (function() {
+          try { return JSON.parse(localStorage.getItem('innerflow_state_local') || 'null'); } catch(e) { return null; }
+        })();
+        if (_localSnap && Array.isArray(_localSnap.tasks)) {
+          const _localMap = {};
+          _localSnap.tasks.forEach(lt => { _localMap[lt.id] = lt; });
+          state.tasks.forEach(ct => {
+            const lt = _localMap[ct.id];
+            if (!lt) return;
+            // 若本地任務有 scheduledFor 而雲端沒有（或本地的 scheduledAt 更新）→ 採用本地排程
+            const localSched = lt.scheduledFor;
+            const localSchedAt = lt.scheduledAt || 0;
+            const cloudSchedAt = ct.scheduledAt || 0;
+            if (localSched && !ct.scheduledFor && localSchedAt >= cloudSchedAt) {
+              ct.scheduledFor = lt.scheduledFor;
+              ct.scheduledAt  = lt.scheduledAt || null;
+              ct.status       = lt.status || null;
+            }
+          });
+        }
+      }
       state.sandbox = data.sandbox || [];
       state.done    = data.done    || 0;
       state.rewards = data.rewards || [];
