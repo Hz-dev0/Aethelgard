@@ -2980,27 +2980,18 @@ async function saveApiUrl(fragment) {
     if (sb) { sb.classList.add('connected'); sb.textContent = '☁ Connected'; }
     if (data && Array.isArray(data.tasks)) {
       state.tasks   = data.tasks;
-      // ── Task merge：保留本地比雲端新的排程狀態（scheduledFor/scheduledAt/status）──
-      // 場景：confirmRecurMorning 後 syncToCloud 失敗，重開 app 從雲端載入舊資料，
-      // 本地已排好的今日任務會被蓋掉。用本地排程狀態補丁回雲端資料，避免任務「消失」。
+      // 保護：若本地已完成重置（LAST_RESET_KEY >= 當前週期），
+      // 雲端上個週期 done=true 不能蓋回本地已重置的 done=false
       {
-        const _localSnap = (function() {
-          try { return JSON.parse(localStorage.getItem('innerflow_state_local') || 'null'); } catch(e) { return null; }
-        })();
-        if (_localSnap && Array.isArray(_localSnap.tasks)) {
-          const _localMap = {};
-          _localSnap.tasks.forEach(lt => { _localMap[lt.id] = lt; });
-          state.tasks.forEach(ct => {
-            const lt = _localMap[ct.id];
-            if (!lt) return;
-            // 若本地任務有 scheduledFor 而雲端沒有（或本地的 scheduledAt 更新）→ 採用本地排程
-            const localSched = lt.scheduledFor;
-            const localSchedAt = lt.scheduledAt || 0;
-            const cloudSchedAt = ct.scheduledAt || 0;
-            if (localSched && !ct.scheduledFor && localSchedAt >= cloudSchedAt) {
-              ct.scheduledFor = lt.scheduledFor;
-              ct.scheduledAt  = lt.scheduledAt || null;
-              ct.status       = lt.status || null;
+        const _lrk = localStorage.getItem('innerflow_last_reset');
+        const _lrkTs = _lrk && /^\d{10,}$/.test(_lrk) ? parseInt(_lrk) : 0;
+        const _cycleTs = typeof getLastResetTimestamp === 'function' ? getLastResetTimestamp() : 0;
+        if (_lrkTs >= _cycleTs && _cycleTs > 0) {
+          const _cycleDate = new Date(_cycleTs).toISOString().slice(0,10);
+          state.tasks.forEach(t => {
+            if (!t.recurring || t.recurMode === 'interval') return;
+            if (t.done && t.completedAt && t.completedAt < _cycleDate) {
+              t.done = false; t.scheduledFor = null; t.scheduledAt = null; t.status = null;
             }
           });
         }
@@ -3028,22 +3019,12 @@ async function saveApiUrl(fragment) {
       }
       // ── Restore notes from cloud on first login (new device) ──
       if (data.notes && data.notes.tabs) {
-        try {
-          const localRaw = localStorage.getItem('innerflow_notes_v1');
-          if (!localRaw) {
-            localStorage.setItem('innerflow_notes_v1', JSON.stringify(data.notes));
-          } else {
-            const localNotes = JSON.parse(localRaw);
-            const cloudTs = data.notes.updatedAt || 0;
-            const localTs = localNotes.updatedAt || 0;
-            const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
-              !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
-            );
-            if (cloudTs > localTs || localIsEmpty) {
-              localStorage.setItem('innerflow_notes_v1', JSON.stringify(data.notes));
-            }
-          }
-        } catch(e) {}
+        const _chosen = _pickNotes(data.notes);
+        if (_chosen) {
+          _lsSafeSet('innerflow_notes_v1', JSON.stringify(_chosen));
+          // 無論 localStorage 是否可用，都直接更新記憶體，確保無痕模式也能正確顯示
+          if (typeof notesLoadFromData === 'function') notesLoadFromData(_chosen);
+        }
       }
       // ── 還原設定（重置時間、久未完成天數）──
       if (data.settings) {
@@ -3059,7 +3040,7 @@ async function saveApiUrl(fragment) {
         }
       }
       renderEnergyDots(); renderSandbox(); renderAll();
-      if (typeof notesReloadFromStorage === 'function') notesReloadFromStorage();
+      // 無痕模式已由上方 notesLoadFromData 處理，此處不再重複 reload（避免覆蓋記憶體資料）
       if (typeof initRoutines === 'function') initRoutines();
       state._initDone = true; // 允許 saveStateLocal / syncToCloud 正常運作
       saveStateLocal();
@@ -3187,27 +3168,18 @@ async function loadFromCloud() {
         return true;
       }
       state.tasks   = data.tasks;
-      // ── Task merge：保留本地比雲端新的排程狀態（scheduledFor/scheduledAt/status）──
-      // 場景：confirmRecurMorning 後 syncToCloud 失敗，重開 app 從雲端載入舊資料，
-      // 本地已排好的今日任務會被蓋掉。用本地排程狀態補丁回雲端資料，避免任務「消失」。
+      // 保護：若本地已完成重置（LAST_RESET_KEY >= 當前週期），
+      // 雲端上個週期 done=true 不能蓋回本地已重置的 done=false
       {
-        const _localSnap = (function() {
-          try { return JSON.parse(localStorage.getItem('innerflow_state_local') || 'null'); } catch(e) { return null; }
-        })();
-        if (_localSnap && Array.isArray(_localSnap.tasks)) {
-          const _localMap = {};
-          _localSnap.tasks.forEach(lt => { _localMap[lt.id] = lt; });
-          state.tasks.forEach(ct => {
-            const lt = _localMap[ct.id];
-            if (!lt) return;
-            // 若本地任務有 scheduledFor 而雲端沒有（或本地的 scheduledAt 更新）→ 採用本地排程
-            const localSched = lt.scheduledFor;
-            const localSchedAt = lt.scheduledAt || 0;
-            const cloudSchedAt = ct.scheduledAt || 0;
-            if (localSched && !ct.scheduledFor && localSchedAt >= cloudSchedAt) {
-              ct.scheduledFor = lt.scheduledFor;
-              ct.scheduledAt  = lt.scheduledAt || null;
-              ct.status       = lt.status || null;
+        const _lrk = localStorage.getItem('innerflow_last_reset');
+        const _lrkTs = _lrk && /^\d{10,}$/.test(_lrk) ? parseInt(_lrk) : 0;
+        const _cycleTs = typeof getLastResetTimestamp === 'function' ? getLastResetTimestamp() : 0;
+        if (_lrkTs >= _cycleTs && _cycleTs > 0) {
+          const _cycleDate = new Date(_cycleTs).toISOString().slice(0,10);
+          state.tasks.forEach(t => {
+            if (!t.recurring || t.recurMode === 'interval') return;
+            if (t.done && t.completedAt && t.completedAt < _cycleDate) {
+              t.done = false; t.scheduledFor = null; t.scheduledAt = null; t.status = null;
             }
           });
         }
@@ -3284,25 +3256,12 @@ async function loadFromCloud() {
       state.tasks.forEach(t => { if (t.energy && _energyMigMap[t.energy]) t.energy = _energyMigMap[t.energy]; });
       // Restore notes from cloud — use whichever version is newer (by updatedAt timestamp)
       if (data.notes && data.notes.tabs) {
-        try {
-          const localRaw = localStorage.getItem('innerflow_notes_v1');
-          if (!localRaw) {
-            // No local data at all → always use cloud
-            localStorage.setItem('innerflow_notes_v1', JSON.stringify(data.notes));
-          } else {
-            const localNotes = JSON.parse(localRaw);
-            const cloudTs = data.notes.updatedAt || 0;
-            const localTs = localNotes.updatedAt || 0;
-            const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
-              !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
-            );
-            if (cloudTs > localTs || localIsEmpty) {
-              // Cloud is newer or local is blank → overwrite local
-              localStorage.setItem('innerflow_notes_v1', JSON.stringify(data.notes));
-            }
-            // else local is newer → keep local (will be pushed on next syncToCloud)
-          }
-        } catch(e) {}
+        const _chosen = _pickNotes(data.notes);
+        if (_chosen) {
+          _lsSafeSet('innerflow_notes_v1', JSON.stringify(_chosen));
+          // 無論 localStorage 是否可用，都直接更新記憶體，確保無痕模式也能正確顯示
+          if (typeof notesLoadFromData === 'function') notesLoadFromData(_chosen);
+        }
       }
       // Restore lotteryState from cloud (cross-device sync)
       if (data.lotteryState && typeof data.lotteryState === 'object') {
@@ -3332,18 +3291,46 @@ async function loadFromCloud() {
   return false;
 }
 
+// ── 安全寫入 localStorage（無痕模式 Safari 會拋出 QuotaExceededError）──
+function _lsSafeSet(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
+}
+// ── 選出應採用的 notes 版本（雲端 vs 本地），無論 localStorage 是否可用 ──
+function _pickNotes(cloudNotes) {
+  if (!cloudNotes || !cloudNotes.tabs) return null;
+  try {
+    const localRaw = localStorage.getItem('innerflow_notes_v1');
+    if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
+    const localNotes = JSON.parse(localRaw);
+    const cloudTs = cloudNotes.updatedAt || 0;
+    const localTs = localNotes.updatedAt || 0;
+    const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
+      !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
+    );
+    return (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+  } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
+}
 // ── Notes cloud sync helper — debounced 5s to avoid pushing on every keystroke ──
 let _notesSyncTimer = null;
 let _notesDirty = false; // 只有筆記真正修改時才標記，避免每次 sync 都帶上全文
 
 function syncNotesToCloud() {
-  // 每次筆記變更時，更新本地 updatedAt 時間戳，確保與雲端比較時本地版本不會被誤判為舊版
+  // 每次筆記變更時，更新 updatedAt 時間戳（確保雲端比較時本地版本不被誤判為舊版）
+  // 同時更新 localStorage（一般模式）和記憶體（無痕模式 fallback）
+  const nowTs = Date.now();
   try {
     const raw = localStorage.getItem('innerflow_notes_v1');
     if (raw) {
       const data = JSON.parse(raw);
-      data.updatedAt = Date.now();
+      data.updatedAt = nowTs;
       localStorage.setItem('innerflow_notes_v1', JSON.stringify(data));
+    }
+  } catch(e) {}
+  // 無論 localStorage 是否可用，記憶體內的資料也打上時間戳（供 _doSyncToCloud 使用）
+  try {
+    if (typeof notesFolderData !== 'undefined' && Array.isArray(notesFolderData)) {
+      if (!window._notesMemUpdatedAt) window._notesMemUpdatedAt = nowTs;
+      window._notesMemUpdatedAt = nowTs;
     }
   } catch(e) {}
   _notesDirty = true; // 標記筆記已修改，下一次 _doSyncToCloud 才帶上 notes
@@ -3511,7 +3498,29 @@ async function _doSyncToCloud() {
             morningDialogShownDate: state.morningDialogShownDate || null,
             routines: state.routines || [],
             routineResetDate: state.routineResetDate || null,
-            notes: _notesDirty ? (function(){ try { return JSON.parse(localStorage.getItem('innerflow_notes_v1') || 'null'); } catch(e){ return null; } })() : undefined,
+            notes: _notesDirty ? (function(){
+              // 優先從記憶體讀（無痕模式 localStorage 取不到，但記憶體有）
+              try {
+                if (typeof notesFolderData !== 'undefined' && Array.isArray(notesFolderData) && notesFolderData.length > 0) {
+                  const hasContent = notesFolderData.some(tab =>
+                    tab.pages && tab.pages.some(pg => pg.a?.trim() || pg.b?.trim() || pg.titleA?.trim() || pg.titleB?.trim())
+                  );
+                  if (hasContent) {
+                    return { tabs: notesFolderData, lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0, updatedAt: window._notesMemUpdatedAt || Date.now() };
+                  }
+                }
+              } catch(e) {}
+              // fallback：從 localStorage 讀
+              try {
+                const raw = localStorage.getItem('innerflow_notes_v1');
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+                }
+              } catch(e) {}
+              // 兩者都取不到 → 不送（undefined），避免把雲端筆記清空
+              return undefined;
+            })() : undefined,
             settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
           }
         })
@@ -3967,7 +3976,6 @@ function allocateWishPoint(id) {
   r.allocatedPoints++;
   checkRewardUnlocks();
   renderRewards();
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -3976,7 +3984,6 @@ function deallocateWishPoint(id) {
   if (!r || !r.allocatedPoints || r.allocatedPoints <= 0) return;
   r.allocatedPoints--;
   renderRewards();
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -4352,7 +4359,6 @@ function claimReward() {
   closeModal('claimRewardModal');
   renderRewards();
   renderLottery();
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -4430,8 +4436,7 @@ function runDailyReset() {
   // 向下相容：舊版存的是日期字串（如 "2024-04-23"），數字解析後會是 NaN
   const lastResetTs = rawStored && /^\d{10,}$/.test(rawStored) ? parseInt(rawStored) : 0;
   if (lastResetTs >= thisCycleResetTs) { scheduleNextReset(); return; }
-  localStorage.setItem(LAST_RESET_KEY, String(thisCycleResetTs));
-  // todayKey 用於 archive、heatmap 等需要日期字串的地方
+  // LAST_RESET_KEY 延後到重置工作完成後才寫入，避免中途例外導致永久鎖住
   const todayKey = localDateStr();
 
   if (!state.doneHistory) state.doneHistory = [];
@@ -4515,8 +4520,9 @@ function runDailyReset() {
     _routineResetDate = String(thisCycleResetTs);
   }
 
-  // 無條件寫本地：cancelled 解除、scheduledFor 修正等變動即使 resetCount=0 也需要持久化
-  saveStateLocal();
+  // 所有重置工作完成，才寫 LAST_RESET_KEY，確保中途例外不鎖住下次重置
+  localStorage.setItem(LAST_RESET_KEY, String(thisCycleResetTs));
+  saveStateLocal(); // 含 cancelled 解除/scheduledFor 修正等隱性變動
   if (resetCount > 0 || toDelete.length > 0) {
     showToast(`🔁 ${resetCount} 個重複任務已重置，新的一天開始！`);
     syncToCloud();
@@ -4793,7 +4799,6 @@ async function init() {
     });
     state.tasks = state.tasks.filter(t => !(t.done && !t.completedAt));
     state.done = state.tasks.filter(t => t.done).length;
-    saveStateLocal();
     syncToCloud();
   }
 
@@ -5364,12 +5369,44 @@ function renderTasks() {
     activeTasks = activeTasks.filter(t => t.goal === state.goalFilter);
     doneTasks   = doneTasks.filter(t => t.goal === state.goalFilter);
   }
-  // Non-recurring tasks float to top, then neglected tasks float above others
+  // 排序：
+  // 1. neglected 優先
+  // 2. 無日期非重複任務
+  // 3. 有日期非重複任務（由早到晚）
+  // 4. 重複任務（interval 天數由多到少，每天置最下）
   activeTasks.sort((a, b) => {
+    // 1. neglected 優先
     const aN = isNeglected(a) ? 0 : 1;
     const bN = isNeglected(b) ? 0 : 1;
     if (aN !== bN) return aN - bN;
-    return (a.recurring ? 1 : 0) - (b.recurring ? 1 : 0);
+
+    // 2. 重複任務排最後
+    const aRec = a.recurring ? 1 : 0;
+    const bRec = b.recurring ? 1 : 0;
+    if (aRec !== bRec) return aRec - bRec;
+
+    // 3. 同為重複任務：interval 天數多的靠上，每天（daily）置最下
+    if (a.recurring && b.recurring) {
+      const aIsDaily = a.recurMode !== 'interval'; // daily / weekly 等非 interval 視為「每天」類
+      const bIsDaily = b.recurMode !== 'interval';
+      if (aIsDaily !== bIsDaily) return aIsDaily ? 1 : -1; // daily 排後面
+      if (!aIsDaily && !bIsDaily) {
+        // 兩者都是 interval，天數多的靠上（每7天 > 每3天 > 每1天）
+        const aInt = a.recurInterval || 1;
+        const bInt = b.recurInterval || 1;
+        if (aInt !== bInt) return bInt - aInt;
+      }
+      return 0;
+    }
+
+    // 4. 同為非重複任務：無日期靠上，有日期由早到晚
+    const aHasDate = a.taskDate ? 1 : 0;
+    const bHasDate = b.taskDate ? 1 : 0;
+    if (aHasDate !== bHasDate) return aHasDate - bHasDate; // 無日期靠上
+    if (a.taskDate && b.taskDate && a.taskDate !== b.taskDate) {
+      return a.taskDate.localeCompare(b.taskDate); // 日期近的靠上
+    }
+    return 0;
   });
 
   let html = '';
@@ -5627,7 +5664,6 @@ function setTaskStatus(id, status) {
   }
   renderTasks();
   renderTodayPanel();
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -5765,7 +5801,6 @@ function deleteTodayTask(id) {
   renderTasks();
   renderTree();
   renderStats();
-  saveStateLocal();
   syncToCloud();
   showToast('🗑 任務已刪除');
 }
@@ -5813,7 +5848,6 @@ function todayChipDrop(e, toIdx) {
   document.querySelectorAll('.today-task-chip').forEach(el => el.classList.remove('drag-over-chip', 'dragging-chip'));
   _todayDragIdx = null;
   renderTodayPanel();
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -6190,7 +6224,6 @@ function addTask() {
     renderTree();
   }
   showToast('🌱 任務已種下，等待發芽');
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -6326,22 +6359,15 @@ function onTaskCompleted(task) {
   const isFocus   = energy === 'focus';  // 𖦏專注 — 20% 機率多一張券
 
   if (!isCharge) {
-    // 碎片 (wishPoints) 一律+1（充電任務除外）
-    if (state.wishPoints === undefined) state.wishPoints = 0;
-    state.wishPoints++;
-    saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
-    renderRewards();
-
     if (!isDaily) {
-      // 核心任務：給抽卡機會
+      // 核心任務：給抽卡機會（不給碎片，沒中時翻牌安慰獎才給碎片）
       lotteryState.todayDone++;
-      // 永遠顯示碎片 toast；若有翻牌機會且有獎池，額外提示抽卡
       const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
       const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
       if (available > 0 && hasWishes) {
-        showToast('🎫 +1 碎片！獲得翻牌機會，去抽獎區翻吧');
+        showToast('🎫 獲得翻牌機會！去抽獎區翻吧');
       } else {
-        showToast('💎 +1 願望碎片！');
+        showToast('🎫 獲得翻牌機會！');
       }
       // 𖦏專注任務 20% 機率額外多一張
       if (isFocus && Math.random() < 0.2) {
@@ -6349,6 +6375,11 @@ function onTaskCompleted(task) {
         _showFocusBonus();
       }
     } else {
+      // 日常任務：只給碎片
+      if (state.wishPoints === undefined) state.wishPoints = 0;
+      state.wishPoints++;
+      saveStateLocal();
+      renderRewards();
       showToast('💎 +1 願望碎片');
     }
   }
@@ -6603,7 +6634,6 @@ function _doFlipCard(i) {
       renderTasks();
       renderTree();
       showToast(`🌊 願望成真！「${wishName}」已加入今日任務`);
-      saveStateLocal();
       syncToCloud();
     }, 400); // slight delay so card flip animation plays first
     } // end else (rImmediate found)
@@ -6903,7 +6933,6 @@ function deletePastDoneTask(id) {
   renderTasks();
   renderTree();
   showToast('🗑 已從任務列表移除（熱力圖記錄保留）');
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -6958,7 +6987,6 @@ function deleteTaskFromStats(id) {
     checkAchievements();
     renderRewards();
     showToast('🗑 任務已刪除');
-    saveStateLocal();
     syncToCloud();
   }
 }
@@ -7013,7 +7041,6 @@ function ctxAction(action) {
     state.tasks = state.tasks.filter(x => x.id !== ctxTargetId);
     checkAchievements(); renderAll();
     showToast('🗑 任務已移除');
-    saveStateLocal();
     syncToCloud();
   }
 }
@@ -7295,7 +7322,6 @@ function saveEdit() {
   closeModal('editModal');
   renderTasks(); renderStats();
   showToast('✦ 任務已更新');
-  saveStateLocal();
   syncToCloud();
 }
 
@@ -7856,7 +7882,6 @@ function _applyDateChange(t, newDate) {
   }
   renderTasks(); renderStats();
   showToast(newDate ? `📅 日期已更新為 ${newDate}` : '📅 日期已清除');
-  saveStateLocal();
   syncToCloud();
 }
 window.openDateTagPicker = openDateTagPicker;
@@ -8031,7 +8056,6 @@ function confirmRecurMorning() {
   // 確認後標記本週期已顯示（存時間戳字串），不再重複詢問
   document.getElementById('recurMorningOverlay').classList.remove('open');
   state.morningDialogShownDate = String(getLastResetTimestamp());
-  saveStateLocal();   // 立即寫 localStorage，確保重整後任務仍在今日清單
   syncToCloud();
   if (count > 0) {
     renderTodayPanel();
@@ -8163,7 +8187,9 @@ function notesLoad() {
       notesFolderData = d.tabs;
       notesTabIndex = Math.min(d.lastTab || 0, notesFolderData.length - 1);
     }
-  } catch(e) {}
+  } catch(e) {
+    // localStorage 不可用（無痕模式）或資料損毀 → 保持記憶體現有資料
+  }
 }
 
 // ── Public: reload from localStorage (called after cloud sync) ──
@@ -8175,6 +8201,17 @@ function notesReloadFromStorage() {
   }
 }
 window.notesReloadFromStorage = notesReloadFromStorage;
+
+// ── 直接從雲端 notes 物件載入到記憶體，繞過 localStorage（無痕模式 fallback）──
+function notesLoadFromData(notes) {
+  if (!notes || !Array.isArray(notes.tabs) || notes.tabs.length === 0) return;
+  notesFolderData = notes.tabs;
+  notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
+  notesEnsureDefaults();
+  if (_notesIsVisible) notesRenderTabs();
+}
+window.notesLoadFromData = notesLoadFromData;
+
 
 // ── 清除所有筆記資料（給 clearApiUrl 呼叫）──
 // 不依賴筆記 section 是否已掛載到 DOM，確保無論使用者有無開啟過筆記都能完整淨空
@@ -9188,15 +9225,23 @@ document.addEventListener('visibilitychange', async () => {
     if (typeof syncToCloud === 'function') syncToCloud();
   } else if (document.visibilityState === 'visible' && state._initDone && typeof getApiUrl === 'function' && getApiUrl()) {
     // 重新顯示：拉雲端最新資料並重新渲染
+    // 先記錄本週期本地已重置的任務 id，避免 loadFromCloud 把 done=true 蓋回來
+    const _localResetIds = new Set(
+      state.tasks.filter(t => t.recurring && t.recurMode !== 'interval' && !t.done).map(t => t.id)
+    );
     const ok = await loadFromCloud();
     if (ok) {
-      checkMissedReset();   // 回到前台時補跑可能錯過的換日重置
+      _localResetIds.forEach(id => {
+        const t = state.tasks.find(x => x.id === id);
+        if (t && t.done) { t.done = false; t.scheduledFor = null; t.scheduledAt = null; t.status = null; }
+      });
+      checkMissedReset();
       renderEnergyDots();
       renderSandbox();
       renderAll();
       checkTaskDates();
       initRoutines();
-      maybeShowRecurMorningDialog(); // 若重置後尚未詢問早晨重複任務，補顯示
+      maybeShowRecurMorningDialog();
     }
   }
 });
