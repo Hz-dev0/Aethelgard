@@ -3046,6 +3046,8 @@ async function saveApiUrl(fragment) {
       saveStateLocal();
       checkMissedReset();
       if (typeof maybeShowRecurMorningDialog === 'function') maybeShowRecurMorningDialog();
+      // 連線後推送一次，確保本地筆記（若比雲端新）能同步上去
+      if (typeof syncToCloud === 'function') syncToCloud();
     }
     return true;
   } catch (e) {
@@ -3300,15 +3302,16 @@ function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
     const cloudTs = cloudNotes.updatedAt || 0;
-    // 優先比較記憶體版本（無痕模式下 localStorage 無資料，但記憶體可能有較新的版本）
-    const memTs = window._notesMemUpdatedAt || 0;
-    const memHasContent = Array.isArray(notesFolderData) && notesFolderData.length > 0 &&
-      notesFolderData.some(tab =>
-        tab.pages && tab.pages.some(pg => pg.a?.trim() || pg.b?.trim() || pg.titleA?.trim() || pg.titleB?.trim())
-      );
-    if (memTs > cloudTs && memHasContent) {
-      // 記憶體版本較新（使用者在此次無痕 session 中已編輯過）→ 保留記憶體
-      return { tabs: notesFolderData, lastTab: notesTabIndex, updatedAt: memTs };
+    // 透過 accessor 取得記憶體版本（無痕模式下 localStorage 無資料，但記憶體可能有較新的版本）
+    // 注意：_pickNotes 在 IIFE 初始化前就可能被呼叫（saveApiUrl 首次連線），
+    // 此時 accessor 尚未註冊，安全降級為只比較 localStorage。
+    const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
+    if (memPayload) {
+      const memTs = window._notesMemUpdatedAt || 0;
+      if (memTs > cloudTs) {
+        // 記憶體版本較新（使用者在此次 session 中已編輯過）→ 保留記憶體
+        return memPayload;
+      }
     }
     const localRaw = localStorage.getItem('innerflow_notes_v1');
     if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
@@ -3336,10 +3339,9 @@ function syncNotesToCloud() {
       localStorage.setItem('innerflow_notes_v1', JSON.stringify(data));
     }
   } catch(e) {}
-  // 無論 localStorage 是否可用，記憶體內的資料也打上時間戳（供 _doSyncToCloud 使用）
+  // 透過 accessor 確認記憶體有資料，才打上時間戳（notesFolderData 是 IIFE 區域變數，外部不可見）
   try {
-    if (typeof notesFolderData !== 'undefined' && Array.isArray(notesFolderData)) {
-      if (!window._notesMemUpdatedAt) window._notesMemUpdatedAt = nowTs;
+    if (window._notesGetSyncPayload && window._notesGetSyncPayload()) {
       window._notesMemUpdatedAt = nowTs;
     }
   } catch(e) {}
@@ -3508,19 +3510,14 @@ async function _doSyncToCloud() {
             morningDialogShownDate: state.morningDialogShownDate || null,
             routines: state.routines || [],
             routineResetDate: state.routineResetDate || null,
-            notes: _notesDirty ? (function(){
-              // 優先從記憶體讀（無痕模式 localStorage 取不到，但記憶體有）
+            notes: (function(){
+              // ── 透過 IIFE 暴露的 accessor 取得 notes payload（正確讀到 IIFE 內部變數）──
+              // notesFolderData/_notesLoaded 是 IIFE 區域變數，_doSyncToCloud 無法直接存取
               try {
-                if (typeof notesFolderData !== 'undefined' && Array.isArray(notesFolderData) && notesFolderData.length > 0) {
-                  const hasContent = notesFolderData.some(tab =>
-                    tab.pages && tab.pages.some(pg => pg.a?.trim() || pg.b?.trim() || pg.titleA?.trim() || pg.titleB?.trim())
-                  );
-                  if (hasContent) {
-                    return { tabs: notesFolderData, lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0, updatedAt: window._notesMemUpdatedAt || Date.now() };
-                  }
-                }
+                const payload = window._notesGetSyncPayload && window._notesGetSyncPayload();
+                if (payload) return payload;
               } catch(e) {}
-              // fallback：從 localStorage 讀
+              // fallback：從 localStorage 讀（一般模式，或 accessor 尚未初始化時）
               try {
                 const raw = localStorage.getItem('innerflow_notes_v1');
                 if (raw) {
@@ -3528,9 +3525,9 @@ async function _doSyncToCloud() {
                   if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
                 }
               } catch(e) {}
-              // 兩者都取不到 → 不送（undefined），避免把雲端筆記清空
+              // 真正取不到任何資料 → 省略欄位，讓 GAS 保留雲端既有筆記
               return undefined;
-            })() : undefined,
+            })(),
             settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
           }
         })
@@ -4714,8 +4711,7 @@ async function init() {
       // Show recurring morning dialog if not yet shown today
       maybeShowRecurMorningDialog();
       // 推送本次 init 中任何本地變動（orphan cleanup、checkMissedReset、routines reset 等）
-      // 首次推送標記 notes dirty，確保雲端有最新筆記
-      _notesDirty = true;
+      // 不再強制設 _notesDirty = true；_doSyncToCloud 會自動帶上記憶體中有內容的筆記
       syncToCloud();
     } else {
       // ── 雲端讀取失敗 ──
@@ -8123,6 +8119,21 @@ let notesFolderData   = [];
 let notesTabIndex     = 0;
 let notesSaveTimer    = null;
 let _notesIsVisible   = false;
+// ── 旗標：是否已從雲端或本地成功載入過筆記資料。
+// 未載入前 notesFolderData 是空陣列，sync 時應省略 notes 欄位讓 GAS 保留雲端資料。
+// 載入後即使筆記是空白頁，也要送出（代表使用者的真實狀態）。
+let _notesLoaded = false;
+
+// ── Window accessor: 讓 IIFE 外的 _doSyncToCloud 安全讀取 IIFE 內部的 notes 狀態 ──
+window._notesGetSyncPayload = function() {
+  if (!_notesLoaded) return undefined; // 尚未載入，不送（讓 GAS 保留雲端資料）
+  if (!Array.isArray(notesFolderData) || notesFolderData.length === 0) return undefined;
+  return {
+    tabs: notesFolderData,
+    lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0,
+    updatedAt: window._notesMemUpdatedAt || Date.now()
+  };
+};
 
 // ── Custom dialog ──────────────────────────────────────
 const _notesDlg = (() => {
@@ -8206,6 +8217,7 @@ function notesLoad() {
       }
       notesFolderData = d.tabs;
       notesTabIndex = Math.min(d.lastTab || 0, notesFolderData.length - 1);
+      _notesLoaded = true;
     }
   } catch(e) {
     // localStorage 不可用（無痕模式）或資料損毀 → 保持記憶體現有資料
@@ -8227,6 +8239,7 @@ function notesLoadFromData(notes) {
   if (!notes || !Array.isArray(notes.tabs) || notes.tabs.length === 0) return;
   notesFolderData = notes.tabs;
   notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
+  _notesLoaded = true; // 已從雲端載入，後續 sync 可安全帶上 notes
   notesEnsureDefaults();
   if (_notesIsVisible) notesRenderTabs();
 }
@@ -8239,7 +8252,9 @@ function notesClearAll() {
   // 1. 取消 pending auto-save，防止清空後舊資料被寫回
   clearTimeout(notesSaveTimer);
   notesSaveTimer = null;
-  // 2. 重置記憶體資料
+  // 2. 重置記憶體資料（使用者主動斷線，重置 loaded 旗標）
+  _notesLoaded = false;
+  window._notesMemUpdatedAt = 0;
   notesFolderData = [{ name: '筆記', pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 }];
   notesTabIndex = 0;
   // 3. 直接清空所有筆記相關 DOM（無論是否可見）
