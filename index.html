@@ -3299,10 +3299,20 @@ function _lsSafeSet(key, value) {
 function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
+    const cloudTs = cloudNotes.updatedAt || 0;
+    // 優先比較記憶體版本（無痕模式下 localStorage 無資料，但記憶體可能有較新的版本）
+    const memTs = window._notesMemUpdatedAt || 0;
+    const memHasContent = Array.isArray(notesFolderData) && notesFolderData.length > 0 &&
+      notesFolderData.some(tab =>
+        tab.pages && tab.pages.some(pg => pg.a?.trim() || pg.b?.trim() || pg.titleA?.trim() || pg.titleB?.trim())
+      );
+    if (memTs > cloudTs && memHasContent) {
+      // 記憶體版本較新（使用者在此次無痕 session 中已編輯過）→ 保留記憶體
+      return { tabs: notesFolderData, lastTab: notesTabIndex, updatedAt: memTs };
+    }
     const localRaw = localStorage.getItem('innerflow_notes_v1');
     if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
     const localNotes = JSON.parse(localRaw);
-    const cloudTs = cloudNotes.updatedAt || 0;
     const localTs = localNotes.updatedAt || 0;
     const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
       !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
@@ -8181,9 +8191,19 @@ function notesSave() {
 function notesLoad() {
   try {
     const raw = localStorage.getItem(NOTES_STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) {
+      // localStorage 無資料（可能是無痕模式）→ 若記憶體已有雲端資料則保留，不覆蓋
+      return;
+    }
     const d = JSON.parse(raw);
     if (d.tabs && d.tabs.length > 0) {
+      // localStorage 有資料時，比較時間戳，保留較新的版本
+      const localTs = d.updatedAt || 0;
+      const memTs = window._notesMemUpdatedAt || 0;
+      if (memTs > localTs && notesFolderData.length > 0) {
+        // 記憶體版本較新（無痕模式下雲端同步後的資料）→ 保留記憶體，不覆蓋
+        return;
+      }
       notesFolderData = d.tabs;
       notesTabIndex = Math.min(d.lastTab || 0, notesFolderData.length - 1);
     }
