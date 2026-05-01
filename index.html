@@ -6749,7 +6749,7 @@ function renderStats() {
   // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
   const todayStr = localDateStr(new Date(getLastResetTimestamp()));
   const allDoneTasks = state.tasks.filter(t => t.done);
-  const historyTasks = state.doneHistory || [];
+  const historyTasks = (state.doneHistory || []).filter(h => !h._neglectReset); // 排除重新計算天數的 sentinel
   // Recalculate state.done to stay in sync with actual task data
   state.done = allDoneTasks.length;
   const statsGrid = document.getElementById('statsGrid');
@@ -6771,6 +6771,7 @@ function renderStats() {
     const calTasks = [];
     [...allDoneTasks, ...historyTasks].forEach(t => {
       if (!t.completedAt) return; // skip tasks without a completion date
+      if (t._neglectReset) return; // 重新計算天數的 sentinel，不計入軌跡
       const key = (t.id || t.name) + '|' + t.completedAt;
       if (!seen.has(key)) { seen.add(key); calTasks.push(t); }
     });
@@ -6834,7 +6835,7 @@ function renderStats() {
 
     // Past done tasks section in show-all mode — grouped by date, each date collapsible
     const pastDone = allDoneTasks.filter(t => !t.completedAt || t.completedAt !== todayStr);
-    const allHistory = [...pastDone, ...historyTasks];
+    const allHistory = [...pastDone, ...historyTasks].filter(t => !t._neglectReset); // 排除重新計算天數的 sentinel
     const pastDoneSection = document.getElementById('pastDoneSection');
     if (pastDoneSection) {
       if (allHistory.length === 0) {
@@ -7725,7 +7726,7 @@ function showCalPopup(e, dateStr) {
   // recurring task completed on different days never collides, and a task that appears
   // in both sources (archived then still active) is shown only once.
   const currentDone = state.tasks.filter(t => t.done && t.completedAt === dateStr);
-  const historyDone = (state.doneHistory || []).filter(t => t.completedAt === dateStr);
+  const historyDone = (state.doneHistory || []).filter(t => t.completedAt === dateStr && !t._neglectReset); // 排除重新計算天數的 sentinel
 
   const seen = new Set();
   const doneTasks = [];
