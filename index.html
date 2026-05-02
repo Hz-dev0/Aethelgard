@@ -6684,10 +6684,10 @@ function renderLottery() {
     }
     const rmSlot = rm ? (lotteryState.rmSlot !== undefined ? lotteryState.rmSlot : 0) : -1;
     grid.innerHTML = Array.from({length:9}, (_, i) => `
-      <div class="lottery-card" id="lcard-${i}">
+      <div class="lottery-card" id="lcard-${i}" onclick="flipCard(${i})">
         <div class="lottery-card-back">
           <div class="card-face-icon">✦</div>
-          <div class="card-face-hint">等待抽獎</div>
+          <div class="card-face-hint">${availableFlips > 0 ? '點擊翻牌' : '等待抽獎'}</div>
         </div>
         <div class="lottery-card-front" style="display:none"></div>
       </div>`).join('');
