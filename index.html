@@ -1925,7 +1925,7 @@
   .notes-md-preview th,.notes-md-preview td{border:1px solid var(--border);padding:4px 8px}
   .notes-md-preview th{background:rgba(58,110,165,0.07);font-weight:700}
 
-  /* Sub-page nav arrows (desktop only) */
+  /* Sub-page nav arrows */
   .notes-page-nav {
     position: absolute; top: 50%; transform: translateY(-50%);
     width: 24px; height: 52px; z-index: 20;
@@ -1934,10 +1934,26 @@
     background: rgba(58,110,165,0.08); border: 1px solid rgba(58,110,165,0.18);
     color: var(--green); font-size: 13px;
     opacity: 0.45; transition: opacity 0.2s, background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .notes-page-nav:hover { opacity: 1; background: rgba(58,110,165,0.15); }
   #notes-prev-zone { left: 4px; }
   #notes-next-zone { right: 4px; }
+
+  /* Mobile: larger tap targets anchored near the page-num pill */
+  @media (max-width: 680px) {
+    .notes-page-nav {
+      top: auto; transform: none;
+      bottom: 8px;
+      width: 44px; height: 36px;
+      border-radius: 10px;
+      font-size: 16px;
+      opacity: 0.75;
+    }
+    #notes-prev-zone { left: auto; right: calc(50% + 60px); }
+    #notes-next-zone { right: auto; left: calc(50% + 60px); }
+  }
 
   /* Floating page number */
   #notes-page-num {
@@ -8227,22 +8243,47 @@ function notesLoad() {
 
 // ── Public: reload from localStorage (called after cloud sync) ──
 function notesReloadFromStorage() {
+  // 若筆記頁正在顯示，保護使用者的操作位置，不重新載入（雲端已透過 notesLoadFromData 合併）
+  if (_notesIsVisible) return;
   notesLoad();
   notesEnsureDefaults();
-  if (_notesIsVisible) {
-    notesRenderTabs();
-  }
+  notesRenderTabs();
 }
 window.notesReloadFromStorage = notesReloadFromStorage;
 
 // ── 直接從雲端 notes 物件載入到記憶體，繞過 localStorage（無痕模式 fallback）──
 function notesLoadFromData(notes) {
   if (!notes || !Array.isArray(notes.tabs) || notes.tabs.length === 0) return;
-  notesFolderData = notes.tabs;
-  notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
+
+  // ── 保護使用者正在操作的頁面位置 ──
+  // 若筆記頁正在顯示（使用者可能正在翻頁），保留記憶體中的 currentPage，
+  // 只更新筆記文字內容，避免被雲端的舊 currentPage 蓋回去。
+  if (_notesIsVisible && notesFolderData.length > 0) {
+    // 合併：保留本地每個 tab 的 currentPage，只更新內容
+    const mergedTabs = notes.tabs.map((cloudTab, i) => {
+      const localTab = notesFolderData[i];
+      if (localTab && typeof localTab.currentPage === 'number') {
+        // 保留本地 currentPage（使用者正在瀏覽的位置）
+        return { ...cloudTab, currentPage: Math.min(localTab.currentPage, (cloudTab.pages || []).length - 1) };
+      }
+      return cloudTab;
+    });
+    notesFolderData = mergedTabs;
+    // 保留本地 tabIndex（使用者正在看的分頁）
+    notesTabIndex = Math.min(notesTabIndex, notesFolderData.length - 1);
+  } else {
+    notesFolderData = notes.tabs;
+    notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
+  }
+
   _notesLoaded = true; // 已從雲端載入，後續 sync 可安全帶上 notes
   notesEnsureDefaults();
-  if (_notesIsVisible) notesRenderTabs();
+  // ── 只有筆記頁不在前景時才重新渲染，避免打斷使用者操作 ──
+  if (_notesIsVisible) {
+    // 靜默更新：flush 目前編輯中的文字到 notesFolderData，再重渲染
+    // 但不重置頁碼顯示（notesRenderTabs 會依 currentPage 顯示，currentPage 已被保護）
+    notesRenderTabs();
+  }
 }
 window.notesLoadFromData = notesLoadFromData;
 
