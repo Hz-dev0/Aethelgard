@@ -3019,7 +3019,7 @@ async function saveApiUrl(fragment) {
       state.energy  = data.energy  || 0;
       state.doneHistory = data.doneHistory || [];
       state.todayOrder  = data.todayOrder  || [];
-      state.wishPoints  = typeof data.wishPoints === 'number' ? Math.max(data.wishPoints, state.wishPoints || 0) : (state.wishPoints || 0);
+      state.wishPoints  = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
       state.morningDialogShownDate = data.morningDialogShownDate || state.morningDialogShownDate || null;
       state.routines = Array.isArray(data.routines) ? data.routines : [];
       state.routineResetDate = data.routineResetDate || null;
@@ -3209,7 +3209,7 @@ async function loadFromCloud() {
       state.energy  = data.energy  || 0;
       state.doneHistory = data.doneHistory || [];
       state.todayOrder  = data.todayOrder  || [];
-      state.wishPoints  = typeof data.wishPoints === 'number' ? Math.max(data.wishPoints, state.wishPoints || 0) : (state.wishPoints || 0);
+      state.wishPoints  = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
       state.morningDialogShownDate = data.morningDialogShownDate || state.morningDialogShownDate || null;
       state.routineResetDate = data.routineResetDate || state.routineResetDate || null;
       // ── 例行任務 merge：union 合併雲端與本地，保留任何一方有的項目
