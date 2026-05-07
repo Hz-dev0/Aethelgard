@@ -4346,6 +4346,7 @@ function deleteReward(id) {
   }
   state.rewards = state.rewards.filter(r => r.id !== id);
   renderRewards();
+  saveStateLocal();
   syncToCloud();
 }
 
@@ -6277,6 +6278,7 @@ function addSandbox() {
 function removeSandbox(i) {
   state.sandbox.splice(i, 1);
   renderSandbox();
+  saveStateLocal();
   syncToCloud();
 }
 
@@ -7010,6 +7012,7 @@ function deleteTaskFromStats(id) {
     checkAchievements();
     renderRewards();
     showToast('🗑 任務已刪除');
+    saveStateLocal();
     syncToCloud();
   }
 }
