@@ -2997,14 +2997,22 @@ function getApiUrl() {
 
 // ── Firebase Firestore 讀寫 helpers ──
 async function _fbLoad() {
-  if (!window._fbUid || !window._fbDb) return null;
+  if (!window._fbUid || !window._fbDb) {
+    console.warn('[_fbLoad] 尚未就緒 uid:', window._fbUid, 'db:', !!window._fbDb);
+    return null;
+  }
   try {
     const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
     const snap = await window._fbGetDoc(ref);
-    if (snap.exists()) return snap.data();
+    if (snap.exists()) {
+      const d = snap.data();
+      console.log('[_fbLoad] 成功，tasks數量:', d && d.tasks ? d.tasks.length : 'none');
+      return d;
+    }
+    console.warn('[_fbLoad] 文件不存在，uid:', window._fbUid);
     return null;
   } catch(e) {
-    console.warn('Firebase 讀取失敗', e);
+    console.warn('[_fbLoad] 讀取失敗:', e.code, e.message);
     return null;
   }
 }
@@ -3131,11 +3139,27 @@ async function importUid() {
 
   setApiStatus('', '正在切換…');
   try {
-    // 儲存 override UID，下次頁面載入時自動使用這份資料
+    // 先用目標 UID 直接讀取（不改 window._fbUid，避免影響目前的寫入）
+    const testRef = window._fbDoc(window._fbDb, 'users', targetUid, 'data', 'main');
+    const testSnap = await window._fbGetDoc(testRef);
+
+    if (!testSnap.exists()) {
+      setApiStatus('err', '找不到對應資料，請確認 ID 是否正確');
+      return;
+    }
+
+    const data = testSnap.data();
+    if (!data || !Array.isArray(data.tasks)) {
+      setApiStatus('err', '資料格式異常，請確認來源裝置已有資料');
+      return;
+    }
+
+    // 確認有資料後，才切換身份
     localStorage.setItem('innerflow_fb_uid_override', targetUid);
-    // 也更新 window._fbUid，讓下面的 loadFromCloud 能立即生效
     window._fbUid = targetUid;
-    // 立刻從 Firebase 載入目標資料
+    try { localStorage.setItem('innerflow_fb_uid', targetUid); } catch(e2) {}
+
+    // 直接套用讀到的資料（不再重新呼叫 loadFromCloud 避免重複讀取）
     const ok = await loadFromCloud();
     if (ok) {
       state._initDone = true;
@@ -3145,13 +3169,13 @@ async function importUid() {
       showToast('✓ 已切換到目標裝置的資料');
       if (input) input.value = '';
     } else {
-      // 找不到資料（UID 可能錯誤或對方尚未有資料）
-      window._fbUid = currentUid; // 還原
+      window._fbUid = currentUid;
       localStorage.removeItem('innerflow_fb_uid_override');
-      setApiStatus('err', '找不到對應資料，請確認 ID 是否正確');
+      setApiStatus('err', '載入失敗，請再試一次');
     }
   } catch(e) {
-    setApiStatus('err', '切換失敗：' + e.message);
+    console.error('[importUid] 錯誤:', e);
+    setApiStatus('err', '切換失敗：' + (e.code || e.message));
   }
 }
 
