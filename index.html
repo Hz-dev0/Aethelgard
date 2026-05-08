@@ -2991,8 +2991,13 @@ const API_STORAGE_KEY = 'innerflow_api_url';
 const API_KEY_FRAGMENT_STORE = 'innerflow_api_fragment';
 
 function getApiUrl() {
-  // Firebase 模式：只要有 UID 就算「已連線」
-  return window._fbUid ? 'firebase:' + window._fbUid : '';
+  // Firebase 模式：用 SDK 直接讀寫，不走 fetch，此函式僅用來判斷「是否已連線」
+  // 回傳空字串讓所有舊版 fetch 路徑靜默跳過
+  return '';
+}
+
+function _isFirebaseReady() {
+  return !!(window._fbUid && window._fbDb);
 }
 
 // ── Firebase Firestore 讀寫 helpers ──
@@ -3009,7 +3014,7 @@ async function _fbLoad() {
       console.log('[_fbLoad] 成功，tasks數量:', d && d.tasks ? d.tasks.length : 'none');
       return d;
     }
-    console.warn('[_fbLoad] 文件不存在，uid:', window._fbUid);
+    console.log('[_fbLoad] 新用戶，尚無雲端資料，uid:', window._fbUid);
     return null;
   } catch(e) {
     console.warn('[_fbLoad] 讀取失敗:', e.code, e.message);
@@ -3676,9 +3681,7 @@ function syncToCloud() {
   saveStateLocal(); // 立即寫本地，UI 不等雲端
 
   if (!state._initDone) return;
-
-  const url = getApiUrl();
-  if (!url) return;
+  if (!_isFirebaseReady()) return;
 
   // debounce：600ms 內連續呼叫只送最後一次（合批拖曳、快速勾選等高頻操作）
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
@@ -3688,10 +3691,9 @@ function syncToCloud() {
   }, 600);
 }
 
-// ── _doSyncToCloud：實際執行 HTTP 推送的內部函式 ──
+// ── _doSyncToCloud：實際執行 Firebase Firestore 推送的內部函式 ──
 async function _doSyncToCloud() {
-  const url = getApiUrl();
-  if (!url) return;
+  if (!_isFirebaseReady()) return;
   if (isSyncing) { _pendingSync = true; return; }
   if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
 
@@ -3751,21 +3753,9 @@ async function _doSyncToCloud() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot syncing';
   try {
-    // ── Fetch with 20s timeout（防止 GAS 冷啟動卡住導致 isSyncing 永久鎖死）──
-    const _ctrl = new AbortController();
-    const _fetchTimeout = setTimeout(() => _ctrl.abort(), 20000);
-    let res;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        signal: _ctrl.signal,
-        body: JSON.stringify({ action: 'save', data: _payload })
-      });
-    } finally {
-      clearTimeout(_fetchTimeout);
-    }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // ── Firebase Firestore 寫入（取代舊版 GAS fetch）──
+    const ok = await _fbSave(_payload);
+    if (!ok) throw new Error('Firebase save failed');
     // ★ 成功後存 hash，下次相同資料可跳過
     _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
@@ -9289,14 +9279,15 @@ function notesRewireLogo() {
     const menu = document.getElementById('logoMenu');
     // 短按時選單已開 → 關閉
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    // 短按 → notes 導航
-    if (_notesIsVisible) {
-      const prevPage = window._notesPrevPage || 'tree';
-      showPage(prevPage);
-    } else {
-      const activePage = document.querySelector('.page.active');
-      const curId = activePage ? activePage.id.replace('page-', '') : 'tree';
-      showPage(curId);
+    // 短按 → 開設定選單（手機版沒有 hover，單擊直接開選單）
+    const rect = newLogo.getBoundingClientRect();
+    if (menu) {
+      const mw = 190;
+      let left = rect.left;
+      if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+      menu.style.left = left + 'px';
+      menu.style.top  = (rect.bottom + 6) + 'px';
+      menu.style.display = 'block';
     }
   });
   // 觸控移動超過 10px 取消長按
@@ -9517,29 +9508,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 window.addEventListener('load', () => {
   setTimeout(notesRewireLogo, 200);
-
-  // ★ GAS 預熱（Warmup）：頁面載入後 3 秒，靜默發一次 GET 請求喚醒 GAS runtime
-  // 讓使用者第一次按「同步」時 GAS 已熱機，體感延遲從 3-4s 降到 ~1s
-  // 使用 keepalive:true 確保即使頁面快速切走也能送出；timeout 5s 避免佔用連線
-  setTimeout(() => {
-    const _warmupUrl = typeof getApiUrl === 'function' ? getApiUrl() : null;
-    if (!_warmupUrl) return;
-    const _wCtrl = new AbortController();
-    const _wTimer = setTimeout(() => _wCtrl.abort(), 5000);
-    fetch(_warmupUrl + '?action=load&_warmup=1&_t=' + Date.now(), {
-      cache: 'no-store',
-      signal: _wCtrl.signal,
-      keepalive: true
-    }).then(r => {
-      clearTimeout(_wTimer);
-      // 預熱順帶更新 syncDot hash，讓後續同步能正確做 diff
-      if (r.ok) r.json().then(d => {
-        if (d && d.tasks) {
-          try { _lastSyncHash = _quickHash({ tasks: d.tasks, sandbox: d.sandbox, done: d.done }); } catch(e) {}
-        }
-      }).catch(() => {});
-    }).catch(() => { clearTimeout(_wTimer); }); // 失敗靜默，不影響任何功能
-  }, 3000);
+  // Firestore 是長連線，不需要 GAS warmup
 });
 
 // 頁面隱藏（切分頁、關閉）時，若有待推的筆記變更，立刻觸發同步
