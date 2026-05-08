@@ -2819,18 +2819,6 @@
     <button id="apiModalCloseBtn" onclick="closeApiModal()" class="btn-close-panel btn-close-panel-abs">×</button>
     <div class="api-modal-title">⚙️ 使用設定</div>
 
-    <!-- Cloud section — Firebase UID sync -->
-    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;margin-top:2px">☁️ 雲端連線</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <input class="api-modal-input input-green" id="importUidInput"
-        placeholder="輸入密碼" type="password"
-        style="width:120px;flex-shrink:0;text-align:center;border-radius:8px;margin-bottom:0;font-size:14px;font-weight:600;letter-spacing:0.2em;padding:7px 10px">
-      <button onclick="importUid()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.2s">切換</button>
-      <button onclick="copyMyUid()" title="複製我的裝置 ID" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s;flex-shrink:0" onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'" onmouseout="this.style.color='var(--text-faint)';this.style.borderColor='var(--border)'">📋</button>
-    </div>
-    <div style="font-size:10px;color:var(--text-faint);margin-bottom:6px;line-height:1.5">輸入其他裝置的 ID 切換資料來源，目前資料將被覆蓋</div>
-    <div class="api-status" id="apiStatus"></div>
-
     <!-- Reset time -->
     <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:10px">⏰ 每日重置時間</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -2991,7 +2979,6 @@ const API_STORAGE_KEY = 'innerflow_api_url';
 const API_KEY_FRAGMENT_STORE = 'innerflow_api_fragment';
 
 function getApiUrl() {
-  // Firebase 模式：用 SDK 直接讀寫，不走 fetch，此函式僅用來判斷「是否已連線」
   return '';
 }
 
@@ -3681,13 +3668,9 @@ function syncToCloud() {
   if (!state._initDone) return;
   if (!_isFirebaseReady()) return;
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
-  _syncDebounceTimer = setTimeout(() => {
-    _syncDebounceTimer = null;
-    _doSyncToCloud();
-  }, 600);
+  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); }, 600);
 }
 
-// ── _doSyncToCloud：實際執行 Firebase Firestore 推送的內部函式 ──
 async function _doSyncToCloud() {
   if (!_isFirebaseReady()) return;
   if (isSyncing) { _pendingSync = true; return; }
@@ -4983,7 +4966,7 @@ async function init() {
   } // end Firebase ok/fail block
   // Firebase 模式：不再有「沒有 API」的分支，統一走上方 Firebase 流程
 
-  // Logo handlers 統一由 notesRewireLogo() 處理（window.addEventListener('load') 時呼叫）
+  // Logo handlers 統一由 notesRewireLogo() 處理
 
   // ── One-time cleanup: done tasks without completedAt are orphans from old data.
   // Archive to doneHistory (heatmap safe) then remove from tasks so counter is accurate.
@@ -9177,11 +9160,9 @@ function notesRewireLogo() {
   const logo = document.getElementById('logoBtn');
   if (!logo) return;
 
-  // cloneNode 清除舊有所有 listener
   const newLogo = logo.cloneNode(true);
   logo.parentNode.replaceChild(newLogo, logo);
 
-  // ── 共用：定位並顯示選單 ──
   function _openMenu() {
     const menu = document.getElementById('logoMenu');
     if (!menu) return;
@@ -9194,9 +9175,8 @@ function notesRewireLogo() {
     menu.style.display = 'block';
   }
 
-  // ── 桌機：長按 500ms 開選單，短按開選單（無 hover 觸發方式） ──
-  let _lp = null;
-  let _lpFired = false;
+  // 桌機
+  let _lp = null, _lpFired = false;
   newLogo.addEventListener('mousedown', () => {
     _lpFired = false;
     _lp = setTimeout(() => { _lpFired = true; _openMenu(); }, 500);
@@ -9205,41 +9185,29 @@ function notesRewireLogo() {
   newLogo.addEventListener('mouseleave', () => clearTimeout(_lp));
   newLogo.addEventListener('click', e => {
     e.stopPropagation();
-    if (_lpFired) { _lpFired = false; return; } // 長按已處理
+    if (_lpFired) { _lpFired = false; return; }
     const menu = document.getElementById('logoMenu');
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    _openMenu(); // 桌機單擊也開選單
+    _openMenu();
   });
 
-  // ── 手機：touchstart 開始計時，touchend 短按直接開選單 ──
-  let _touchLp = null;
-  let _touchFired = false;
-  let _touchStartX = 0;
-  let _touchStartY = 0;
+  // 手機
+  let _touchLp = null, _touchFired = false, _tx = 0, _ty = 0;
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
-    _touchStartX = e.touches[0].clientX;
-    _touchStartY = e.touches[0].clientY;
-    _touchLp = setTimeout(() => {
-      _touchFired = true;
-      if (navigator.vibrate) navigator.vibrate(30);
-      _openMenu();
-    }, 500);
+    _tx = e.touches[0].clientX; _ty = e.touches[0].clientY;
+    _touchLp = setTimeout(() => { _touchFired = true; if (navigator.vibrate) navigator.vibrate(30); _openMenu(); }, 500);
   }, { passive: true });
   newLogo.addEventListener('touchmove', e => {
-    // 移動超過 8px 取消長按（避免誤觸）
-    const dx = e.touches[0].clientX - _touchStartX;
-    const dy = e.touches[0].clientY - _touchStartY;
-    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(_touchLp);
+    if (Math.abs(e.touches[0].clientX - _tx) > 8 || Math.abs(e.touches[0].clientY - _ty) > 8) clearTimeout(_touchLp);
   }, { passive: true });
   newLogo.addEventListener('touchend', e => {
     clearTimeout(_touchLp);
-    e.preventDefault();
-    e.stopPropagation();
-    if (_touchFired) { _touchFired = false; return; } // 長按已開選單，不重複
+    e.preventDefault(); e.stopPropagation();
+    if (_touchFired) { _touchFired = false; return; }
     const menu = document.getElementById('logoMenu');
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    _openMenu(); // 短按 → 開選單
+    _openMenu();
   });
 }
 
@@ -9454,7 +9422,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 window.addEventListener('load', () => {
   setTimeout(notesRewireLogo, 200);
-  // Firestore 是長連線，不需要 GAS warmup
 });
 
 // 頁面隱藏（切分頁、關閉）時，若有待推的筆記變更，立刻觸發同步
