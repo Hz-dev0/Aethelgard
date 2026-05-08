@@ -2992,7 +2992,6 @@ const API_KEY_FRAGMENT_STORE = 'innerflow_api_fragment';
 
 function getApiUrl() {
   // Firebase 模式：用 SDK 直接讀寫，不走 fetch，此函式僅用來判斷「是否已連線」
-  // 回傳空字串讓所有舊版 fetch 路徑靜默跳過
   return '';
 }
 
@@ -3678,12 +3677,9 @@ function loadStateLocal() {
 // ── syncToCloud：對外入口，帶 debounce（600ms）防止短時間內連續呼叫造成閃爍 ──
 // ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
 function syncToCloud() {
-  saveStateLocal(); // 立即寫本地，UI 不等雲端
-
+  saveStateLocal();
   if (!state._initDone) return;
   if (!_isFirebaseReady()) return;
-
-  // debounce：600ms 內連續呼叫只送最後一次（合批拖曳、快速勾選等高頻操作）
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   _syncDebounceTimer = setTimeout(() => {
     _syncDebounceTimer = null;
@@ -3749,18 +3745,16 @@ async function _doSyncToCloud() {
 
   isSyncing = true;
   _pendingSync = false;
-  let _retryScheduled = false; // 本次執行是否安排了 retry
+  let _retryScheduled = false;
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot syncing';
   try {
-    // ── Firebase Firestore 寫入（取代舊版 GAS fetch）──
     const ok = await _fbSave(_payload);
     if (!ok) throw new Error('Firebase save failed');
-    // ★ 成功後存 hash，下次相同資料可跳過
     _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
-    _notesDirty = false; // 成功後清除，下次 sync 若筆記無變動就不帶
+    _notesDirty = false;
   } catch (e) {
     console.warn('雲端儲存失敗', e);
     if (dot) dot.className = 'sync-dot error';
@@ -4989,32 +4983,7 @@ async function init() {
   } // end Firebase ok/fail block
   // Firebase 模式：不再有「沒有 API」的分支，統一走上方 Firebase 流程
 
-  // Logo: 長按 → 開設定選單（單擊不動作，由 IIFE notesRewireLogo 接管）
-  const logo = document.getElementById('logoBtn');
-  let _logoLpTimer = null;
-  let _logoLpFired = false;
-  logo.addEventListener('mousedown', () => {
-    _logoLpFired = false;
-    _logoLpTimer = setTimeout(() => {
-      _logoLpFired = true;
-      openLogoMenu({});
-    }, 500);
-  });
-  logo.addEventListener('mouseup',    () => clearTimeout(_logoLpTimer));
-  logo.addEventListener('mouseleave', () => clearTimeout(_logoLpTimer));
-  logo.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (_logoLpFired) { _logoLpFired = false; return; }
-    // 單擊：不做任何事（由 IIFE 覆蓋後處理 notes 導航）
-  });
-  // Touch support
-  logo.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // 長按由 IIFE 的 touchstart timer 處理；這裡只處理選單關閉
-    const menu = document.getElementById('logoMenu');
-    if (menu && menu.style.display === 'block') { closeLogoMenu(); }
-  });
+  // Logo handlers 統一由 notesRewireLogo() 處理（window.addEventListener('load') 時呼叫）
 
   // ── One-time cleanup: done tasks without completedAt are orphans from old data.
   // Archive to doneHistory (heatmap safe) then remove from tasks so counter is accurate.
@@ -9208,93 +9177,70 @@ function notesRewireLogo() {
   const logo = document.getElementById('logoBtn');
   if (!logo) return;
 
+  // cloneNode 清除舊有所有 listener
   const newLogo = logo.cloneNode(true);
   logo.parentNode.replaceChild(newLogo, logo);
 
+  // ── 共用：定位並顯示選單 ──
+  function _openMenu() {
+    const menu = document.getElementById('logoMenu');
+    if (!menu) return;
+    const rect = newLogo.getBoundingClientRect();
+    const mw = 190;
+    let left = rect.left;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+    menu.style.left = left + 'px';
+    menu.style.top  = (rect.bottom + 6) + 'px';
+    menu.style.display = 'block';
+  }
+
+  // ── 桌機：長按 500ms 開選單，短按開選單（無 hover 觸發方式） ──
   let _lp = null;
   let _lpFired = false;
-
   newLogo.addEventListener('mousedown', () => {
     _lpFired = false;
-    _lp = setTimeout(() => {
-      _lpFired = true;
-      const rect = newLogo.getBoundingClientRect();
-      const menu = document.getElementById('logoMenu');
-      if (menu) {
-        const mw = 190;
-        let left = rect.left;
-        if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-        menu.style.left = left + 'px';
-        menu.style.top  = (rect.bottom + 6) + 'px';
-        menu.style.display = 'block';
-      }
-    }, 500);
+    _lp = setTimeout(() => { _lpFired = true; _openMenu(); }, 500);
   });
-  newLogo.addEventListener('mouseup', () => clearTimeout(_lp));
+  newLogo.addEventListener('mouseup',    () => clearTimeout(_lp));
   newLogo.addEventListener('mouseleave', () => clearTimeout(_lp));
-
   newLogo.addEventListener('click', e => {
     e.stopPropagation();
-    if (_lpFired) { _lpFired = false; return; }
+    if (_lpFired) { _lpFired = false; return; } // 長按已處理
     const menu = document.getElementById('logoMenu');
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    if (_notesIsVisible) {
-      const prevPage = window._notesPrevPage || 'tree';
-      showPage(prevPage);
-    } else {
-      const activePage = document.querySelector('.page.active');
-      const curId = activePage ? activePage.id.replace('page-', '') : 'tree';
-      showPage(curId);
-    }
+    _openMenu(); // 桌機單擊也開選單
   });
 
+  // ── 手機：touchstart 開始計時，touchend 短按直接開選單 ──
   let _touchLp = null;
   let _touchFired = false;
-  let _touchStartTime = 0;
+  let _touchStartX = 0;
+  let _touchStartY = 0;
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
-    _touchStartTime = Date.now();
+    _touchStartX = e.touches[0].clientX;
+    _touchStartY = e.touches[0].clientY;
     _touchLp = setTimeout(() => {
       _touchFired = true;
       if (navigator.vibrate) navigator.vibrate(30);
-      const menu = document.getElementById('logoMenu');
-      const rect  = newLogo.getBoundingClientRect();
-      const mw = 190;
-      let left = rect.left;
-      if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-      if (menu) {
-        menu.style.left = left + 'px';
-        menu.style.top  = (rect.bottom + 6) + 'px';
-        menu.style.display = 'block';
-      }
+      _openMenu();
     }, 500);
   }, { passive: true });
+  newLogo.addEventListener('touchmove', e => {
+    // 移動超過 8px 取消長按（避免誤觸）
+    const dx = e.touches[0].clientX - _touchStartX;
+    const dy = e.touches[0].clientY - _touchStartY;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(_touchLp);
+  }, { passive: true });
   newLogo.addEventListener('touchend', e => {
-    const held = Date.now() - _touchStartTime;
     clearTimeout(_touchLp);
-    // 長按已觸發（選單已開）→ touchend 不做任何事，選單保持開著
-    if (_touchFired) { _touchFired = false; e.preventDefault(); return; }
     e.preventDefault();
     e.stopPropagation();
+    if (_touchFired) { _touchFired = false; return; } // 長按已開選單，不重複
     const menu = document.getElementById('logoMenu');
-    // 短按時選單已開 → 關閉
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    // 短按 → 開設定選單（手機版沒有 hover，單擊直接開選單）
-    const rect = newLogo.getBoundingClientRect();
-    if (menu) {
-      const mw = 190;
-      let left = rect.left;
-      if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-      menu.style.left = left + 'px';
-      menu.style.top  = (rect.bottom + 6) + 'px';
-      menu.style.display = 'block';
-    }
+    _openMenu(); // 短按 → 開選單
   });
-  // 觸控移動超過 10px 取消長按
-  newLogo.addEventListener('touchmove', e => {
-    clearTimeout(_touchLp);
-  }, { passive: true });
-  newLogo.addEventListener('touchmove', () => clearTimeout(_touchLp), { passive: true });
 }
 
 // ── Swipe left/right on notes page tabs (title inputs only) ───────────
