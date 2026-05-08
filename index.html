@@ -2820,27 +2820,15 @@
     <div class="api-modal-title">⚙️ 使用設定</div>
 
     <!-- Cloud section — Firebase UID sync -->
-    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;margin-top:2px">☁️ 雲端連線（Firebase）</div>
-
-    <!-- 我的裝置 ID -->
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:5px">📱 我的裝置 ID <span style="color:var(--text-faint);font-size:10px">（複製後在其他裝置貼上）</span></div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-      <input class="api-modal-input" id="apiKeyFragment" readonly
-        placeholder="正在取得…" type="text"
-        style="flex:1;border-radius:8px;margin-bottom:0;font-size:12px;letter-spacing:0.05em;padding:7px 10px;opacity:0.75;cursor:default">
-      <button onclick="copyMyUid()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.2s" onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">複製</button>
-    </div>
-
-    <!-- 匯入其他裝置的 ID -->
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:5px">🔗 切換到其他裝置 <span style="color:var(--text-faint);font-size:10px">（貼上其他裝置的 ID）</span></div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;margin-top:2px">☁️ 雲端連線</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
       <input class="api-modal-input input-green" id="importUidInput"
-        placeholder="貼上其他裝置的 ID…" type="text"
-        style="flex:1;border-radius:8px;margin-bottom:0;font-size:12px;letter-spacing:0.05em;padding:7px 10px">
-      <button onclick="importUid()" style="padding:6px 12px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.2s">切換</button>
+        placeholder="輸入密碼" type="password"
+        style="width:120px;flex-shrink:0;text-align:center;border-radius:8px;margin-bottom:0;font-size:14px;font-weight:600;letter-spacing:0.2em;padding:7px 10px">
+      <button onclick="importUid()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.2s">切換</button>
+      <button onclick="copyMyUid()" title="複製我的裝置 ID" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s;flex-shrink:0" onmouseover="this.style.color='var(--green)';this.style.borderColor='var(--green)'" onmouseout="this.style.color='var(--text-faint)';this.style.borderColor='var(--border)'">📋</button>
     </div>
-    <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;line-height:1.5">⚠️ 切換後此裝置將讀取並同步那份資料，目前資料會被覆蓋</div>
-
+    <div style="font-size:10px;color:var(--text-faint);margin-bottom:6px;line-height:1.5">輸入其他裝置的 ID 切換資料來源，目前資料將被覆蓋</div>
     <div class="api-status" id="apiStatus"></div>
 
     <!-- Reset time -->
@@ -3052,17 +3040,11 @@ function handleApiModalOverlayClick(e) {
 }
 
 function openApiModal() {
-  // Firebase 模式：顯示 UID 供跨裝置同步使用
+  // Firebase 模式：清空輸入框、顯示連線狀態
   const uid = window._fbUid || localStorage.getItem('innerflow_fb_uid') || '';
-  const fragInput = document.getElementById('apiKeyFragment');
+  const importInput = document.getElementById('importUidInput');
+  if (importInput) importInput.value = '';
   const clearBtn = document.getElementById('apiClearBtn');
-  if (fragInput) {
-    fragInput.value = uid;
-    fragInput.readOnly = true;
-    fragInput.style.opacity = '0.7';
-    fragInput.placeholder = '正在取得裝置 ID…';
-    fragInput.title = '這是你的裝置同步 ID，可複製到其他裝置使用';
-  }
   if (clearBtn) clearBtn.style.display = 'none';
   // Load saved reset time
   const savedTime = localStorage.getItem('innerflow_reset_time') || '04:00';
@@ -9254,9 +9236,10 @@ function notesRewireLogo() {
 
   let _touchLp = null;
   let _touchFired = false;
+  let _touchStartTime = 0;
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
-    const t = e.touches[0];
+    _touchStartTime = Date.now();
     _touchLp = setTimeout(() => {
       _touchFired = true;
       if (navigator.vibrate) navigator.vibrate(30);
@@ -9273,12 +9256,16 @@ function notesRewireLogo() {
     }, 500);
   }, { passive: true });
   newLogo.addEventListener('touchend', e => {
+    const held = Date.now() - _touchStartTime;
     clearTimeout(_touchLp);
-    if (_touchFired) { _touchFired = false; return; }
+    // 長按已觸發（選單已開）→ touchend 不做任何事，選單保持開著
+    if (_touchFired) { _touchFired = false; e.preventDefault(); return; }
     e.preventDefault();
     e.stopPropagation();
     const menu = document.getElementById('logoMenu');
+    // 短按時選單已開 → 關閉
     if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
+    // 短按 → notes 導航
     if (_notesIsVisible) {
       const prevPage = window._notesPrevPage || 'tree';
       showPage(prevPage);
@@ -9288,6 +9275,10 @@ function notesRewireLogo() {
       showPage(curId);
     }
   });
+  // 觸控移動超過 10px 取消長按
+  newLogo.addEventListener('touchmove', e => {
+    clearTimeout(_touchLp);
+  }, { passive: true });
   newLogo.addEventListener('touchmove', () => clearTimeout(_touchLp), { passive: true });
 }
 
