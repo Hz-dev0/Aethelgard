@@ -3142,6 +3142,15 @@ let _syncRetryCount = 0;
 let _syncRetryTimer = null;    // 追蹤 retry timer，防止疊加
 let _syncDebounceTimer = null; // debounce：合批短時間內連續的 sync 呼叫為一次
 let _routineResetDate = null;  // in-memory 快取（存重置時間戳字串）
+let _lastSyncHash = '';        // ★ 增量防重：上次成功推送的資料 hash
+
+// ★ 輕量 hash：JSON 長度 + 首尾各 100 字元，零 crypto 成本
+function _quickHash(obj) {
+  try {
+    const s = JSON.stringify(obj);
+    return s.length + '|' + s.slice(0, 100) + '|' + s.slice(-100);
+  } catch(e) { return ''; }
+}
 
 async function loadFromCloud() {
   const url = getApiUrl();
@@ -3465,23 +3474,22 @@ function loadStateLocal() {
   } catch(e) { return false; }
 }
 
-// ── syncToCloud：對外入口，帶 debounce（500ms）防止短時間內連續呼叫造成閃爍 ──
+// ── syncToCloud：對外入口，帶 debounce（600ms）防止短時間內連續呼叫造成閃爍 ──
+// ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
 function syncToCloud() {
-  // 無論如何先存本地
-  saveStateLocal();
+  saveStateLocal(); // 立即寫本地，UI 不等雲端
 
-  // 初始化未完成時不推雲端
   if (!state._initDone) return;
 
   const url = getApiUrl();
   if (!url) return;
 
-  // debounce：1000ms 內連續呼叫只送最後一次（合批拖曳、快速勾選等高頻操作）
+  // debounce：600ms 內連續呼叫只送最後一次（合批拖曳、快速勾選等高頻操作）
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   _syncDebounceTimer = setTimeout(() => {
     _syncDebounceTimer = null;
     _doSyncToCloud();
-  }, 1000);
+  }, 600);
 }
 
 // ── _doSyncToCloud：實際執行 HTTP 推送的內部函式 ──
@@ -3490,6 +3498,57 @@ async function _doSyncToCloud() {
   if (!url) return;
   if (isSyncing) { _pendingSync = true; return; }
   if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
+
+  // ★ 先組出 payload，做 hash 比對，相同就靜默跳過（不發請求）
+  const _payload = {
+    tasks: state.tasks,
+    sandbox: state.sandbox,
+    done: state.done,
+    rewards: state.rewards || [],
+    customQuotes: state.customQuotes || [],
+    energy: state.energy || 0,
+    doneHistory: (state.doneHistory || []).filter(h => {
+      if (!h.completedAt) return true;
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
+    }),
+    todayOrder: state.todayOrder || [],
+    lotteryState: lotteryState,
+    wishPoints: state.wishPoints || 0,
+    morningDialogShownDate: state.morningDialogShownDate || null,
+    routines: state.routines || [],
+    routineResetDate: state.routineResetDate || null,
+    settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
+  };
+
+  // ★ 只有 _notesDirty 時才帶 notes，省略大量 payload
+  if (_notesDirty) {
+    const _notesPayload = (function(){
+      try {
+        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
+        if (p) return p;
+      } catch(e) {}
+      try {
+        const raw = localStorage.getItem('innerflow_notes_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+        }
+      } catch(e) {}
+      return undefined;
+    })();
+    if (_notesPayload) _payload.notes = _notesPayload;
+  }
+
+  // ★ Hash 防重：資料未變動就靜默跳過，不耗費任何網路
+  const _hash = _quickHash(_payload);
+  if (_hash && _hash === _lastSyncHash) {
+    const dot = document.getElementById('syncDot');
+    if (dot && dot.className !== 'sync-dot synced') dot.className = 'sync-dot synced';
+    return;
+  }
+
   isSyncing = true;
   _pendingSync = false;
   let _retryScheduled = false; // 本次執行是否安排了 retry
@@ -3505,53 +3564,14 @@ async function _doSyncToCloud() {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         signal: _ctrl.signal,
-        body: JSON.stringify({
-          action: 'save',
-          data: {
-            tasks: state.tasks,
-            sandbox: state.sandbox,
-            done: state.done,
-            rewards: state.rewards || [],
-            customQuotes: state.customQuotes || [],
-            energy: state.energy || 0,
-            doneHistory: (state.doneHistory || []).filter(h => {
-              if (!h.completedAt) return true;
-              const oneYearAgo = new Date();
-              oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-              return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
-            }),
-            todayOrder: state.todayOrder || [],
-            lotteryState: lotteryState,
-            wishPoints: state.wishPoints || 0,
-            morningDialogShownDate: state.morningDialogShownDate || null,
-            routines: state.routines || [],
-            routineResetDate: state.routineResetDate || null,
-            notes: (function(){
-              // ── 透過 IIFE 暴露的 accessor 取得 notes payload（正確讀到 IIFE 內部變數）──
-              // notesFolderData/_notesLoaded 是 IIFE 區域變數，_doSyncToCloud 無法直接存取
-              try {
-                const payload = window._notesGetSyncPayload && window._notesGetSyncPayload();
-                if (payload) return payload;
-              } catch(e) {}
-              // fallback：從 localStorage 讀（一般模式，或 accessor 尚未初始化時）
-              try {
-                const raw = localStorage.getItem('innerflow_notes_v1');
-                if (raw) {
-                  const parsed = JSON.parse(raw);
-                  if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
-                }
-              } catch(e) {}
-              // 真正取不到任何資料 → 省略欄位，讓 GAS 保留雲端既有筆記
-              return undefined;
-            })(),
-            settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
-          }
-        })
+        body: JSON.stringify({ action: 'save', data: _payload })
       });
     } finally {
       clearTimeout(_fetchTimeout);
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // ★ 成功後存 hash，下次相同資料可跳過
+    _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
     _notesDirty = false; // 成功後清除，下次 sync 若筆記無變動就不帶
@@ -9291,6 +9311,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 window.addEventListener('load', () => {
   setTimeout(notesRewireLogo, 200);
+
+  // ★ GAS 預熱（Warmup）：頁面載入後 3 秒，靜默發一次 GET 請求喚醒 GAS runtime
+  // 讓使用者第一次按「同步」時 GAS 已熱機，體感延遲從 3-4s 降到 ~1s
+  // 使用 keepalive:true 確保即使頁面快速切走也能送出；timeout 5s 避免佔用連線
+  setTimeout(() => {
+    const _warmupUrl = typeof getApiUrl === 'function' ? getApiUrl() : null;
+    if (!_warmupUrl) return;
+    const _wCtrl = new AbortController();
+    const _wTimer = setTimeout(() => _wCtrl.abort(), 5000);
+    fetch(_warmupUrl + '?action=load&_warmup=1&_t=' + Date.now(), {
+      cache: 'no-store',
+      signal: _wCtrl.signal,
+      keepalive: true
+    }).then(r => {
+      clearTimeout(_wTimer);
+      // 預熱順帶更新 syncDot hash，讓後續同步能正確做 diff
+      if (r.ok) r.json().then(d => {
+        if (d && d.tasks) {
+          try { _lastSyncHash = _quickHash({ tasks: d.tasks, sandbox: d.sandbox, done: d.done }); } catch(e) {}
+        }
+      }).catch(() => {});
+    }).catch(() => { clearTimeout(_wTimer); }); // 失敗靜默，不影響任何功能
+  }, 3000);
 });
 
 // 頁面隱藏（切分頁、關閉）時，若有待推的筆記變更，立刻觸發同步
