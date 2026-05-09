@@ -3168,16 +3168,16 @@ async function submitGuestToken() {
       grantedAt: Date.now(),
       expiresAt: data.expiresAt
     });
-    window._fbUid = data.ownerUid;  // ← 這行不能少
+    window._fbUid = data.ownerUid;
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
-    await _fbLoad();
+    await loadFromCloud();
   } catch(e) {
     errEl.textContent = '驗證失敗：' + e.message;
   }
 }
-
+  
 function setApiStatus(type, msg) {
   const el = document.getElementById('apiStatus');
   el.className = 'api-status' + (type ? ' ' + type : '');
