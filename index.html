@@ -2827,6 +2827,13 @@
     </div>
     <div id="tokenStatus" style="font-size:10px;color:var(--text-faint);margin-bottom:10px;line-height:1.5;min-height:14px"></div>
 
+    <!-- 強制同步筆記 -->
+    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px">📒 筆記同步</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div id="notesSyncStatus" style="flex:1;font-size:11px;color:var(--text-faint)">點擊右側按鈕強制將筆記推送至雲端</div>
+      <button onclick="forceSyncNotes()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">強制同步</button>
+    </div>
+
     <!-- Reset time -->
     <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:10px">⏰ 每日重置時間</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -4130,6 +4137,25 @@ async function syncDotClicked() {
   }
 }
 window.syncDotClicked = syncDotClicked;
+
+// ── 強制同步筆記到 Firestore ──
+async function forceSyncNotes() {
+  const statusEl = document.getElementById('notesSyncStatus');
+  if (!window._fbUid || !window._fbDb) {
+    if (statusEl) statusEl.textContent = '❌ 尚未連線 Firebase';
+    return;
+  }
+  if (statusEl) statusEl.textContent = '同步中…';
+  try {
+    _notesDirty = true;
+    await syncToCloud();
+    if (statusEl) statusEl.textContent = '✓ 筆記已推送至雲端！';
+    showToast('✓ 筆記已同步');
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '❌ 同步失敗：' + e.message;
+  }
+}
+window.forceSyncNotes = forceSyncNotes;
 
 // ── State ──
 let state = {
