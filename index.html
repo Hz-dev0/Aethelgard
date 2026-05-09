@@ -2978,13 +2978,8 @@ function escHtml(s) {
 const API_STORAGE_KEY = 'innerflow_api_url';
 const API_KEY_FRAGMENT_STORE = 'innerflow_api_fragment';
 
-function getApiUrl() {
-  return '';
-}
-
-function _isFirebaseReady() {
-  return !!(window._fbUid && window._fbDb);
-}
+function getApiUrl() { return ''; }
+function _isFirebaseReady() { return !!(window._fbUid && window._fbDb); }
 
 // ── Firebase Firestore 讀寫 helpers ──
 async function _fbLoad() {
@@ -3008,11 +3003,24 @@ async function _fbLoad() {
   }
 }
 
+// Firestore 不接受 undefined，遞迴替換成 null
+function _stripUndefined(obj) {
+  if (Array.isArray(obj)) return obj.map(_stripUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    const out = {};
+    for (const k of Object.keys(obj)) {
+      out[k] = obj[k] === undefined ? null : _stripUndefined(obj[k]);
+    }
+    return out;
+  }
+  return obj;
+}
+
 async function _fbSave(payload) {
   if (!window._fbUid || !window._fbDb) return false;
   try {
     const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
-    await window._fbSetDoc(ref, payload);
+    await window._fbSetDoc(ref, _stripUndefined(payload));
     return true;
   } catch(e) {
     console.warn('Firebase 寫入失敗', e);
@@ -4744,8 +4752,7 @@ function runDailyReset() {
     lotteryState.todayDate = todayKey;
     lotteryState.todayDone = 0;
     lotteryState.todayFlipped = 0;
-    lotteryState.rmSlot = undefined;
-    lotteryState.cards = []; // clear deck so user must draw again
+    lotteryState.rmSlot = null;
     // 隨機任務不隨每日 reset 消失，持續到下次洗牌前都可以完成並獲得對應卡片數量
     saveLottery();
   }
@@ -4887,7 +4894,7 @@ async function init() {
         lotteryState.todayDate = _today;
         lotteryState.todayDone = 0;
         lotteryState.todayFlipped = 0;
-        lotteryState.rmSlot = undefined;
+        lotteryState.rmSlot = null;
       } else {
         // 同一天：reconcile todayDone
         // 計算「目前仍在 tasks 裡的今日完成數」＋「已從 tasks 移除但計入 doneHistory 的今日完成數」
@@ -6491,7 +6498,7 @@ function initLottery() {
     lotteryState.todayDate = today;
     lotteryState.todayDone = 0;
     lotteryState.todayFlipped = 0;
-    lotteryState.rmSlot = undefined;
+    lotteryState.rmSlot = null;
     // Do NOT clear randomMission here — it persists until awarded or a new draw is made
   }
   // Migrate old saves that don't have todayFlipped
@@ -7783,16 +7790,25 @@ function _wireTaskLongPress() {
 // ── PWA Service Worker ──
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // 使用相對路徑，不論部署在哪個子路徑都能正常運作
-    const swPath = (function() {
-      const scripts = document.getElementsByTagName('script');
-      // 以目前頁面路徑為基準找同目錄的 sw.js
-      const base = location.pathname.endsWith('/') ? location.pathname : location.pathname.replace(/[^/]*$/, '');
-      return base + 'sw.js';
-    })();
+    const base = location.pathname.endsWith('/') ? location.pathname : location.pathname.replace(/[^/]*$/, '');
+    const swPath = base + 'sw.js?v=20250509001';
     navigator.serviceWorker.register(swPath)
-      .then(reg => console.log('SW registered:', reg.scope))
-      .catch(err => console.warn('SW registration failed (sw.js 尚未建立？):', err));
+      .then(reg => {
+        console.log('SW registered:', reg.scope);
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('SW registration failed:', err));
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) { refreshing = true; location.reload(); }
+    });
   });
 }
 
@@ -9175,7 +9191,19 @@ function notesRewireLogo() {
     menu.style.display = 'block';
   }
 
-  // 桌機
+  function _goHome() {
+    const menu = document.getElementById('logoMenu');
+    if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
+    // 短按：關閉 notes，回到任務首頁
+    if (typeof _notesIsVisible !== 'undefined' && _notesIsVisible) {
+      const prevPage = window._notesPrevPage || 'tree';
+      showPage(prevPage);
+    } else {
+      showPage('tree');
+    }
+  }
+
+  // ── 桌機 ──
   let _lp = null, _lpFired = false;
   newLogo.addEventListener('mousedown', () => {
     _lpFired = false;
@@ -9186,17 +9214,19 @@ function notesRewireLogo() {
   newLogo.addEventListener('click', e => {
     e.stopPropagation();
     if (_lpFired) { _lpFired = false; return; }
-    const menu = document.getElementById('logoMenu');
-    if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    _openMenu();
+    _goHome();
   });
 
-  // 手機
+  // ── 手機 ──
   let _touchLp = null, _touchFired = false, _tx = 0, _ty = 0;
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
     _tx = e.touches[0].clientX; _ty = e.touches[0].clientY;
-    _touchLp = setTimeout(() => { _touchFired = true; if (navigator.vibrate) navigator.vibrate(30); _openMenu(); }, 500);
+    _touchLp = setTimeout(() => {
+      _touchFired = true;
+      if (navigator.vibrate) navigator.vibrate(30);
+      _openMenu();
+    }, 500);
   }, { passive: true });
   newLogo.addEventListener('touchmove', e => {
     if (Math.abs(e.touches[0].clientX - _tx) > 8 || Math.abs(e.touches[0].clientY - _ty) > 8) clearTimeout(_touchLp);
@@ -9205,9 +9235,7 @@ function notesRewireLogo() {
     clearTimeout(_touchLp);
     e.preventDefault(); e.stopPropagation();
     if (_touchFired) { _touchFired = false; return; }
-    const menu = document.getElementById('logoMenu');
-    if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    _openMenu();
+    _goHome();
   });
 }
 
