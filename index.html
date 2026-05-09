@@ -4151,11 +4151,19 @@ async function forceSyncNotes() {
     if (statusEl) statusEl.textContent = '❌ 尚未連線 Firebase';
     return;
   }
+  // 確認筆記有資料
+  const notesPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
+  if (!notesPayload) {
+    if (statusEl) statusEl.textContent = '❌ 筆記尚未載入或無資料';
+    return;
+  }
   if (statusEl) statusEl.textContent = '同步中…';
   try {
-    _notesDirty = true;
-    await syncToCloud();
-    if (statusEl) statusEl.textContent = '✓ 筆記已推送至雲端！';
+    // 直接寫入 Firestore，不走 debounce
+    const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+    await updateDoc(ref, { notes: notesPayload });
+    if (statusEl) statusEl.textContent = '✓ 筆記已推送至雲端！tabs: ' + notesPayload.tabs.length;
     showToast('✓ 筆記已同步');
   } catch(e) {
     if (statusEl) statusEl.textContent = '❌ 同步失敗：' + e.message;
