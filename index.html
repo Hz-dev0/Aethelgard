@@ -3153,14 +3153,22 @@ async function submitGuestToken() {
   if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
   try {
-    const { doc, getDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const { doc, getDoc, updateDoc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const snap = await getDoc(doc(window._fbDb, 'tokens', code));
     if (!snap.exists()) { errEl.textContent = '通行碼不存在'; return; }
     const data = snap.data();
     if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
     if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期'; return; }
-    await updateDoc(doc(window._fbDb, 'tokens', code), { used: true });
-    window._fbUid = data.ownerUid;
+    await updateDoc(doc(window._fbDb, 'tokens', code), {
+      used: true,
+      usedByUid: window._fbAuthUid
+    });
+    await setDoc(doc(window._fbDb, 'guest_access', window._fbAuthUid), {
+      ownerUid: data.ownerUid,
+      grantedAt: Date.now(),
+      expiresAt: data.expiresAt
+    });
+    window._fbUid = data.ownerUid;  // ← 這行不能少
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
