@@ -2736,7 +2736,7 @@
 
 
 <!-- Context Menu -->
-<div class="ctx-menu" id="ctxMenu">
+<div class="ctx-menu" id="ctxMenu" onclick="event.stopPropagation()">
   <div class="ctx-item" id="ctxEdit" onclick="ctxAction('edit')">✏️ 編輯任務</div>
   <div class="ctx-item" id="ctxBreakdown" onclick="ctxAction('breakdown')">🔀 拆解流程</div>
   <div class="ctx-item" id="ctxToggle" onclick="ctxAction('toggle')">↩ 取消完成</div>
@@ -7420,8 +7420,9 @@ function ctxAction(action) {
   }
 }
 
-document.addEventListener('click', () => {
-  document.getElementById('ctxMenu').classList.remove('open');
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('ctxMenu');
+  if (menu && !menu.contains(e.target)) menu.classList.remove('open');
 });
 
 // ── Task Breakdown (拆解流程) ──
