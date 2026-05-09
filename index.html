@@ -2669,6 +2669,7 @@
     <div class="notes-page-nav" id="notes-next-zone" onclick="notesHandleRightZone()">❯</div>
     <!-- Floating controls -->
     <div id="notes-page-num">1 / 1</div>
+    <div id="notes-saved-indicator" style="position:absolute;bottom:12px;left:calc(50% - 128px);font-size:11px;color:var(--text-faint);background:var(--bg2);border:1px solid var(--border);padding:3px 10px;border-radius:12px;pointer-events:none;opacity:0;transition:opacity 0.4s ease;z-index:20;white-space:nowrap">✓ 已保存</div>
     <button id="notes-search-btn" onclick="notesToggleSearch()" title="搜尋筆記">🔍</button>
     <!-- Search bar -->
     <div id="notes-search-bar">
@@ -5976,7 +5977,13 @@ function taskHTML(t) {
           ${t.postponed >= 3 ? '<span class="tag" style="border-color:rgba(200,120,120,0.4);color:var(--rose);background:rgba(200,120,120,0.06)">⚠ 已多次延期</span>' : ''}
           ${t.recurring && t.recurMode === 'interval' ? `<span class="tag" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)">🔁 每${t.recurInterval || '?'}天</span>` : t.recurring ? '<span class="tag" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)">🔁 重複</span>' : ''}
           ${isOverdue && !t.done ? '<span class="tag" style="border-color:rgba(192,86,90,0.4);color:var(--rose);background:rgba(192,86,90,0.07)">逾期</span>' : ''}
-          ${t.taskDate && !t.done ? `<span class="tag" style="border-color:rgba(130,154,177,0.35);color:var(--sky);background:rgba(130,154,177,0.07);cursor:pointer" title="點擊修改日期" onclick="event.stopPropagation();openDateTagPicker(event,${t.id})">📅 ${t.taskDate}</span>` : ''}
+          ${t.taskDate && !t.done ? (() => {
+            const today = localDateStr();
+            const diff = Math.round((new Date(t.taskDate) - new Date(today)) / 86400000);
+            const diffLabel = diff === 0 ? '今天' : diff > 0 ? `剩 ${diff} 天` : `逾 ${-diff} 天`;
+            const diffColor = diff < 0 ? 'var(--rose)' : diff <= 2 ? '#C9A227' : 'var(--sky)';
+            return `<span class="tag" style="border-color:rgba(130,154,177,0.35);color:${diffColor};background:rgba(130,154,177,0.07);cursor:pointer" title="點擊修改日期" onclick="event.stopPropagation();openDateTagPicker(event,${t.id})">📅 ${t.taskDate} · ${diffLabel}</span>`;
+          })() : ''}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
@@ -6156,6 +6163,13 @@ function renderTodayPanel() {
       <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id});renderTodayPanel()">${t.done ? '✓' : ''}</div>
       <span class="today-chip-goal">${gIcon}</span>
       <span class="today-chip-name" style="${isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(t.name)}</span>
+      ${t.taskDate && !t.done && !isOverdue ? (() => {
+        const diff = Math.round((new Date(t.taskDate) - new Date(todayStr)) / 86400000);
+        if (diff < 0 || diff > 7) return '';
+        const lbl = diff === 0 ? '今天截止' : `剩 ${diff} 天`;
+        const col = diff === 0 ? 'var(--rose)' : diff <= 2 ? '#C9A227' : 'var(--sky)';
+        return `<span style="font-size:9px;color:${col};flex-shrink:0;font-weight:600;border:1px solid ${col};border-radius:8px;padding:0 4px">${lbl}</span>`;
+      })() : ''}
       ${isOverdue ? '<span style="font-size:10px;color:var(--rose);flex-shrink:0;font-weight:600">逾期</span>' : ''}
       ${isPreSched ? '<span style="font-size:10px;color:var(--text-faint);flex-shrink:0">預排</span>' : ''}
       ${!t.done ? `<span class="btn-del-icon" style="font-size:12px;flex-shrink:0;padding:1px 5px;border-radius:4px" onclick="event.stopPropagation();deleteTodayTask(${t.id})" title="刪除此任務">🗑</span>` : ''}
@@ -6587,17 +6601,20 @@ function addTask() {
   if (rewardField) rewardField.value = '';
   _setGoalBtn('技能');
   _setEnergyBtn('easy');
-  closeModal('addModal');
+  // 不關閉 modal，清空後重新 focus，讓使用者可以連續新增（按取消或 Esc 離開）
+  setTimeout(() => {
+    const inp = document.getElementById('newTaskName');
+    if (inp) inp.focus();
+  }, 30);
   // If added from the tree today panel, stay on tree page
   if (newTask.scheduledFor === todayStr && document.getElementById('page-tree').classList.contains('active')) {
     renderTree();
     renderTodayPanel();
   } else {
-    showPage('tasks');
     renderTasks();
     renderTree();
   }
-  showToast('🌱 任務已種下，等待發芽');
+  showToast('🌱 任務已種下，再新增或按取消關閉');
   syncToCloud();
 }
 
@@ -8576,6 +8593,13 @@ function notesSave() {
   try {
     if (typeof syncNotesToCloud === 'function') syncNotesToCloud();
   } catch(e) {}
+  // 顯示已保存提示
+  const ind = document.getElementById('notes-saved-indicator');
+  if (ind) {
+    ind.style.opacity = '1';
+    clearTimeout(ind._hideTimer);
+    ind._hideTimer = setTimeout(() => { ind.style.opacity = '0'; }, 1800);
+  }
 }
 
 function notesLoad() {
