@@ -2819,6 +2819,14 @@
     <button id="apiModalCloseBtn" onclick="closeApiModal()" class="btn-close-panel btn-close-panel-abs">×</button>
     <div class="api-modal-title">⚙️ 使用設定</div>
 
+    <!-- 臨時通行碼 -->
+    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px">🔑 臨時通行碼</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div id="tokenDisplay" style="flex:1;font-size:22px;font-family:monospace;font-weight:700;letter-spacing:0.18em;color:var(--green);background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center">——————</div>
+      <button onclick="generateToken()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">產生</button>
+    </div>
+    <div id="tokenStatus" style="font-size:10px;color:var(--text-faint);margin-bottom:10px;line-height:1.5;min-height:14px"></div>
+
     <!-- Reset time -->
     <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:10px">⏰ 每日重置時間</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -2857,6 +2865,23 @@
     <span>使用設定</span>
   </div>
 
+</div>
+
+<!-- 訪客通行碼 Overlay -->
+<div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:28px 24px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center">
+    <div style="font-size:20px;margin-bottom:6px">🔑</div>
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入臨時通行碼</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px">由你的白名單裝置產生，30 分鐘內有效</div>
+    <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
+      placeholder="000000"
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px">
+    <div id="guestTokenError" style="font-size:11px;color:var(--red,#e05);min-height:16px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeGuestTokenOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">取消</button>
+      <button onclick="submitGuestToken()" style="flex:2;padding:9px;border-radius:9px;border:none;background:var(--green);color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">進入</button>
+    </div>
+  </div>
 </div>
 
 <!-- Add Wish Modal -->
@@ -2952,7 +2977,7 @@
     <div id="recurMorningList"></div>
     <div class="rm-footer">
       <button class="rm-select-all-btn" onclick="recurMorningToggleAll()">全選 / 全不選</button>
-      <button class="rm-skip-btn" onclick="skipRecurMorningDialog()">跳過（下次再問）</button>
+      <button class="rm-skip-btn" onclick="skipRecurMorningDialog()">跳過</button>
       <button class="rm-confirm-btn" onclick="confirmRecurMorning()">加入今日任務 →</button>
     </div>
   </div>
@@ -3003,14 +3028,11 @@ async function _fbLoad() {
   }
 }
 
-// Firestore 不接受 undefined，遞迴替換成 null
 function _stripUndefined(obj) {
   if (Array.isArray(obj)) return obj.map(_stripUndefined);
   if (obj !== null && typeof obj === 'object') {
     const out = {};
-    for (const k of Object.keys(obj)) {
-      out[k] = obj[k] === undefined ? null : _stripUndefined(obj[k]);
-    }
+    for (const k of Object.keys(obj)) { out[k] = obj[k] === undefined ? null : _stripUndefined(obj[k]); }
     return out;
   }
   return obj;
@@ -3022,10 +3044,7 @@ async function _fbSave(payload) {
     const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
     await window._fbSetDoc(ref, _stripUndefined(payload));
     return true;
-  } catch(e) {
-    console.warn('Firebase 寫入失敗', e);
-    return false;
-  }
+  } catch(e) { console.warn('Firebase 寫入失敗', e); return false; }
 }
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
@@ -3033,10 +3052,17 @@ let _firebaseReadyFired = false;
 window._onFirebaseReady = function() {
   if (_firebaseReadyFired) return;
   _firebaseReadyFired = true;
-  // 更新 UI：顯示已連線
   const btn = document.getElementById('settingsBtn');
   if (btn) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
-  // 若 init() 已在等待 Firebase，通知它繼續
+  // 非白名單裝置 → 自動彈出訪客通行碼輸入
+  const WHITELIST = [
+    'B53QVIoHSBZq6woxzhJX0b3Z8D82',
+    '21TsXzZ9IDOz5Xlq5VBECSxOY7L2',
+    'UjpfEGR8vmbOxQHRb28ft6L0gZH3'
+  ];
+  if (window._fbUid && !WHITELIST.includes(window._fbUid)) {
+    setTimeout(openGuestTokenOverlay, 600);
+  }
   if (typeof window._onFirebaseReadyCallback === 'function') {
     window._onFirebaseReadyCallback();
   }
@@ -3047,12 +3073,14 @@ function handleApiModalOverlayClick(e) {
 }
 
 function openApiModal() {
-  // Firebase 模式：清空輸入框、顯示連線狀態
   const uid = window._fbUid || localStorage.getItem('innerflow_fb_uid') || '';
-  const importInput = document.getElementById('importUidInput');
-  if (importInput) importInput.value = '';
   const clearBtn = document.getElementById('apiClearBtn');
   if (clearBtn) clearBtn.style.display = 'none';
+  // 重置通行碼顯示
+  const tokenDisplay = document.getElementById('tokenDisplay');
+  if (tokenDisplay) tokenDisplay.textContent = '——————';
+  const tokenStatus = document.getElementById('tokenStatus');
+  if (tokenStatus) tokenStatus.textContent = uid ? '✓ Firebase 已連線' : '正在連線 Firebase…';
   // Load saved reset time
   const savedTime = localStorage.getItem('innerflow_reset_time') || '04:00';
   document.getElementById('resetTimeInput').value = savedTime;
@@ -3060,16 +3088,82 @@ function openApiModal() {
   const savedNeglect = localStorage.getItem('innerflow_neglect_days') || '7';
   const neglectEl = document.getElementById('neglectDaysInput');
   if (neglectEl) neglectEl.value = savedNeglect;
-  if (uid) {
-    setApiStatus('ok', '✓ Firebase 已連線（自動同步中）');
-  } else {
-    setApiStatus('', '正在連線 Firebase…');
-  }
   document.getElementById('apiModal').classList.add('open');
 }
 
 function closeApiModal() {
   document.getElementById('apiModal').classList.remove('open');
+}
+
+// ── 臨時通行碼：產生（白名單裝置用）──
+let _tokenExpireTimer = null;
+async function generateToken() {
+  if (!window._fbUid || !window._fbDb) {
+    const ts = document.getElementById('tokenStatus');
+    if (ts) ts.textContent = '尚未連線 Firebase，請稍候再試';
+    return;
+  }
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = Date.now() + 30 * 60 * 1000; // 30 分鐘
+  const ownerUid = window._fbUid;
+  try {
+    const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    await setDoc(doc(window._fbDb, 'tokens', code), { ownerUid, expiresAt, used: false });
+    const display = document.getElementById('tokenDisplay');
+    if (display) display.textContent = code;
+    const ts = document.getElementById('tokenStatus');
+    if (ts) {
+      ts.textContent = '30 分鐘內有效，點擊複製';
+      display && (display.style.cursor = 'pointer');
+      display && display.addEventListener('click', () => {
+        navigator.clipboard.writeText(code).then(() => { ts.textContent = '✓ 已複製！'; });
+      }, { once: true });
+    }
+    if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
+    _tokenExpireTimer = setTimeout(() => {
+      if (display) display.textContent = '——————';
+      if (ts) ts.textContent = '通行碼已過期';
+    }, 30 * 60 * 1000);
+  } catch(e) {
+    const ts = document.getElementById('tokenStatus');
+    if (ts) ts.textContent = '產生失敗：' + e.message;
+  }
+}
+
+// ── 臨時通行碼：訪客驗證（無痕模式用）──
+function openGuestTokenOverlay() {
+  const el = document.getElementById('guestTokenOverlay');
+  if (el) { el.style.display = 'flex'; document.getElementById('guestTokenInput').focus(); }
+}
+function closeGuestTokenOverlay() {
+  const el = document.getElementById('guestTokenOverlay');
+  if (el) el.style.display = 'none';
+}
+async function submitGuestToken() {
+  const input = document.getElementById('guestTokenInput');
+  const errEl = document.getElementById('guestTokenError');
+  const code = (input.value || '').trim();
+  if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
+  errEl.textContent = '驗證中…';
+  try {
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(window._fbDb, 'tokens', code));
+    if (!snap.exists()) { errEl.textContent = '通行碼不存在'; return; }
+    const data = snap.data();
+    if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
+    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期'; return; }
+    // 標記已使用
+    const { updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    await updateDoc(doc(window._fbDb, 'tokens', code), { used: true });
+    // 用 ownerUid 覆蓋本裝置的 UID，讀取主人的資料
+    window._fbUid = data.ownerUid;
+    localStorage.setItem('innerflow_fb_uid', data.ownerUid);
+    closeGuestTokenOverlay();
+    showToast('🔑 訪客模式已啟用，正在載入資料…');
+    await _fbLoad();
+  } catch(e) {
+    errEl.textContent = '驗證失敗：' + e.message;
+  }
 }
 
 function setApiStatus(type, msg) {
@@ -4753,6 +4847,7 @@ function runDailyReset() {
     lotteryState.todayDone = 0;
     lotteryState.todayFlipped = 0;
     lotteryState.rmSlot = null;
+    lotteryState.cards = []; // clear deck so user must draw again
     // 隨機任務不隨每日 reset 消失，持續到下次洗牌前都可以完成並獲得對應卡片數量
     saveLottery();
   }
@@ -8265,13 +8360,13 @@ function confirmRecurMorning() {
   }
 }
 
-// 跳過：關閉視窗但【不】寫入 morningDialogShownDate，下次開啟 app 會再詢問一次
+// 跳過 / × 關閉：本週期不再詢問
 function skipRecurMorningDialog() {
   document.getElementById('recurMorningOverlay').classList.remove('open');
-  // 不寫 state.morningDialogShownDate，下次開啟會重新詢問
+  state.morningDialogShownDate = String(getLastResetTimestamp());
+  syncToCloud();
 }
 
-// 用 × 關閉（等同跳過）
 function closeRecurMorningDialog() {
   skipRecurMorningDialog();
 }
@@ -9179,35 +9274,24 @@ function notesRewireLogo() {
   const newLogo = logo.cloneNode(true);
   logo.parentNode.replaceChild(newLogo, logo);
 
-  function _openMenu() {
-    const menu = document.getElementById('logoMenu');
-    if (!menu) return;
-    const rect = newLogo.getBoundingClientRect();
-    const mw = 190;
-    let left = rect.left;
-    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-    menu.style.left = left + 'px';
-    menu.style.top  = (rect.bottom + 6) + 'px';
-    menu.style.display = 'block';
-  }
-
   function _goHome() {
-    const menu = document.getElementById('logoMenu');
-    if (menu && menu.style.display === 'block') { closeLogoMenu(); return; }
-    // 短按：關閉 notes，回到任務首頁
     if (typeof _notesIsVisible !== 'undefined' && _notesIsVisible) {
-      const prevPage = window._notesPrevPage || 'tree';
-      showPage(prevPage);
+      showPage(window._notesPrevPage || 'tree');
     } else {
       showPage('tree');
     }
+  }
+
+  function _openSettings() {
+    if (navigator.vibrate) navigator.vibrate(30);
+    openApiModal();
   }
 
   // ── 桌機 ──
   let _lp = null, _lpFired = false;
   newLogo.addEventListener('mousedown', () => {
     _lpFired = false;
-    _lp = setTimeout(() => { _lpFired = true; _openMenu(); }, 500);
+    _lp = setTimeout(() => { _lpFired = true; _openSettings(); }, 500);
   });
   newLogo.addEventListener('mouseup',    () => clearTimeout(_lp));
   newLogo.addEventListener('mouseleave', () => clearTimeout(_lp));
@@ -9222,11 +9306,7 @@ function notesRewireLogo() {
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
     _tx = e.touches[0].clientX; _ty = e.touches[0].clientY;
-    _touchLp = setTimeout(() => {
-      _touchFired = true;
-      if (navigator.vibrate) navigator.vibrate(30);
-      _openMenu();
-    }, 500);
+    _touchLp = setTimeout(() => { _touchFired = true; _openSettings(); }, 500);
   }, { passive: true });
   newLogo.addEventListener('touchmove', e => {
     if (Math.abs(e.touches[0].clientX - _tx) > 8 || Math.abs(e.touches[0].clientY - _ty) > 8) clearTimeout(_touchLp);
