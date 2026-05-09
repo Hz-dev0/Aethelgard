@@ -4109,7 +4109,8 @@ function showInstantRewardPopup(reward) {
 // ── Manual sync on syncDot click ──
 async function syncDotClicked() {
   const url = getApiUrl();
-  if (!url) { openApiModal(); return; }
+  // Firebase 模式下沒有 API URL，直接手動同步；無任何連線才開設定
+  if (!url && !window._fbUid) { openApiModal(); return; }
   // 清除所有 pending timer，強制立即同步
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
