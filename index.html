@@ -3044,7 +3044,10 @@ async function _fbSave(payload) {
     const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
     await window._fbSetDoc(ref, _stripUndefined(payload));
     return true;
-  } catch(e) { console.warn('Firebase 寫入失敗', e); return false; }
+  } catch(e) {
+    console.warn('Firebase 寫入失敗', e);
+    return false;
+  }
 }
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
@@ -3054,13 +3057,14 @@ window._onFirebaseReady = function() {
   _firebaseReadyFired = true;
   const btn = document.getElementById('settingsBtn');
   if (btn) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
-  // 非白名單裝置 → 自動彈出訪客通行碼輸入
+  // 用真實 auth UID 判斷是否為白名單裝置（_fbUid 可能被 override 成別人的 UID）
   const WHITELIST = [
     'B53QVIoHSBZq6woxzhJX0b3Z8D82',
     '21TsXzZ9IDOz5Xlq5VBECSxOY7L2',
     'UjpfEGR8vmbOxQHRb28ft6L0gZH3'
   ];
-  if (window._fbUid && !WHITELIST.includes(window._fbUid)) {
+  const authUid = window._fbAuthUid || window._fbUid || '';
+  if (authUid && !WHITELIST.includes(authUid)) {
     setTimeout(openGuestTokenOverlay, 600);
   }
   if (typeof window._onFirebaseReadyCallback === 'function') {
@@ -3076,15 +3080,12 @@ function openApiModal() {
   const uid = window._fbUid || localStorage.getItem('innerflow_fb_uid') || '';
   const clearBtn = document.getElementById('apiClearBtn');
   if (clearBtn) clearBtn.style.display = 'none';
-  // 重置通行碼顯示
   const tokenDisplay = document.getElementById('tokenDisplay');
   if (tokenDisplay) tokenDisplay.textContent = '——————';
   const tokenStatus = document.getElementById('tokenStatus');
   if (tokenStatus) tokenStatus.textContent = uid ? '✓ Firebase 已連線' : '正在連線 Firebase…';
-  // Load saved reset time
   const savedTime = localStorage.getItem('innerflow_reset_time') || '04:00';
   document.getElementById('resetTimeInput').value = savedTime;
-  // Load neglect days
   const savedNeglect = localStorage.getItem('innerflow_neglect_days') || '7';
   const neglectEl = document.getElementById('neglectDaysInput');
   if (neglectEl) neglectEl.value = savedNeglect;
@@ -3104,24 +3105,24 @@ async function generateToken() {
     return;
   }
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = Date.now() + 30 * 60 * 1000; // 30 分鐘
+  const expiresAt = Date.now() + 30 * 60 * 1000;
   const ownerUid = window._fbUid;
   try {
     const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     await setDoc(doc(window._fbDb, 'tokens', code), { ownerUid, expiresAt, used: false });
     const display = document.getElementById('tokenDisplay');
-    if (display) display.textContent = code;
     const ts = document.getElementById('tokenStatus');
-    if (ts) {
-      ts.textContent = '30 分鐘內有效，點擊複製';
-      display && (display.style.cursor = 'pointer');
-      display && display.addEventListener('click', () => {
-        navigator.clipboard.writeText(code).then(() => { ts.textContent = '✓ 已複製！'; });
-      }, { once: true });
+    if (display) {
+      display.textContent = code;
+      display.style.cursor = 'pointer';
+      display.onclick = () => {
+        navigator.clipboard.writeText(code).then(() => { if (ts) ts.textContent = '✓ 已複製！'; });
+      };
     }
+    if (ts) ts.textContent = '30 分鐘內有效，點擊數字複製';
     if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
     _tokenExpireTimer = setTimeout(() => {
-      if (display) display.textContent = '——————';
+      if (display) { display.textContent = '——————'; display.style.cursor = ''; display.onclick = null; }
       if (ts) ts.textContent = '通行碼已過期';
     }, 30 * 60 * 1000);
   } catch(e) {
@@ -3130,10 +3131,10 @@ async function generateToken() {
   }
 }
 
-// ── 臨時通行碼：訪客驗證（無痕模式用）──
+// ── 訪客通行碼：輸入驗證 ──
 function openGuestTokenOverlay() {
   const el = document.getElementById('guestTokenOverlay');
-  if (el) { el.style.display = 'flex'; document.getElementById('guestTokenInput').focus(); }
+  if (el) { el.style.display = 'flex'; setTimeout(() => document.getElementById('guestTokenInput').focus(), 100); }
 }
 function closeGuestTokenOverlay() {
   const el = document.getElementById('guestTokenOverlay');
@@ -3146,16 +3147,13 @@ async function submitGuestToken() {
   if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
   errEl.textContent = '驗證中…';
   try {
-    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const { doc, getDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const snap = await getDoc(doc(window._fbDb, 'tokens', code));
     if (!snap.exists()) { errEl.textContent = '通行碼不存在'; return; }
     const data = snap.data();
     if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
     if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期'; return; }
-    // 標記已使用
-    const { updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     await updateDoc(doc(window._fbDb, 'tokens', code), { used: true });
-    // 用 ownerUid 覆蓋本裝置的 UID，讀取主人的資料
     window._fbUid = data.ownerUid;
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
     closeGuestTokenOverlay();
@@ -9287,7 +9285,7 @@ function notesRewireLogo() {
     openApiModal();
   }
 
-  // ── 桌機 ──
+  // 桌機
   let _lp = null, _lpFired = false;
   newLogo.addEventListener('mousedown', () => {
     _lpFired = false;
@@ -9301,7 +9299,7 @@ function notesRewireLogo() {
     _goHome();
   });
 
-  // ── 手機 ──
+  // 手機
   let _touchLp = null, _touchFired = false, _tx = 0, _ty = 0;
   newLogo.addEventListener('touchstart', e => {
     _touchFired = false;
