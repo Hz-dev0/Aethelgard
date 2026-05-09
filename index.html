@@ -9285,7 +9285,10 @@ function notesWirePageCtx() {
 // ── Show / Hide notes page ─────────────────────────────
 function notesShow() {
   _notesIsVisible = true;
-  notesLoad();
+  // 若記憶體已有雲端載入的資料，跳過 notesLoad()（避免空的 localStorage 蓋掉雲端資料）
+  if (!_notesLoaded || notesFolderData.length === 0) {
+    notesLoad();
+  }
   notesEnsureDefaults();
   notesRenderTabs();
   // Show the import/export button in the header
