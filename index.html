@@ -3070,7 +3070,7 @@ window._onFirebaseReady = async function() {
       if (snap.exists()) {
         const ga = snap.data();
         if (Date.now() < ga.expiresAt) {
-          // 還在有效期內，自動放行
+          // 還在有效期內，自動放行：先設好 uid 再通知 init() 繼續
           window._fbUid = ga.ownerUid;
           localStorage.setItem('innerflow_fb_uid', ga.ownerUid);
           _startGuestExpireTimer(ga.expiresAt);
@@ -3079,8 +3079,11 @@ window._onFirebaseReady = async function() {
         }
       }
     } catch(e) { console.warn('guest_access 查詢失敗', e); }
-    // 沒有有效 guest_access，彈出輸入框
+    // 沒有有效 guest_access：先讓 init() 知道 Firebase 就緒（但 uid 仍是訪客自己的），
+    // 再彈出輸入框。submitGuestToken 成功後會自己呼叫 loadFromCloud() 補載資料。
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
     setTimeout(openGuestTokenOverlay, 600);
+    return;
   }
   if (typeof window._onFirebaseReadyCallback === 'function') {
     window._onFirebaseReadyCallback();
@@ -3209,7 +3212,15 @@ async function submitGuestToken() {
     _startGuestExpireTimer(data.expiresAt);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
-    await loadFromCloud();
+    state._initDone = true;
+    const ok = await loadFromCloud();
+    if (ok) {
+      saveStateLocal();
+      renderEnergyDots();
+      renderSandbox();
+      renderAll();
+      initRoutines();
+    }
   } catch(e) {
     errEl.textContent = '驗證失敗：' + e.message;
   }
