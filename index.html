@@ -3058,7 +3058,8 @@ window._onFirebaseReady = function() {
   const WHITELIST = [
     'B53QVIoHSBZq6woxzhJX0b3Z8D82',
     '21TsXzZ9IDOz5Xlq5VBECSxOY7L2',
-    'UjpfEGR8vmbOxQHRb28ft6L0gZH3'
+    'UjpfEGR8vmbOxQHRb28ft6L0gZH3',
+    '4SjrQvNrgtRmD0y5BJ9s4KW1JA43'
   ];
   const authUid = window._fbAuthUid || window._fbUid || '';
   if (authUid && !WHITELIST.includes(authUid)) {
@@ -3093,7 +3094,6 @@ function closeApiModal() {
   document.getElementById('apiModal').classList.remove('open');
 }
 
-// ── 臨時通行碼：產生 ──
 let _tokenExpireTimer = null;
 async function generateToken() {
   if (!window._fbUid || !window._fbDb) {
@@ -3126,7 +3126,6 @@ async function generateToken() {
   }
 }
 
-// ── 訪客通行碼 ──
 function openGuestTokenOverlay() {
   const el = document.getElementById('guestTokenOverlay');
   if (el) { el.style.display = 'flex'; setTimeout(() => { const i = document.getElementById('guestTokenInput'); if(i) i.focus(); }, 100); }
@@ -3144,8 +3143,7 @@ function copyDeviceUid() {
     errEl.textContent = '✓ 已複製：' + uid.slice(0,8) + '…';
     setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
   }).catch(() => {
-    const errEl = document.getElementById('guestTokenError');
-    errEl.textContent = uid;
+    document.getElementById('guestTokenError').textContent = uid;
   });
 }
 async function submitGuestToken() {
@@ -9322,7 +9320,6 @@ function notesRewireLogo() {
     _goHome();
   });
 }
-
 // ── Swipe left/right on notes page tabs (title inputs only) ───────────
 function notesInitSwipe() {
   // Only title inputs support swipe-to-change-page (textareas use native scroll)
