@@ -3079,9 +3079,8 @@ window._onFirebaseReady = async function() {
         }
       }
     } catch(e) { console.warn('guest_access 查詢失敗', e); }
-    // 沒有有效 guest_access：先讓 init() 知道 Firebase 就緒（但 uid 仍是訪客自己的），
-    // 再彈出輸入框。submitGuestToken 成功後會自己呼叫 loadFromCloud() 補載資料。
-    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+    // 沒有有效 guest_access：彈出輸入框，不通知 init() 繼續。
+    // init() 會等最多 8 秒，submitGuestToken 成功後會設好 uid 再呼叫 _onFirebaseReadyCallback。
     setTimeout(openGuestTokenOverlay, 600);
     return;
   }
@@ -3212,15 +3211,9 @@ async function submitGuestToken() {
     _startGuestExpireTimer(data.expiresAt);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
-    state._initDone = true;
-    const ok = await loadFromCloud();
-    if (ok) {
-      saveStateLocal();
-      renderEnergyDots();
-      renderSandbox();
-      renderAll();
-      initRoutines();
-    }
+    // 通知 init() 的 Promise 繼續（init() 在等這個 callback）
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+    // init() 會自己呼叫 loadFromCloud() 並完整渲染，這裡不需要重複呼叫
   } catch(e) {
     errEl.textContent = '驗證失敗：' + e.message;
   }
