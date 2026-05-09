@@ -3050,7 +3050,7 @@ async function _fbSave(payload) {
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
 let _firebaseReadyFired = false;
-window._onFirebaseReady = function() {
+window._onFirebaseReady = async function() {
   if (_firebaseReadyFired) return;
   _firebaseReadyFired = true;
   const btn = document.getElementById('settingsBtn');
@@ -3063,6 +3063,23 @@ window._onFirebaseReady = function() {
   ];
   const authUid = window._fbAuthUid || window._fbUid || '';
   if (authUid && !WHITELIST.includes(authUid)) {
+    // 查看是否有未過期的 guest_access（重新整理免重新輸入）
+    try {
+      const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const snap = await getDoc(doc(window._fbDb, 'guest_access', authUid));
+      if (snap.exists()) {
+        const ga = snap.data();
+        if (Date.now() < ga.expiresAt) {
+          // 還在有效期內，自動放行
+          window._fbUid = ga.ownerUid;
+          localStorage.setItem('innerflow_fb_uid', ga.ownerUid);
+          _startGuestExpireTimer(ga.expiresAt);
+          if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+          return;
+        }
+      }
+    } catch(e) { console.warn('guest_access 查詢失敗', e); }
+    // 沒有有效 guest_access，彈出輸入框
     setTimeout(openGuestTokenOverlay, 600);
   }
   if (typeof window._onFirebaseReadyCallback === 'function') {
@@ -3146,6 +3163,25 @@ function copyDeviceUid() {
     document.getElementById('guestTokenError').textContent = uid;
   });
 }
+function _startGuestExpireTimer(expiresAt) {
+  const remaining = expiresAt - Date.now();
+  if (remaining <= 0) return;
+  setTimeout(() => {
+    // 清除本機資料（不動雲端）
+    try {
+      localStorage.removeItem('innerflow_fb_uid');
+      localStorage.removeItem('innerflow_fb_uid_override');
+      localStorage.removeItem('innerflow_state_local');
+      localStorage.removeItem('innerflow_notes_v1');
+    } catch(e) {}
+    // 重置 uid 回自己的 auth uid
+    window._fbUid = window._fbAuthUid;
+    // 彈回輸入框
+    showToast('⏰ 訪客通行碼已過期，請重新輸入');
+    setTimeout(openGuestTokenOverlay, 1000);
+  }, remaining);
+}
+
 async function submitGuestToken() {
   const input = document.getElementById('guestTokenInput');
   const errEl = document.getElementById('guestTokenError');
@@ -3170,6 +3206,7 @@ async function submitGuestToken() {
     });
     window._fbUid = data.ownerUid;
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
+    _startGuestExpireTimer(data.expiresAt);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
     await loadFromCloud();
@@ -3177,7 +3214,7 @@ async function submitGuestToken() {
     errEl.textContent = '驗證失敗：' + e.message;
   }
 }
-  
+
 function setApiStatus(type, msg) {
   const el = document.getElementById('apiStatus');
   el.className = 'api-status' + (type ? ' ' + type : '');
