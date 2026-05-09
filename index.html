@@ -3444,11 +3444,17 @@ async function loadFromCloud() {
       const _energyMigMap = { deep:'focus', flow:'charge', light:'easy', rest:'charge', low:'charge', mid:'easy', high:'focus' };
       state.tasks.forEach(t => { if (t.energy && _energyMigMap[t.energy]) t.energy = _energyMigMap[t.energy]; });
       // ── Restore notes
+      console.log('[notes] data.notes:', data.notes ? 'exists, tabs:' + (data.notes.tabs ? data.notes.tabs.length : 'no tabs') : 'MISSING');
       if (data.notes && data.notes.tabs) {
         const _chosen = _pickNotes(data.notes);
+        console.log('[notes] _chosen:', _chosen ? 'ok, tabs:' + _chosen.tabs.length : 'null');
         if (_chosen) {
           _lsSafeSet('innerflow_notes_v1', JSON.stringify(_chosen));
-          if (typeof notesLoadFromData === 'function') notesLoadFromData(_chosen);
+          if (typeof notesLoadFromData === 'function') {
+            console.log('[notes] calling notesLoadFromData');
+            notesLoadFromData(_chosen);
+            console.log('[notes] notesLoadFromData done');
+          }
         }
       }
       // ── Restore lotteryState
