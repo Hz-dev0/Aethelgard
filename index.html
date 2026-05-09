@@ -2821,16 +2821,12 @@
     <div class="api-modal-title">⚙️ 使用設定</div>
 
     <!-- 臨時通行碼 -->
-    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px">🔑 臨時通行碼</div>
+    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" onclick="copyDeviceUidFromSettings()" title="點擊複製裝置 ID"><span>🔑 臨時通行碼</span><span id="settingsDeviceIdStatus" style="font-size:10px;color:var(--green);letter-spacing:0;text-transform:none;font-weight:400"></span></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <div id="tokenDisplay" style="flex:1;font-size:22px;font-family:monospace;font-weight:700;letter-spacing:0.18em;color:var(--green);background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center">——————</div>
       <button onclick="generateToken()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">產生</button>
     </div>
     <div id="tokenStatus" style="font-size:10px;color:var(--text-faint);margin-bottom:10px;line-height:1.5;min-height:14px"></div>
-    <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;margin-top:-6px">
-      <span onclick="copyDeviceUidFromSettings()" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px" title="複製此裝置 ID 給管理員加入白名單">🔑 複製此裝置 ID</span>
-      <span id="settingsDeviceIdStatus" style="margin-left:6px"></span>
-    </div>
 
     <!-- Reset time -->
     <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:10px">⏰ 每日重置時間</div>
