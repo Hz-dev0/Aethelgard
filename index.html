@@ -2826,12 +2826,9 @@
       <button onclick="generateToken()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">產生</button>
     </div>
     <div id="tokenStatus" style="font-size:10px;color:var(--text-faint);margin-bottom:10px;line-height:1.5;min-height:14px"></div>
-
-    <!-- 強制同步筆記 -->
-    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px">📒 筆記同步</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <div id="notesSyncStatus" style="flex:1;font-size:11px;color:var(--text-faint)">點擊右側按鈕強制將筆記推送至雲端</div>
-      <button onclick="forceSyncNotes()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">強制同步</button>
+    <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;margin-top:-6px">
+      <span onclick="copyDeviceUidFromSettings()" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px" title="複製此裝置 ID 給管理員加入白名單">🔑 複製此裝置 ID</span>
+      <span id="settingsDeviceIdStatus" style="margin-left:6px"></span>
     </div>
 
     <!-- Reset time -->
@@ -2877,7 +2874,7 @@
 <!-- 訪客通行碼 Overlay -->
 <div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:28px 24px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center">
-    <div style="font-size:20px;margin-bottom:6px">🔑</div>
+    <div style="font-size:20px;margin-bottom:6px;cursor:pointer;user-select:none" onclick="copyDeviceUid()" title="點擊複製裝置 ID">🔑</div>
     <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入臨時通行碼</div>
     <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px">由你的白名單裝置產生，30 分鐘內有效</div>
     <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
@@ -2888,7 +2885,6 @@
       <button onclick="closeGuestTokenOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">取消</button>
       <button onclick="submitGuestToken()" style="flex:2;padding:9px;border-radius:9px;border:none;background:var(--green);color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">進入</button>
     </div>
-    <button onclick="copyDeviceUid()" style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:11px;cursor:pointer;font-family:inherit">📋 複製此裝置 ID（給管理員加入白名單）</button>
   </div>
 </div>
 
@@ -3166,7 +3162,7 @@ function copyDeviceUid() {
   navigator.clipboard.writeText(uid).then(() => {
     const errEl = document.getElementById('guestTokenError');
     errEl.style.color = 'var(--green)';
-    errEl.textContent = '✓ 已複製：' + uid.slice(0,8) + '…';
+    errEl.textContent = '✓ 裝置 ID 已複製';
     setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
   }).catch(() => {
     document.getElementById('guestTokenError').textContent = uid;
@@ -7411,8 +7407,6 @@ function ctxAction(action) {
     return; // toggleTask 已處理 render 與 sync
   }
   if (action === 'delete') {
-    const isRecurringDone = t.done && t.recurring;
-    if (isRecurringDone) { showToast('🔒 重複任務完成後不可刪除'); return; }
     // 若已完成的任務被刪除，退還 wishPoints（非充電任務才有給）
     if (t.done && t.energy !== 'charge') {
       if (state.wishPoints === undefined) state.wishPoints = 0;
@@ -9476,6 +9470,8 @@ function notesShowIoMenu() {
     { label: '📤 匯出為 JSON', fn: 'notesExportJson()' },
     { sep: true },
     { label: '📥 從 JSON 匯入', fn: 'notesImportJson()' },
+    { sep: true },
+    { label: '☁ 強制同步至雲端', fn: 'forceSyncNotesFromMenu()' },
   ];
   menu.innerHTML = items.map(it => {
     if (it.sep) return `<div style="height:1px;background:var(--border);margin:4px 8px"></div>`;
@@ -9507,6 +9503,23 @@ function _notesIoOutside(e) {
 }
 window.notesShowIoMenu = notesShowIoMenu;
 window._notesCloseIoMenu = _notesCloseIoMenu;
+
+async function forceSyncNotesFromMenu() {
+  await forceSyncNotes();
+}
+window.forceSyncNotesFromMenu = forceSyncNotesFromMenu;
+
+function copyDeviceUidFromSettings() {
+  const uid = window._fbAuthUid || window._fbUid || '';
+  const statusEl = document.getElementById('settingsDeviceIdStatus');
+  if (!uid) { if (statusEl) { statusEl.style.color = 'var(--rose)'; statusEl.textContent = '尚未取得'; } return; }
+  navigator.clipboard.writeText(uid).then(() => {
+    if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ 已複製'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+  }).catch(() => {
+    if (statusEl) { statusEl.style.color = 'var(--text-dim)'; statusEl.textContent = uid.slice(0,8) + '…'; }
+  });
+}
+window.copyDeviceUidFromSettings = copyDeviceUidFromSettings;
 
 function notesExportTxt() {
   notesFlush();
