@@ -7460,7 +7460,6 @@ function undoneTask(id) {
   renderTasks();
   renderTree();
   renderTodayPanel();
-  checkAchievements();
   renderRewards();
   showToast('↩ 已恢復為未完成');
   saveStateLocal();
@@ -7486,7 +7485,6 @@ function deleteTaskFromStats(id) {
     state.tasks = state.tasks.filter(x => x.id !== id);
     renderStats();
     renderTasks();
-    checkAchievements();
     renderRewards();
     showToast('🗑 任務已刪除');
     saveStateLocal();
@@ -7523,30 +7521,23 @@ function openCtxMenu(e, id) {
 function ctxAction(action) {
   const menu = document.getElementById('ctxMenu');
   menu.classList.remove('open');
-  // ★ 修正：強制將 ctxTargetId 轉為數字，防止 HTML 傳入字串型別導致 === 比對失敗
   const _targetId = typeof ctxTargetId === 'string' ? parseInt(ctxTargetId, 10) : ctxTargetId;
-  console.log('[ctxAction] action:', action, 'ctxTargetId:', ctxTargetId, 'type:', typeof ctxTargetId, '_targetId:', _targetId);
-  console.log('[ctxAction] state.tasks ids:', state.tasks.map(x => x.id + '(' + typeof x.id + ')'));
   const t = state.tasks.find(x => x.id === _targetId || String(x.id) === String(_targetId));
-  console.log('[ctxAction] found t:', t ? t.id : 'NOT FOUND');
-  if (!t) { console.warn('[ctxAction] 找不到任務，中止'); return; }
+  if (!t) return;
   if (action === 'edit') openEditTask(t);
   if (action === 'breakdown') openBreakdown(t);
   if (action === 'toggle') {
-    // 直接走 toggleTask，邏輯與主要勾選完全一致，避免重複計算 wishPoints
     toggleTask(_targetId);
-    return; // toggleTask 已處理 render 與 sync
+    return;
   }
   if (action === 'delete') {
-    // 若已完成的任務被刪除，退還 wishPoints（非充電任務才有給）
     if (t.done && t.energy !== 'charge') {
       if (state.wishPoints === undefined) state.wishPoints = 0;
       state.wishPoints = Math.max(0, state.wishPoints - 1);
     }
     if (t.done && state.done > 0) state.done--;
-    // ★ 修正：用 String 比對確保型別不一致也能正確刪除
     state.tasks = state.tasks.filter(x => String(x.id) !== String(_targetId));
-    checkAchievements(); renderAll();
+    renderAll();
     showToast('🗑 任務已移除');
     syncToCloud();
   }
