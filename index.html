@@ -3070,15 +3070,14 @@ function _startRealtimeListener(uid) {
     const data = snap.data();
     if (!data || !Array.isArray(data.tasks)) return;
 
-    // 4. 用 hash 比對：若和本地當前狀態一樣就不重繪（自己寫的那份）
-    const remoteHash = _quickHash(data);
-    const localHash = _quickHash({
-      tasks: state.tasks, sandbox: state.sandbox, done: state.done,
-      rewards: state.rewards, doneHistory: state.doneHistory,
-      todayOrder: state.todayOrder, wishPoints: state.wishPoints,
-      routines: state.routines, lotteryState: lotteryState,
-    });
-    if (remoteHash === localHash) return;
+    // 4. 用 tasks fingerprint 比對：只看任務的 id/done/name，避免欄位順序不同造成誤判
+    function _taskFingerprint(tasks) {
+      if (!Array.isArray(tasks)) return '';
+      return JSON.stringify(tasks.map(t => ({ id: t.id, done: t.done, name: t.name, completedAt: t.completedAt || null })).sort((a,b) => String(a.id).localeCompare(String(b.id))));
+    }
+    const remoteFingerprint = _taskFingerprint(data.tasks);
+    const localFingerprint  = _taskFingerprint(state.tasks);
+    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints) return;
 
     console.log('[realtime] 偵測到其他裝置的更新，套用中…');
     const dot = document.getElementById('syncDot');
@@ -3138,7 +3137,7 @@ function _startRealtimeListener(uid) {
 
 // syncToCloud 寫入時，短暫標記「忽略接下來 3 秒的 snapshot」避免自我觸發
 function _markSyncWrite() {
-  _snapshotIgnoreUntil = Date.now() + 3000;
+  _snapshotIgnoreUntil = Date.now() + 5000;
 }
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
@@ -3438,11 +3437,10 @@ let _syncDebounceTimer = null; // debounce：合批短時間內連續的 sync �
 let _routineResetDate = null;  // in-memory 快取（存重置時間戳字串）
 let _lastSyncHash = '';        // ★ 增量防重：上次成功推送的資料 hash
 
-// ★ 輕量 hash：JSON 長度 + 首尾各 100 字元，零 crypto 成本
+// ★ 改用完整 JSON 字串做 hash，避免首尾相同但中間不同被誤判為一致
 function _quickHash(obj) {
   try {
-    const s = JSON.stringify(obj);
-    return s.length + '|' + s.slice(0, 100) + '|' + s.slice(-100);
+    return JSON.stringify(obj);
   } catch(e) { return ''; }
 }
 
