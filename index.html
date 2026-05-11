@@ -21,7 +21,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAvThGRXxl8uF5N4dvd0Svogrs0OXFe81U",
@@ -43,6 +43,7 @@
   window._fbDoc = doc;
   window._fbGetDoc = getDoc;
   window._fbSetDoc = setDoc;
+  window._fbOnSnapshot = onSnapshot;
 
   // ── 匿名登入（背景靜默，使用者無感）──
   onAuthStateChanged(auth, async (user) => {
@@ -3048,6 +3049,98 @@ async function _fbSave(payload) {
   } catch(e) { console.warn('Firebase 寫入失敗', e); return false; }
 }
 
+// ── 即時監聽（onSnapshot）：其他裝置修改後自動更新本裝置 ──
+let _fbUnsubscribe = null;      // 用來取消舊的監聽
+let _snapshotIgnoreUntil = 0;   // 自己剛寫入後短暫忽略，避免觸發自我更新
+
+function _startRealtimeListener(uid) {
+  // 先取消舊的監聽（UID 切換時重新綁定）
+  if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+  if (!window._fbOnSnapshot || !window._fbDb) return;
+
+  const ref = window._fbDoc(window._fbDb, 'users', uid, 'data', 'main');
+  _fbUnsubscribe = window._fbOnSnapshot(ref, (snap) => {
+    // 1. 尚未初始化完成前不處理（init() 自己會讀一次）
+    if (!state._initDone) return;
+    // 2. 若是自己剛寫入觸發的 snapshot，忽略（避免自我迴圈）
+    if (Date.now() < _snapshotIgnoreUntil) return;
+    // 3. 沒資料就略過
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+    if (!data || !Array.isArray(data.tasks)) return;
+
+    // 4. 用 hash 比對：若和本地當前狀態一樣就不重繪（自己寫的那份）
+    const remoteHash = _quickHash(data);
+    const localHash = _quickHash({
+      tasks: state.tasks, sandbox: state.sandbox, done: state.done,
+      rewards: state.rewards, doneHistory: state.doneHistory,
+      todayOrder: state.todayOrder, wishPoints: state.wishPoints,
+      routines: state.routines, lotteryState: lotteryState,
+    });
+    if (remoteHash === localHash) return;
+
+    console.log('[realtime] 偵測到其他裝置的更新，套用中…');
+    const dot = document.getElementById('syncDot');
+    if (dot) dot.className = 'sync-dot syncing';
+
+    // 5. 套用遠端資料到 state（複用 loadFromCloud 的欄位映射邏輯）
+    state.tasks        = data.tasks        || [];
+    state.sandbox      = data.sandbox      || [];
+    state.done         = data.done         || 0;
+    state.rewards      = data.rewards      || [];
+    state.customQuotes = data.customQuotes || [];
+    state.energy       = data.energy       || 0;
+    state.doneHistory  = data.doneHistory  || [];
+    state.todayOrder   = data.todayOrder   || [];
+    state.wishPoints   = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
+    state.routines     = Array.isArray(data.routines) ? data.routines : state.routines;
+    state.routineResetDate = data.routineResetDate || state.routineResetDate || null;
+    if (data.lotteryState && typeof data.lotteryState === 'object') {
+      lotteryState = { ...lotteryState, ...data.lotteryState };
+      localStorage.setItem('innerflow_lottery', JSON.stringify(lotteryState));
+    }
+    // 筆記：只在遠端版本較新時才覆蓋（避免蓋掉本裝置正在編輯的內容）
+    if (data.notes && data.notes.tabs) {
+      const chosen = _pickNotes(data.notes);
+      if (chosen) {
+        _lsSafeSet('innerflow_notes_v1', JSON.stringify(chosen));
+        if (typeof notesLoadFromData === 'function') notesLoadFromData(chosen);
+      }
+    }
+
+    saveStateLocal();
+    // 更新 hash，讓下一次 syncToCloud 不會把剛收到的資料重新推回去
+    _lastSyncHash = _quickHash({
+      tasks: state.tasks, sandbox: state.sandbox, done: state.done,
+      rewards: state.rewards || [], customQuotes: state.customQuotes || [],
+      energy: state.energy || 0,
+      doneHistory: (state.doneHistory || []).filter(h => {
+        if (!h.completedAt) return true;
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
+      }),
+      todayOrder: state.todayOrder || [], lotteryState,
+      wishPoints: state.wishPoints || 0,
+      morningDialogShownDate: state.morningDialogShownDate || null,
+      routines: state.routines || [], routineResetDate: state.routineResetDate || null,
+      settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
+    });
+
+    renderEnergyDots(); renderSandbox(); renderAll(); initRoutines();
+    if (dot) dot.className = 'sync-dot synced';
+    showToast('🔄 已同步其他裝置的更新');
+  }, (err) => {
+    console.warn('[realtime] 監聽錯誤:', err.code, err.message);
+  });
+}
+
+// syncToCloud 寫入時，短暫標記「忽略接下來 3 秒的 snapshot」避免自我觸發
+function _markSyncWrite() {
+  _snapshotIgnoreUntil = Date.now() + 3000;
+}
+
 // ── Firebase 就緒回呼（由 module script 呼叫）──
 let _firebaseReadyFired = false;
 window._onFirebaseReady = async function() {
@@ -3076,6 +3169,8 @@ window._onFirebaseReady = async function() {
           _startGuestExpireTimer(ga.expiresAt);
           // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
           if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+          // ★ 重新綁定即時監聽到新的 UID（init 完成後會再呼叫一次，這裡先綁避免 init 前的空窗）
+          if (typeof _startRealtimeListener === 'function') _startRealtimeListener(ga.ownerUid);
           if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
           return;
         }
@@ -3213,6 +3308,8 @@ async function submitGuestToken() {
     _startGuestExpireTimer(data.expiresAt);
     // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    // ★ 重新綁定即時監聽到新的 UID
+    _startRealtimeListener(data.ownerUid);
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
     // 通知 init() 的 Promise 繼續（init() 在等這個 callback）
@@ -3310,6 +3407,8 @@ async function importUid() {
     try { localStorage.setItem('innerflow_fb_uid', targetUid); } catch(e2) {}
     // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    // ★ 重新綁定即時監聽到新的 UID
+    _startRealtimeListener(targetUid);
 
     // 直接套用讀到的資料（不再重新呼叫 loadFromCloud 避免重複讀取）
     const ok = await loadFromCloud();
@@ -3718,6 +3817,7 @@ async function _doSyncToCloud() {
   try {
     const ok = await _fbSave(_payload);
     if (!ok) throw new Error('Firebase 寫入回傳 false');
+    _markSyncWrite(); // ★ 告知 snapshot 監聽器：接下來 3 秒的更新是自己寫的，忽略
     _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
@@ -5077,6 +5177,8 @@ async function init() {
     const ok = await loadFromCloud();
     // ── initDone 在雲端資料回來後立刻設定，讓後續呼叫的 syncToCloud 能正常推送 ──
     state._initDone = true;
+    // ★ 啟動即時監聽：init 完成後才開始，避免和初次讀取競態
+    if (window._fbUid) _startRealtimeListener(window._fbUid);
     if (ok) {
       // 雲端資料載入後：確保 lotteryState 日期正確（可能跨日），並對齊實際完成數
       // 使用「有效今日」：00:00~重置時間 之間仍屬上個週期的今天
@@ -7423,8 +7525,11 @@ function ctxAction(action) {
   menu.classList.remove('open');
   // ★ 修正：強制將 ctxTargetId 轉為數字，防止 HTML 傳入字串型別導致 === 比對失敗
   const _targetId = typeof ctxTargetId === 'string' ? parseInt(ctxTargetId, 10) : ctxTargetId;
+  console.log('[ctxAction] action:', action, 'ctxTargetId:', ctxTargetId, 'type:', typeof ctxTargetId, '_targetId:', _targetId);
+  console.log('[ctxAction] state.tasks ids:', state.tasks.map(x => x.id + '(' + typeof x.id + ')'));
   const t = state.tasks.find(x => x.id === _targetId || String(x.id) === String(_targetId));
-  if (!t) return;
+  console.log('[ctxAction] found t:', t ? t.id : 'NOT FOUND');
+  if (!t) { console.warn('[ctxAction] 找不到任務，中止'); return; }
   if (action === 'edit') openEditTask(t);
   if (action === 'breakdown') openBreakdown(t);
   if (action === 'toggle') {
