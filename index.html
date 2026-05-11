@@ -3633,9 +3633,8 @@ let _notesSyncTimer = null;
 let _notesDirty = false; // 只有筆記真正修改時才標記，避免每次 sync 都帶上全文
 
 function syncNotesToCloud() {
-  // 每次筆記變更時，更新 updatedAt 時間戳（確保雲端比較時本地版本不被誤判為舊版）
-  // 同時更新 localStorage（一般模式）和記憶體（無痕模式 fallback）
   const nowTs = Date.now();
+  // 更新 localStorage 的 updatedAt
   try {
     const raw = localStorage.getItem('innerflow_notes_v1');
     if (raw) {
@@ -3644,18 +3643,82 @@ function syncNotesToCloud() {
       localStorage.setItem('innerflow_notes_v1', JSON.stringify(data));
     }
   } catch(e) {}
-  // 透過 accessor 確認記憶體有資料，才打上時間戳（notesFolderData 是 IIFE 區域變數，外部不可見）
   try {
     if (window._notesGetSyncPayload && window._notesGetSyncPayload()) {
       window._notesMemUpdatedAt = nowTs;
     }
   } catch(e) {}
-  _notesDirty = true; // 標記筆記已修改，下一次 _doSyncToCloud 才帶上 notes
+  _notesDirty = true;
+
+  // ★ 筆記直接寫 Firestore，不走 syncToCloud 的 debounce/hash，防止關頁前遺失
   clearTimeout(_notesSyncTimer);
-  _notesSyncTimer = setTimeout(() => syncToCloud(), 5000);
+  _notesSyncTimer = setTimeout(async () => {
+    if (!window._fbUid || !window._fbDb) {
+      // Firebase 未就緒，降級走 syncToCloud
+      syncToCloud();
+      return;
+    }
+    const notesPayload = (function() {
+      try {
+        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
+        if (p) return p;
+      } catch(e) {}
+      try {
+        const raw = localStorage.getItem('innerflow_notes_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+        }
+      } catch(e) {}
+      return null;
+    })();
+    if (!notesPayload) { syncToCloud(); return; }
+
+    try {
+      const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+      await updateDoc(ref, { notes: notesPayload });
+      _notesDirty = false;
+      console.log('[notes] 直接寫入 Firestore 成功');
+      const dot = document.getElementById('syncDot');
+      if (dot) dot.className = 'sync-dot synced';
+    } catch(e) {
+      console.warn('[notes] 直接寫入失敗，降級走 syncToCloud', e);
+      syncToCloud();
+    }
+  }, 2000); // ★ 從 5000ms 縮短到 2000ms，減少關頁前遺失的時間窗口
 }
 
-// ── 歷史封存：將超過一年的 doneHistory 封存到獨立 localStorage key ──
+// ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && _notesDirty) {
+    clearTimeout(_notesSyncTimer);
+    // 用 sendBeacon 或同步方式確保資料送出
+    const notesPayload = (function() {
+      try {
+        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
+        if (p) return p;
+      } catch(e) {}
+      try {
+        const raw = localStorage.getItem('innerflow_notes_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+        }
+      } catch(e) {}
+      return null;
+    })();
+    if (notesPayload && window._fbUid && window._fbDb) {
+      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
+        .then(({ doc, updateDoc }) => {
+          const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+          return updateDoc(ref, { notes: notesPayload });
+        })
+        .then(() => { _notesDirty = false; console.log('[notes] visibilitychange 緊急推送成功'); })
+        .catch(e => console.warn('[notes] visibilitychange 推送失敗', e));
+    }
+  }
+});
 // 雲端只同步當年資料，舊資料保留在本地（不會消失）
 function archiveOldHistory() {
   if (!state.doneHistory || state.doneHistory.length === 0) return;
@@ -3998,6 +4061,7 @@ async function _doSyncToCloud() {
       } catch(e) {}
       return undefined;
     })();
+    console.log('[sync] notes payload:', _notesPayload ? 'ok updatedAt=' + _notesPayload.updatedAt : 'MISSING');
     if (_notesPayload) _payload.notes = _notesPayload;
   }
 
@@ -8114,16 +8178,34 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(swPath)
       .then(reg => {
         console.log('SW registered:', reg.scope);
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: 'SKIP_WAITING' });
+
+        // ★ 每次開啟都主動 check update，不等瀏覽器自己輪詢（預設 24 小時才查一次）
+        reg.update().catch(() => {});
+
+        function _applyUpdate(worker) {
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed') {
+              // ★ 不管有沒有舊 controller，直接送 SKIP_WAITING，強制新版接管
+              worker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
+          // ★ 若 worker 已經在 installed 狀態（錯過 statechange），直接送
+          if (worker.state === 'installed') {
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }
+
+        reg.addEventListener('updatefound', () => {
+          _applyUpdate(reg.installing);
         });
+
+        // ★ 已有 waiting worker（上次更新沒完成）也直接套用
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
       })
       .catch(err => console.warn('SW registration failed:', err));
+
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) { refreshing = true; location.reload(); }
