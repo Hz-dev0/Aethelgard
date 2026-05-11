@@ -8768,11 +8768,9 @@ function notesToggleMd(side) {
   btn?.setAttribute('title', on ? '切回編輯模式' : '切換 Markdown 預覽');
   if (on) {
     pre.innerHTML = _notesMdParse(ta.value || '');
-    pre.ondblclick = () => notesToggleMd(side);
     const toolbar = document.getElementById('notes-md-toolbar');
     if (toolbar) toolbar.classList.remove('show');
   } else {
-    pre.ondblclick = null;
     setTimeout(() => ta.focus(), 40);
   }
 }
@@ -8796,9 +8794,9 @@ function notesRefreshPreviews() {
     if (_notesMdState[side]) {
       pre.innerHTML = _notesMdParse(ta.value || '');
       ta.style.display = 'none';
+      pre.ondblclick = null;
       pre.classList.add('show');
       if (btn) { btn.classList.add('active'); btn.setAttribute('title','切回編輯模式'); }
-      pre.ondblclick = () => notesToggleMd(side);
     } else {
       ta.style.display = '';
       pre.classList.remove('show');
