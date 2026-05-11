@@ -8729,7 +8729,13 @@ function notesFlush() {
 const _notesMdState = { A: true, B: true };
 
 function _notesMdParse(text) {
-  const processed = (text || '').replace(/^[ \t]*(---+|===+|\*\*\*+)[ \t]*$/gm, '\n\n$1\n\n');
+  // ── ::: 折疊區塊：:::標題\n內容\n::: → <details><summary>標題</summary>內容</details>
+  let src = (text || '').replace(
+    /^:::([^\n]*)\n([\s\S]*?)^:::/gm,
+    (_, title, body) =>
+      `<details><summary>${title.trim()}</summary>\n\n${body.trim()}\n\n</details>`
+  );
+  const processed = src.replace(/^[ \t]*(---+|===+|\*\*\*+)[ \t]*$/gm, '\n\n$1\n\n');
   let raw;
   if (typeof marked !== 'undefined') {
     raw = marked.parse(processed, { breaks: true, gfm: true });
@@ -8740,8 +8746,9 @@ function _notesMdParse(text) {
     return DOMPurify.sanitize(raw, {
       ALLOWED_TAGS: ['p','br','b','strong','i','em','u','s','del','mark','span','div',
                      'h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','hr',
-                     'table','thead','tbody','tr','th','td','code','pre','a'],
-      ALLOWED_ATTR: ['href','target','rel','style','class'],
+                     'table','thead','tbody','tr','th','td','code','pre','a',
+                     'details','summary'],
+      ALLOWED_ATTR: ['href','target','rel','style','class','open'],
       ALLOW_DATA_ATTR: false
     });
   }
