@@ -1,4 +1,5 @@
-const CACHE_NAME = 'innerflow-v5';
+const _swVersion = new URL(location.href).searchParams.get('v') || 'v5';
+const CACHE_NAME = 'innerflow-' + _swVersion;
 
 const ASSETS = [
   '/Innerflow/',
@@ -11,7 +12,6 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
   );
-  // 不在這裡 skipWaiting，等 index.html 通知
 });
 
 self.addEventListener('activate', e => {
@@ -23,7 +23,6 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// 接收 index.html 的 SKIP_WAITING 指令 → 立即接管
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
@@ -32,7 +31,6 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
-  // Network first：先抓網路，失敗才用快取
   e.respondWith(
     fetch(e.request)
       .then(networkResponse => {
