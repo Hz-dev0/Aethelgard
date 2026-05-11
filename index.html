@@ -3162,6 +3162,9 @@ window._onFirebaseReady = async function() {
     'UjpfEGR8vmbOxQHRb28ft6L0gZH3',
     '4SjrQvNrgtRmD0y5BJ9s4KW1JA43'
   ];
+  // ★ 所有裝置（含白名單）統一讀寫 owner 的資料
+  // owner 是第一個白名單 UID，其餘白名單裝置自動切換過去
+  const OWNER_UID = WHITELIST[0];
   const authUid = window._fbAuthUid || window._fbUid || '';
   if (authUid && !WHITELIST.includes(authUid)) {
     // 查看是否有未過期的 guest_access（重新整理免重新輸入）
@@ -3171,23 +3174,25 @@ window._onFirebaseReady = async function() {
       if (snap.exists()) {
         const ga = snap.data();
         if (Date.now() < ga.expiresAt) {
-          // 還在有效期內，自動放行：先設好 uid 再通知 init() 繼續
           window._fbUid = ga.ownerUid;
           localStorage.setItem('innerflow_fb_uid', ga.ownerUid);
           _startGuestExpireTimer(ga.expiresAt);
-          // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
           if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-          // ★ 重新綁定即時監聽到新的 UID（init 完成後會再呼叫一次，這裡先綁避免 init 前的空窗）
           if (typeof _startRealtimeListener === 'function') _startRealtimeListener(ga.ownerUid);
           if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
           return;
         }
       }
     } catch(e) { console.warn('guest_access 查詢失敗', e); }
-    // 沒有有效 guest_access：彈出輸入框，不通知 init() 繼續。
-    // init() 會等最多 8 秒，submitGuestToken 成功後會設好 uid 再呼叫 _onFirebaseReadyCallback。
     setTimeout(openGuestTokenOverlay, 600);
     return;
+  }
+  // ★ 白名單裝置：統一切換到 OWNER_UID，確保所有裝置共用同一份資料
+  if (authUid !== OWNER_UID) {
+    console.log('[whitelist] 切換到 owner UID:', OWNER_UID);
+    window._fbUid = OWNER_UID;
+    localStorage.setItem('innerflow_fb_uid', OWNER_UID);
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
   }
   if (typeof window._onFirebaseReadyCallback === 'function') {
     window._onFirebaseReadyCallback();
