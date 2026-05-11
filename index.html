@@ -3074,6 +3074,8 @@ window._onFirebaseReady = async function() {
           window._fbUid = ga.ownerUid;
           localStorage.setItem('innerflow_fb_uid', ga.ownerUid);
           _startGuestExpireTimer(ga.expiresAt);
+          // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
+          if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
           if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
           return;
         }
@@ -3209,6 +3211,8 @@ async function submitGuestToken() {
     window._fbUid = data.ownerUid;
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
     _startGuestExpireTimer(data.expiresAt);
+    // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
     // 通知 init() 的 Promise 繼續（init() 在等這個 callback）
@@ -3304,6 +3308,8 @@ async function importUid() {
     localStorage.setItem('innerflow_fb_uid_override', targetUid);
     window._fbUid = targetUid;
     try { localStorage.setItem('innerflow_fb_uid', targetUid); } catch(e2) {}
+    // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
 
     // 直接套用讀到的資料（不再重新呼叫 loadFromCloud 避免重複讀取）
     const ok = await loadFromCloud();
@@ -3350,11 +3356,15 @@ async function loadFromCloud() {
     const hasCloudData = data && Array.isArray(data.tasks) && data.tasks.length > 0;
     if (data && Array.isArray(data.tasks)) {
       // ── 安全檢查：若雲端是空陣列但本地有資料，保留本地
+      // ★ 修正：只有在「這個 UID 是本裝置自己產生的匿名 UID」時才做 fallback；
+      //   若是透過 token/importUid 切換過來的 ownerUid，雲端空陣列代表真的沒任務，
+      //   不應用本地舊快取覆蓋。用 _fbAuthUid !== _fbUid 來判斷是否為訪客/切換狀態。
       const localBackup = (function() {
         try { return JSON.parse(localStorage.getItem('innerflow_state_local') || 'null'); } catch(e) { return null; }
       })();
       const localHasTasks = localBackup && Array.isArray(localBackup.tasks) && localBackup.tasks.length > 0;
-      if (!hasCloudData && localHasTasks) {
+      const isOwnUid = !window._fbAuthUid || window._fbAuthUid === window._fbUid;
+      if (!hasCloudData && localHasTasks && isOwnUid) {
         console.warn('Firebase 無資料但本地有，保留本地並重新推送');
         state.tasks        = localBackup.tasks;
         state.sandbox      = localBackup.sandbox      || [];
@@ -7411,13 +7421,15 @@ function openCtxMenu(e, id) {
 function ctxAction(action) {
   const menu = document.getElementById('ctxMenu');
   menu.classList.remove('open');
-  const t = state.tasks.find(x => x.id === ctxTargetId);
+  // ★ 修正：強制將 ctxTargetId 轉為數字，防止 HTML 傳入字串型別導致 === 比對失敗
+  const _targetId = typeof ctxTargetId === 'string' ? parseInt(ctxTargetId, 10) : ctxTargetId;
+  const t = state.tasks.find(x => x.id === _targetId || String(x.id) === String(_targetId));
   if (!t) return;
   if (action === 'edit') openEditTask(t);
   if (action === 'breakdown') openBreakdown(t);
   if (action === 'toggle') {
     // 直接走 toggleTask，邏輯與主要勾選完全一致，避免重複計算 wishPoints
-    toggleTask(ctxTargetId);
+    toggleTask(_targetId);
     return; // toggleTask 已處理 render 與 sync
   }
   if (action === 'delete') {
@@ -7427,7 +7439,8 @@ function ctxAction(action) {
       state.wishPoints = Math.max(0, state.wishPoints - 1);
     }
     if (t.done && state.done > 0) state.done--;
-    state.tasks = state.tasks.filter(x => x.id !== ctxTargetId);
+    // ★ 修正：用 String 比對確保型別不一致也能正確刪除
+    state.tasks = state.tasks.filter(x => String(x.id) !== String(_targetId));
     checkAchievements(); renderAll();
     showToast('🗑 任務已移除');
     syncToCloud();
