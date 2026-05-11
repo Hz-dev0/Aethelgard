@@ -3061,14 +3061,15 @@ function _startRealtimeListener(uid) {
   const ref = window._fbDoc(window._fbDb, 'users', uid, 'data', 'main');
   _fbUnsubscribe = window._fbOnSnapshot(ref, (snap) => {
     // 1. 尚未初始化完成前不處理（init() 自己會讀一次）
-    if (!state._initDone) return;
+    console.log('[snapshot] 收到推送 _initDone:', state._initDone, 'ignoreUntil:', _snapshotIgnoreUntil, 'now:', Date.now(), 'exists:', snap.exists());
+    if (!state._initDone) { console.log('[snapshot] ❌ _initDone=false，略過'); return; }
     // 2. 若是自己剛寫入觸發的 snapshot，忽略（避免自我迴圈）
-    if (Date.now() < _snapshotIgnoreUntil) return;
+    if (Date.now() < _snapshotIgnoreUntil) { console.log('[snapshot] ❌ 在忽略視窗內（自己寫的），略過'); return; }
     // 3. 沒資料就略過
-    if (!snap.exists()) return;
+    if (!snap.exists()) { console.log('[snapshot] ❌ snap 不存在'); return; }
 
     const data = snap.data();
-    if (!data || !Array.isArray(data.tasks)) return;
+    if (!data || !Array.isArray(data.tasks)) { console.log('[snapshot] ❌ data 無效', data); return; }
 
     // 4. 用 tasks fingerprint 比對：只看任務的 id/done/name，避免欄位順序不同造成誤判
     function _taskFingerprint(tasks) {
@@ -3077,9 +3078,11 @@ function _startRealtimeListener(uid) {
     }
     const remoteFingerprint = _taskFingerprint(data.tasks);
     const localFingerprint  = _taskFingerprint(state.tasks);
-    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints) return;
+    console.log('[snapshot] remote tasks:', data.tasks.length, 'local tasks:', state.tasks.length);
+    console.log('[snapshot] fingerprint 相同?', remoteFingerprint === localFingerprint, 'done相同?', data.done === state.done, 'wish相同?', data.wishPoints === state.wishPoints);
+    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints) { console.log('[snapshot] ❌ fingerprint 相同，略過'); return; }
 
-    console.log('[realtime] 偵測到其他裝置的更新，套用中…');
+    console.log('[snapshot] ✅ 套用遠端資料');
     const dot = document.getElementById('syncDot');
     if (dot) dot.className = 'sync-dot syncing';
 
