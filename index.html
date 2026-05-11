@@ -3791,7 +3791,7 @@ async function _doSyncToCloud() {
     settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
   };
 
-  if (_notesDirty) {
+  {
     const _notesPayload = (function(){
       try {
         const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
@@ -3977,8 +3977,8 @@ async function _doSyncToCloud() {
     settings: { resetTime: localStorage.getItem('innerflow_reset_time') || '04:00', neglectDays: localStorage.getItem('innerflow_neglect_days') || '7' }
   };
 
-  // ★ 只有 _notesDirty 時才帶 notes，省略大量 payload
-  if (_notesDirty) {
+  // 永遠帶上 notes（不限 _notesDirty），確保雲端不會遺漏筆記
+  {
     const _notesPayload = (function(){
       try {
         const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
