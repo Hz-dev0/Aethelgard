@@ -1799,14 +1799,16 @@
     padding: 7px 16px;
     background: rgba(58,110,165,0.05);
     border-radius: 8px 8px 0 0;
-    cursor: pointer; white-space: nowrap;
+    cursor: grab; white-space: nowrap;
     color: var(--text-dim); border: none;
     display: flex; align-items: center;
     font-size: 13px; font-weight: 500;
     position: relative; flex-shrink: 0;
     transition: background 0.2s, color 0.2s;
     font-family: inherit;
+    user-select: none;
   }
+  .notes-tab:active { cursor: grabbing; }
   .notes-tab.active {
     background: var(--bg2); color: var(--green);
     font-weight: 600;
@@ -9010,63 +9012,127 @@ function notesRefreshPreviews() {
   });
 }
 
-// ── Render tabs (with drag-to-reorder) ────────────────────────────────────────
-let _tabDragIdx = null;
-let _tabRowDragWired = false;
+// ── Render tabs (with pointer-based drag-to-reorder) ──────────────────────────
+// Uses Pointer Events instead of HTML5 drag API — works reliably in overflow
+// containers and with child elements.
 
-function _notesWireTabRowDrag() {
-  if (_tabRowDragWired) return;
-  _tabRowDragWired = true;
-  const row = document.getElementById('notes-tabs-row');
-  if (!row) return;
+let _tabPointerDrag = null; // { fromIdx, clone, startX, startY, moved }
 
-  row.addEventListener('dragover', e => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const target = e.target.closest('.notes-tab');
-    if (!target) return;
-    const toIdx = parseInt(target.dataset.tabIdx);
-    if (_tabDragIdx === null || _tabDragIdx === toIdx) return;
-    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
-    target.classList.add('tab-drag-over');
-  });
+function _notesTabPointerDown(e, div, row) {
+  if (e.button !== undefined && e.button !== 0) return; // left button only
+  if (e.target.classList.contains('tab-del-btn')) return;
 
-  row.addEventListener('dragleave', e => {
-    if (!row.contains(e.relatedTarget)) {
-      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+  const fromIdx = parseInt(div.dataset.tabIdx);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  let moved = false;
+  let clone = null;
+  let insertMarker = null;
+
+  function onMove(ev) {
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
+
+    if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+
+    if (!moved) {
+      moved = true;
+      // Create floating clone
+      const rect = div.getBoundingClientRect();
+      clone = div.cloneNode(true);
+      clone.style.cssText = [
+        'position:fixed',
+        'z-index:99999',
+        'pointer-events:none',
+        'opacity:0.85',
+        'width:' + rect.width + 'px',
+        'left:' + rect.left + 'px',
+        'top:' + rect.top + 'px',
+        'border-radius:8px 8px 0 0',
+        'box-shadow:0 4px 16px rgba(58,110,165,0.3)',
+        'transition:none',
+        'cursor:grabbing',
+        'background:var(--bg2)',
+        'border:1px solid rgba(58,110,165,0.35)'
+      ].join(';');
+      document.body.appendChild(clone);
+      div.style.opacity = '0.3';
+
+      // Insert marker line
+      insertMarker = document.createElement('div');
+      insertMarker.style.cssText = 'width:3px;height:28px;background:var(--green);border-radius:3px;flex-shrink:0;pointer-events:none;align-self:center;';
+      document.body.appendChild(insertMarker); // will be moved into row
     }
-  });
 
-  row.addEventListener('drop', e => {
-    e.preventDefault();
-    const target = e.target.closest('.notes-tab');
-    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over', 'tab-dragging'));
-    if (!target) { _tabDragIdx = null; return; }
+    // Move clone
+    clone.style.left = (ev.clientX - startX + parseFloat(clone.style.left)) + 'px';
+    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
+
+    // Find target tab
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
+    if (target && target !== div) {
+      target.classList.add('tab-drag-over');
+      // Position marker
+      const tr = target.getBoundingClientRect();
+      const rr = row.getBoundingClientRect();
+      const half = ev.clientX < tr.left + tr.width / 2;
+      insertMarker.style.cssText = insertMarker.style.cssText +
+        ';position:fixed;top:' + (tr.top + 4) + 'px;left:' + (half ? tr.left - 3 : tr.right - 1) + 'px';
+      insertMarker.style.display = 'block';
+    } else {
+      if (insertMarker) insertMarker.style.display = 'none';
+    }
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+
+    if (clone) clone.remove();
+    if (insertMarker) insertMarker.remove();
+    div.style.opacity = '';
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+
+    if (!moved) return; // was a click, not a drag — onclick will handle it
+
+    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
+    if (!target || target === div) return;
+
     const toIdx = parseInt(target.dataset.tabIdx);
-    if (_tabDragIdx === null || _tabDragIdx === toIdx) { _tabDragIdx = null; return; }
+    const tr = target.getBoundingClientRect();
+    const insertBefore = ev.clientX < tr.left + tr.width / 2;
+    const finalIdx = insertBefore ? toIdx : toIdx + (toIdx > fromIdx ? 0 : 1);
+
     notesFlush();
-    const moved = notesFolderData.splice(_tabDragIdx, 1)[0];
-    notesFolderData.splice(toIdx, 0, moved);
-    notesTabIndex = notesFolderData.indexOf(moved);
-    _tabDragIdx = null;
+    const [movedTab] = notesFolderData.splice(fromIdx, 1);
+    const adjustedIdx = finalIdx > fromIdx ? finalIdx - 1 : finalIdx;
+    notesFolderData.splice(Math.max(0, Math.min(adjustedIdx, notesFolderData.length)), 0, movedTab);
+    notesTabIndex = notesFolderData.indexOf(movedTab);
     notesRenderTabs();
     notesSave();
-  });
+  }
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  div.setPointerCapture && div.setPointerCapture(e.pointerId);
 }
 
 function notesRenderTabs() {
   const row = document.getElementById('notes-tabs-row');
   if (!row) return;
-  _notesWireTabRowDrag();
   row.innerHTML = '';
   notesFolderData.forEach((tab, i) => {
     const div = document.createElement('div');
     div.className = 'notes-tab' + (i === notesTabIndex ? ' active' : '');
-    div.draggable = true;
+    div.style.cursor = 'grab';
     div.dataset.tabIdx = i;
+
+    div.addEventListener('pointerdown', e => _notesTabPointerDown(e, div, row));
 
     div.onclick = e => {
       if (e.target.classList.contains('tab-del-btn')) return;
+      if (_tabPointerDrag) return; // suppress click after drag
       const idx = parseInt(div.dataset.tabIdx);
       notesFlush();
       notesDropEmptyCurrentPage();
@@ -9091,17 +9157,6 @@ function notesRenderTabs() {
       const n = await _notesDlg.prompt('修改標籤名稱', t.name);
       if (n?.trim()) { t.name = n.trim(); notesRenderTabs(); notesSave(); }
     };
-
-    // dragover+drop handled by row-level delegation (_notesWireTabRowDrag)
-    div.addEventListener('dragstart', e => {
-      _tabDragIdx = parseInt(div.dataset.tabIdx);
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => div.classList.add('tab-dragging'), 0);
-    });
-    div.addEventListener('dragend', () => {
-      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over', 'tab-dragging'));
-      _tabDragIdx = null;
-    });
 
     const nameSpan = document.createElement('span');
     nameSpan.textContent = tab.name;
