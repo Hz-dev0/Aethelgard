@@ -9012,10 +9012,52 @@ function notesRefreshPreviews() {
 
 // ── Render tabs (with drag-to-reorder) ────────────────────────────────────────
 let _tabDragIdx = null;
+let _tabRowDragWired = false;
+
+function _notesWireTabRowDrag() {
+  if (_tabRowDragWired) return;
+  _tabRowDragWired = true;
+  const row = document.getElementById('notes-tabs-row');
+  if (!row) return;
+
+  row.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const target = e.target.closest('.notes-tab');
+    if (!target) return;
+    const toIdx = parseInt(target.dataset.tabIdx);
+    if (_tabDragIdx === null || _tabDragIdx === toIdx) return;
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    target.classList.add('tab-drag-over');
+  });
+
+  row.addEventListener('dragleave', e => {
+    if (!row.contains(e.relatedTarget)) {
+      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    }
+  });
+
+  row.addEventListener('drop', e => {
+    e.preventDefault();
+    const target = e.target.closest('.notes-tab');
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over', 'tab-dragging'));
+    if (!target) { _tabDragIdx = null; return; }
+    const toIdx = parseInt(target.dataset.tabIdx);
+    if (_tabDragIdx === null || _tabDragIdx === toIdx) { _tabDragIdx = null; return; }
+    notesFlush();
+    const moved = notesFolderData.splice(_tabDragIdx, 1)[0];
+    notesFolderData.splice(toIdx, 0, moved);
+    notesTabIndex = notesFolderData.indexOf(moved);
+    _tabDragIdx = null;
+    notesRenderTabs();
+    notesSave();
+  });
+}
 
 function notesRenderTabs() {
   const row = document.getElementById('notes-tabs-row');
   if (!row) return;
+  _notesWireTabRowDrag();
   row.innerHTML = '';
   notesFolderData.forEach((tab, i) => {
     const div = document.createElement('div');
@@ -9023,10 +9065,12 @@ function notesRenderTabs() {
     div.draggable = true;
     div.dataset.tabIdx = i;
 
-    div.onclick = () => {
+    div.onclick = e => {
+      if (e.target.classList.contains('tab-del-btn')) return;
+      const idx = parseInt(div.dataset.tabIdx);
       notesFlush();
       notesDropEmptyCurrentPage();
-      notesTabIndex = i;
+      notesTabIndex = idx;
       _notesMdState.A = true;
       _notesMdState.B = true;
       ['a','b'].forEach(s => {
@@ -9042,38 +9086,21 @@ function notesRenderTabs() {
 
     div.ondblclick = async e => {
       e.stopPropagation();
-      const n = await _notesDlg.prompt('修改標籤名稱', tab.name);
-      if (n?.trim()) { tab.name = n.trim(); notesRenderTabs(); notesSave(); }
+      const idx = parseInt(div.dataset.tabIdx);
+      const t = notesFolderData[idx];
+      const n = await _notesDlg.prompt('修改標籤名稱', t.name);
+      if (n?.trim()) { t.name = n.trim(); notesRenderTabs(); notesSave(); }
     };
 
+    // dragover+drop handled by row-level delegation (_notesWireTabRowDrag)
     div.addEventListener('dragstart', e => {
       _tabDragIdx = parseInt(div.dataset.tabIdx);
-      div.classList.add('tab-dragging');
       e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => div.classList.add('tab-dragging'), 0);
     });
     div.addEventListener('dragend', () => {
-      div.classList.remove('tab-dragging');
-      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over', 'tab-dragging'));
       _tabDragIdx = null;
-    });
-    div.addEventListener('dragover', e => {
-      e.preventDefault();
-      const myIdx = parseInt(div.dataset.tabIdx);
-      if (_tabDragIdx === null || _tabDragIdx === myIdx) return;
-      row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
-      div.classList.add('tab-drag-over');
-    });
-    div.addEventListener('drop', e => {
-      e.preventDefault();
-      const myIdx = parseInt(div.dataset.tabIdx);
-      if (_tabDragIdx === null || _tabDragIdx === myIdx) return;
-      notesFlush();
-      const moved = notesFolderData.splice(_tabDragIdx, 1)[0];
-      notesFolderData.splice(myIdx, 0, moved);
-      notesTabIndex = notesFolderData.indexOf(moved);
-      _tabDragIdx = null;
-      notesRenderTabs();
-      notesSave();
     });
 
     const nameSpan = document.createElement('span');
@@ -9083,7 +9110,8 @@ function notesRenderTabs() {
     delSpan.textContent = '✕';
     delSpan.addEventListener('click', e => {
       e.stopPropagation();
-      notesDeleteTab(i);
+      const idx = parseInt(div.dataset.tabIdx);
+      notesDeleteTab(idx);
     });
     div.appendChild(nameSpan);
     div.appendChild(delSpan);
