@@ -3282,12 +3282,14 @@ function _startGuestExpireTimer(expiresAt) {
   const remaining = expiresAt - Date.now();
   if (remaining <= 0) return;
   setTimeout(() => {
-    // 清除本機資料（不動雲端）
+    // ★ 修正 Bug 2：只清除 UID 導向設定，不刪除本地 state/notes
+    // 無痕模式下 localStorage 是唯一的資料快取，不能在到期時一併清除
     try {
       localStorage.removeItem('innerflow_fb_uid');
       localStorage.removeItem('innerflow_fb_uid_override');
-      localStorage.removeItem('innerflow_state_local');
-      localStorage.removeItem('innerflow_notes_v1');
+      // 不再刪除 innerflow_state_local 與 innerflow_notes_v1
+      // 因為訪客 session 期間使用者的編輯已即時同步到雲端，
+      // 這份本地快取不需要刪除；下次重新輸入 token 後仍可正常載入
     } catch(e) {}
     // 重置 uid 回自己的 auth uid
     window._fbUid = window._fbAuthUid;
@@ -3321,16 +3323,20 @@ async function submitGuestToken() {
     });
     window._fbUid = data.ownerUid;
     localStorage.setItem('innerflow_fb_uid', data.ownerUid);
+    // ★ 修正 Bug 1：無痕模式下 localStorage 關分頁後會清空；
+    //   用 sessionStorage 備份 ownerUid，讓同一次訪客 session 內重整頁面仍能找回 UID
+    try { sessionStorage.setItem('innerflow_guest_uid', data.ownerUid); } catch(e) {}
     _startGuestExpireTimer(data.expiresAt);
     // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // ★ 重新綁定即時監聽到新的 UID
     _startRealtimeListener(data.ownerUid);
-    closeGuestTokenOverlay();
     showToast('🔑 訪客模式已啟用，正在載入資料…');
-    // 通知 init() 的 Promise 繼續（init() 在等這個 callback）
+    // ★ 修正 Bug 3：先通知 init() 繼續執行 loadFromCloud()，
+    //   等資料有機會渲染後再關閉 overlay，避免競態導致 UI 顯示空白
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
-    // init() 會自己呼叫 loadFromCloud() 並完整渲染，這裡不需要重複呼叫
+    await new Promise(r => setTimeout(r, 800));
+    closeGuestTokenOverlay();
   } catch(e) {
     errEl.textContent = '驗證失敗：' + e.message;
   }
