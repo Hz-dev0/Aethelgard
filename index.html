@@ -2732,6 +2732,7 @@
 <div id="notes-page-ctx">
   <div class="npctx-i" id="notes-ctx-after">＋ 在此頁後插入</div>
   <div class="npctx-i" id="notes-ctx-before">＋ 在此頁前插入</div>
+  <div class="npctx-i" id="notes-ctx-move">↕ 將本頁移動到第幾頁…</div>
   <div class="npctx-sep"></div>
   <div class="npctx-i danger" id="notes-ctx-del">✕ 刪除此頁</div>
 </div>
@@ -9046,7 +9047,7 @@ function notesRenderTabs() {
     };
 
     div.addEventListener('dragstart', e => {
-      _tabDragIdx = i;
+      _tabDragIdx = parseInt(div.dataset.tabIdx);
       div.classList.add('tab-dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
@@ -9057,16 +9058,18 @@ function notesRenderTabs() {
     });
     div.addEventListener('dragover', e => {
       e.preventDefault();
-      if (_tabDragIdx === null || _tabDragIdx === i) return;
+      const myIdx = parseInt(div.dataset.tabIdx);
+      if (_tabDragIdx === null || _tabDragIdx === myIdx) return;
       row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
       div.classList.add('tab-drag-over');
     });
     div.addEventListener('drop', e => {
       e.preventDefault();
-      if (_tabDragIdx === null || _tabDragIdx === i) return;
+      const myIdx = parseInt(div.dataset.tabIdx);
+      if (_tabDragIdx === null || _tabDragIdx === myIdx) return;
       notesFlush();
       const moved = notesFolderData.splice(_tabDragIdx, 1)[0];
-      notesFolderData.splice(i, 0, moved);
+      notesFolderData.splice(myIdx, 0, moved);
       notesTabIndex = notesFolderData.indexOf(moved);
       _tabDragIdx = null;
       notesRenderTabs();
@@ -9521,6 +9524,29 @@ function notesWirePageCtx() {
     tab.pages.splice(idx, 0, { titleA:'', a:'', titleB:'', b:'' });
     notesRenderTabs(); notesSave();
     document.getElementById('notes-page-ctx').classList.remove('show');
+  });
+  document.getElementById('notes-ctx-move')?.addEventListener('click', async () => {
+    const tab = _notesPageCtxTab || notesFolderData[notesTabIndex];
+    document.getElementById('notes-page-ctx').classList.remove('show');
+    const total = tab.pages.length;
+    if (total <= 1) { await _notesDlg.confirm('目前只有一頁，無法移動'); return; }
+    const current = tab.currentPage + 1;
+    const input = await _notesDlg.prompt(
+      '目前第 ' + current + ' 頁，共 ' + total + ' 頁\n請輸入要移到第幾頁（1–' + total + '）：', ''
+    );
+    if (!input?.trim()) return;
+    const target = parseInt(input.trim());
+    if (isNaN(target) || target < 1 || target > total) {
+      await _notesDlg.confirm('請輸入有效頁碼（1–' + total + '）');
+      return;
+    }
+    const toIdx = target - 1;
+    if (toIdx === tab.currentPage) return;
+    notesFlush();
+    const [moved] = tab.pages.splice(tab.currentPage, 1);
+    tab.pages.splice(toIdx, 0, moved);
+    tab.currentPage = toIdx;
+    notesRenderTabs(); notesSave();
   });
   document.getElementById('notes-ctx-del')?.addEventListener('click', async () => {
     const tab = _notesPageCtxTab || notesFolderData[notesTabIndex];
