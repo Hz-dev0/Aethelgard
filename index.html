@@ -2826,6 +2826,16 @@
 
     <!-- 臨時通行碼 -->
     <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:2px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px" onclick="copyDeviceUidFromSettings()" title="點擊複製裝置 ID"><span>🔑 臨時通行碼</span><span id="settingsDeviceIdStatus" style="font-size:10px;color:var(--green);letter-spacing:0;text-transform:none;font-weight:400"></span></div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap" id="tokenDurationPills">
+      <button onclick="selectTokenDuration(this,30)" data-minutes="30"
+        style="padding:3px 11px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid var(--green);background:var(--green);color:var(--bg);transition:all 0.15s">30 分鐘</button>
+      <button onclick="selectTokenDuration(this,60)" data-minutes="60"
+        style="padding:3px 11px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text-dim);transition:all 0.15s">1 小時</button>
+      <button onclick="selectTokenDuration(this,180)" data-minutes="180"
+        style="padding:3px 11px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text-dim);transition:all 0.15s">3 小時</button>
+      <button onclick="selectTokenDuration(this,480)" data-minutes="480"
+        style="padding:3px 11px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text-dim);transition:all 0.15s">8 小時</button>
+    </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <div id="tokenDisplay" style="flex:1;font-size:22px;font-family:monospace;font-weight:700;letter-spacing:0.18em;color:var(--green);background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center">——————</div>
       <button onclick="generateToken()" style="padding:7px 14px;border-radius:8px;border:none;background:var(--green);color:var(--bg);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">產生</button>
@@ -3159,47 +3169,52 @@ window._onFirebaseReady = async function() {
   _firebaseReadyFired = true;
   const btn = document.getElementById('settingsBtn');
   if (btn) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
+
+  // ★ 架構改為：所有裝置永遠讀寫同一個 OWNER_UID
+  // 信任裝置（白名單）→ 直接使用 OWNER_UID，無需驗證
+  // 訪客裝置 → 第一次輸入通行碼，之後永久記住，不再過期切換
   const WHITELIST = [
+    '4SjrQvNrgtRmD0y5BJ9s4KW1JA43', // ★ 手機，主裝置 OWNER
     'B53QVIoHSBZq6woxzhJX0b3Z8D82',
     '21TsXzZ9IDOz5Xlq5VBECSxOY7L2',
-    'UjpfEGR8vmbOxQHRb28ft6L0gZH3',
-    '4SjrQvNrgtRmD0y5BJ9s4KW1JA43'
+    'UjpfEGR8vmbOxQHRb28ft6L0gZH3'
   ];
-  // ★ 所有裝置（含白名單）統一讀寫 owner 的資料
-  // owner 是第一個白名單 UID，其餘白名單裝置自動切換過去
-  const OWNER_UID = WHITELIST[0];
+  const OWNER_UID = WHITELIST[0]; // 手機 UID 為所有資料的唯一儲存位置
+
   const authUid = window._fbAuthUid || window._fbUid || '';
-  if (authUid && !WHITELIST.includes(authUid)) {
-    // 查看是否有未過期的 guest_access（重新整理免重新輸入）
-    try {
-      const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const snap = await getDoc(doc(window._fbDb, 'guest_access', authUid));
-      if (snap.exists()) {
-        const ga = snap.data();
-        if (Date.now() < ga.expiresAt) {
-          window._fbUid = ga.ownerUid;
-          localStorage.setItem('innerflow_fb_uid', ga.ownerUid);
-          _startGuestExpireTimer(ga.expiresAt);
-          if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-          if (typeof _startRealtimeListener === 'function') _startRealtimeListener(ga.ownerUid);
-          if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
-          return;
-        }
-      }
-    } catch(e) { console.warn('guest_access 查詢失敗', e); }
-    setTimeout(openGuestTokenOverlay, 600);
+
+  // ── 信任裝置：直接切換到 OWNER_UID ──
+  if (WHITELIST.includes(authUid)) {
+    if (authUid !== OWNER_UID) {
+      console.log('[whitelist] 切換到 owner UID:', OWNER_UID);
+    }
+    window._fbUid = OWNER_UID;
+    try { localStorage.setItem('innerflow_fb_uid', OWNER_UID); } catch(e) {}
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
     return;
   }
-  // ★ 白名單裝置：統一切換到 OWNER_UID，確保所有裝置共用同一份資料
-  if (authUid !== OWNER_UID) {
-    console.log('[whitelist] 切換到 owner UID:', OWNER_UID);
-    window._fbUid = OWNER_UID;
-    localStorage.setItem('innerflow_fb_uid', OWNER_UID);
-    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-  }
-  if (typeof window._onFirebaseReadyCallback === 'function') {
-    window._onFirebaseReadyCallback();
-  }
+
+  // ── 訪客裝置：查詢是否已有永久授權（grant） ──
+  try {
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(window._fbDb, 'guest_access', authUid));
+    if (snap.exists()) {
+      const ga = snap.data();
+      // ★ 永久授權：只要 granted=true 就直接放行，不再檢查 expiresAt
+      if (ga.granted === true || (ga.ownerUid && ga.ownerUid === OWNER_UID)) {
+        window._fbUid = OWNER_UID;
+        try { localStorage.setItem('innerflow_fb_uid', OWNER_UID); } catch(e) {}
+        if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+        if (typeof _startRealtimeListener === 'function') _startRealtimeListener(OWNER_UID);
+        if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+        return;
+      }
+    }
+  } catch(e) { console.warn('guest_access 查詢失敗', e); }
+
+  // ── 訪客裝置首次使用：彈出通行碼輸入 ──
+  setTimeout(openGuestTokenOverlay, 600);
 };
 
 function handleApiModalOverlayClick(e) {
@@ -3227,6 +3242,19 @@ function closeApiModal() {
 }
 
 let _tokenExpireTimer = null;
+let _selectedTokenMinutes = 30; // 預設 30 分鐘
+
+function selectTokenDuration(btn, minutes) {
+  _selectedTokenMinutes = minutes;
+  document.querySelectorAll('#tokenDurationPills button').forEach(b => {
+    const active = b === btn;
+    b.style.background = active ? 'var(--green)' : 'transparent';
+    b.style.color = active ? 'var(--bg)' : 'var(--text-dim)';
+    b.style.borderColor = active ? 'var(--green)' : 'var(--border)';
+  });
+}
+window.selectTokenDuration = selectTokenDuration;
+
 async function generateToken() {
   if (!window._fbUid || !window._fbDb) {
     const ts = document.getElementById('tokenStatus');
@@ -3234,8 +3262,12 @@ async function generateToken() {
     return;
   }
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = Date.now() + 30 * 60 * 1000;
+  const TOKEN_DURATION = _selectedTokenMinutes * 60 * 1000;
+  const expiresAt = Date.now() + TOKEN_DURATION;
   const ownerUid = window._fbUid;
+  const label = _selectedTokenMinutes < 60
+    ? `${_selectedTokenMinutes} 分鐘`
+    : `${_selectedTokenMinutes / 60} 小時`;
   try {
     const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     await setDoc(doc(window._fbDb, 'tokens', code), { ownerUid, expiresAt, used: false });
@@ -3246,12 +3278,12 @@ async function generateToken() {
       display.style.cursor = 'pointer';
       display.onclick = () => { navigator.clipboard.writeText(code).then(() => { if (ts) ts.textContent = '✓ 已複製！'; }); };
     }
-    if (ts) ts.textContent = '30 分鐘內有效，點擊數字複製';
+    if (ts) ts.textContent = `${label}內有效，點擊數字複製`;
     if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
     _tokenExpireTimer = setTimeout(() => {
       if (display) { display.textContent = '——————'; display.style.cursor = ''; display.onclick = null; }
       if (ts) ts.textContent = '通行碼已過期';
-    }, 30 * 60 * 1000);
+    }, TOKEN_DURATION);
   } catch(e) {
     const ts = document.getElementById('tokenStatus');
     if (ts) ts.textContent = '產生失敗：' + e.message;
@@ -3281,20 +3313,19 @@ function copyDeviceUid() {
 function _startGuestExpireTimer(expiresAt) {
   const remaining = expiresAt - Date.now();
   if (remaining <= 0) return;
+
+  // 提前 5 分鐘提醒（只在剩餘時間夠長時才設）
+  const warnAt = remaining - 5 * 60 * 1000;
+  if (warnAt > 0) {
+    setTimeout(() => {
+      showToast('⚠️ 訪客通行碼將在 5 分鐘後過期，請到信任裝置重新產生');
+    }, warnAt);
+  }
+
   setTimeout(() => {
-    // ★ 修正 Bug 2：只清除 UID 導向設定，不刪除本地 state/notes
-    // 無痕模式下 localStorage 是唯一的資料快取，不能在到期時一併清除
-    try {
-      localStorage.removeItem('innerflow_fb_uid');
-      localStorage.removeItem('innerflow_fb_uid_override');
-      // 不再刪除 innerflow_state_local 與 innerflow_notes_v1
-      // 因為訪客 session 期間使用者的編輯已即時同步到雲端，
-      // 這份本地快取不需要刪除；下次重新輸入 token 後仍可正常載入
-    } catch(e) {}
-    // 重置 uid 回自己的 auth uid
-    window._fbUid = window._fbAuthUid;
-    // 彈回輸入框
-    showToast('⏰ 訪客通行碼已過期，請重新輸入');
+    // ★ 過期時：不刪資料、不切換 UID（window._fbUid 繼續維持 OWNER_UID）
+    // 只彈出驗證框讓使用者輸入新通行碼，輸入成功後繼續正常同步
+    showToast('⏰ 訪客通行碼已過期，請輸入新通行碼繼續');
     setTimeout(openGuestTokenOverlay, 1000);
   }, remaining);
 }
@@ -3310,7 +3341,9 @@ async function submitGuestToken() {
     const snap = await getDoc(doc(window._fbDb, 'tokens', code));
     if (!snap.exists()) { errEl.textContent = '通行碼不存在'; return; }
     const data = snap.data();
-    if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
+    // ★ 允許同一通行碼在有效期內重複輸入（訪客過期後重新驗證用）
+    // 只有「已過期」才拒絕，不檢查 used 旗標
+    // if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
     if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期'; return; }
     await updateDoc(doc(window._fbDb, 'tokens', code), {
       used: true,
