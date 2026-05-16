@@ -1819,6 +1819,10 @@
   .notes-tab:hover .tab-del-btn { opacity: 0.6; }
   .notes-tab.tab-dragging { opacity: 0.4; cursor: grabbing; }
   .notes-tab.tab-drag-over { border-bottom: 2px solid var(--green); background: rgba(58,110,165,0.1); }
+  /* ★ 拖拉時禁止整列選字，消除手機長按選文字的干擾 */
+  .notes-tabs-row.is-dragging { user-select: none; -webkit-user-select: none; }
+  /* ★ tab 本身加 touch-action:pan-y，允許垂直滾動但不攔截水平拖拉事件 */
+  .notes-tab { touch-action: pan-y; }
   #notes-add-tab-btn {
     position: absolute; right: 10px; bottom: 4px;
     background: none; border: none; color: var(--green);
@@ -9079,11 +9083,14 @@ function notesRefreshPreviews() {
 // Uses Pointer Events instead of HTML5 drag API — works reliably in overflow
 // containers and with child elements.
 
-let _tabPointerDrag = null; // { fromIdx, clone, startX, startY, moved }
+let _tabPointerDrag = null;
 
 function _notesTabPointerDown(e, div, row) {
-  if (e.button !== undefined && e.button !== 0) return; // left button only
+  if (e.button !== undefined && e.button !== 0) return;
   if (e.target.classList.contains('tab-del-btn')) return;
+
+  // ★ 立即捕獲 pointer，確保手機上 pointermove 不會因為離開元素而中斷
+  if (div.setPointerCapture) div.setPointerCapture(e.pointerId);
 
   const fromIdx = parseInt(div.dataset.tabIdx);
   const startX = e.clientX;
@@ -9091,79 +9098,132 @@ function _notesTabPointerDown(e, div, row) {
   let moved = false;
   let clone = null;
   let insertMarker = null;
+  let cloneOffsetX = 0;        // ★ 快取 clone 的初始 left，避免每幀 getBoundingClientRect
+  let cloneTop = 0;
+  let _lastTargetEl = null;    // ★ 快取上一個 hover target，減少 classList 操作次數
+  let _rafId = null;           // ★ rAF handle，節流 DOM 更新到每幀最多一次
+
+  // ★ 預先快取所有 tab 的位置（pointerdown 時只算一次，移動時不再 getBoundingClientRect）
+  let _tabRects = [];
+  function _cacheTabRects() {
+    _tabRects = Array.from(row.querySelectorAll('.notes-tab')).map(el => ({
+      el,
+      rect: el.getBoundingClientRect()
+    }));
+  }
+
+  // ★ 從快取座標找 hover target，不觸發 reflow
+  function _findTarget(x) {
+    for (const { el, rect } of _tabRects) {
+      if (el === div) continue;
+      if (x >= rect.left && x <= rect.right) return { el, rect };
+    }
+    return null;
+  }
 
   function onMove(ev) {
+    // ★ 手機上必須 preventDefault 阻止頁面滾動干擾拖拉
+    if (moved) ev.preventDefault();
+
     const dx = ev.clientX - startX;
     const dy = ev.clientY - startY;
 
-    if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-
     if (!moved) {
+      // 水平位移 > 4px 才判定為拖拉（垂直位移大但水平小的情況讓給頁面滾動）
+      if (Math.abs(dx) < 4) return;
       moved = true;
-      // Create floating clone
+      _tabPointerDrag = true;
+
       const rect = div.getBoundingClientRect();
+      cloneOffsetX = rect.left - startX;  // ★ 計算手指位置到 clone 左邊的偏移
+      cloneTop = rect.top;
+
+      // 浮動 clone
       clone = div.cloneNode(true);
-      clone.style.cssText = [
-        'position:fixed',
-        'z-index:99999',
-        'pointer-events:none',
-        'opacity:0.85',
-        'width:' + rect.width + 'px',
-        'left:' + rect.left + 'px',
-        'top:' + rect.top + 'px',
-        'border-radius:8px 8px 0 0',
-        'box-shadow:0 4px 16px rgba(58,110,165,0.3)',
-        'transition:none',
-        'cursor:grabbing',
-        'background:var(--bg2)',
-        'border:1px solid rgba(58,110,165,0.35)'
-      ].join(';');
+      clone.style.cssText =
+        'position:fixed;z-index:99999;pointer-events:none;opacity:0.88;' +
+        'width:' + rect.width + 'px;' +
+        'left:' + rect.left + 'px;' +
+        'top:' + cloneTop + 'px;' +
+        'border-radius:8px 8px 0 0;' +
+        'box-shadow:0 4px 16px rgba(58,110,165,0.3);' +
+        'transition:none;cursor:grabbing;' +
+        'background:var(--bg2);border:1px solid rgba(58,110,165,0.35);' +
+        'will-change:left;';   // ★ 提示瀏覽器這個元素會頻繁移動，提前合成層
       document.body.appendChild(clone);
       div.style.opacity = '0.3';
 
-      // Insert marker line
+      // 插入指示線（fixed 定位，只改 left/top，不改 cssText）
       insertMarker = document.createElement('div');
-      insertMarker.style.cssText = 'width:3px;height:28px;background:var(--green);border-radius:3px;flex-shrink:0;pointer-events:none;align-self:center;';
-      document.body.appendChild(insertMarker); // will be moved into row
+      insertMarker.style.cssText =
+        'position:fixed;width:3px;height:28px;background:var(--green);' +
+        'border-radius:3px;pointer-events:none;display:none;z-index:99998;' +
+        'will-change:left,top;';
+      document.body.appendChild(insertMarker);
+
+      row.classList.add('is-dragging'); // ★ 禁止拖拉期間選字
+      _cacheTabRects(); // ★ 只在拖拉開始時快取一次
     }
 
-    // Move clone
-    clone.style.left = (ev.clientX - startX + parseFloat(clone.style.left)) + 'px';
-    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
+    // ★ 用 rAF 節流：每幀最多更新一次 DOM，避免 60fps 輸入事件造成過多 reflow
+    if (_rafId) return;
+    _rafId = requestAnimationFrame(() => {
+      _rafId = null;
+      if (!clone) return;
 
-    // Find target tab
-    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
-    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
-    if (target && target !== div) {
-      target.classList.add('tab-drag-over');
-      // Position marker
-      const tr = target.getBoundingClientRect();
-      const rr = row.getBoundingClientRect();
-      const half = ev.clientX < tr.left + tr.width / 2;
-      insertMarker.style.cssText = insertMarker.style.cssText +
-        ';position:fixed;top:' + (tr.top + 4) + 'px;left:' + (half ? tr.left - 3 : tr.right - 1) + 'px';
-      insertMarker.style.display = 'block';
-    } else {
-      if (insertMarker) insertMarker.style.display = 'none';
-    }
+      // ★ 直接設 left，不再累加舊 left（避免誤差累積），使用快取的偏移
+      clone.style.left = (ev.clientX + cloneOffsetX) + 'px';
+
+      // ★ 用快取座標找 target，零 reflow
+      const hit = _findTarget(ev.clientX);
+      const targetEl = hit ? hit.el : null;
+
+      if (targetEl !== _lastTargetEl) {
+        // 只在 target 改變時才操作 classList
+        if (_lastTargetEl) _lastTargetEl.classList.remove('tab-drag-over');
+        if (targetEl) targetEl.classList.add('tab-drag-over');
+        _lastTargetEl = targetEl;
+      }
+
+      if (hit) {
+        const { rect: tr } = hit;
+        const insertLeft = ev.clientX < tr.left + tr.width / 2 ? tr.left - 3 : tr.right - 1;
+        // ★ 只改 left/top，不重寫整個 cssText
+        insertMarker.style.left = insertLeft + 'px';
+        insertMarker.style.top  = (tr.top + 4) + 'px';
+        insertMarker.style.display = 'block';
+      } else {
+        insertMarker.style.display = 'none';
+      }
+    });
+  }
+
+  function _cleanup() {
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup',   onUp);
+    document.removeEventListener('pointercancel', onUp);
+    if (clone)        { clone.remove();        clone = null; }
+    if (insertMarker) { insertMarker.remove();  insertMarker = null; }
+    div.style.opacity = '';
+    if (_lastTargetEl) { _lastTargetEl.classList.remove('tab-drag-over'); _lastTargetEl = null; }
+    row.classList.remove('is-dragging');
+    // ★ 短暫延遲清除旗標，讓同一個 pointerup 冒泡到 onclick 時仍能判斷是否為拖拉
+    setTimeout(() => { _tabPointerDrag = false; }, 80);
   }
 
   function onUp(ev) {
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
+    const wasMoved = moved;
+    _cleanup();
 
-    if (clone) clone.remove();
-    if (insertMarker) insertMarker.remove();
-    div.style.opacity = '';
-    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    if (!wasMoved) return; // 只是點擊，交給 onclick
 
-    if (!moved) return; // was a click, not a drag — onclick will handle it
+    // ★ 用快取座標判斷落點，不需要再 elementFromPoint（pointer capture 保證座標可信）
+    const hit = _findTarget(ev.clientX);
+    if (!hit) return;
 
-    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
-    if (!target || target === div) return;
-
-    const toIdx = parseInt(target.dataset.tabIdx);
-    const tr = target.getBoundingClientRect();
+    const { el: targetEl, rect: tr } = hit;
+    const toIdx = parseInt(targetEl.dataset.tabIdx);
     const insertBefore = ev.clientX < tr.left + tr.width / 2;
     const finalIdx = insertBefore ? toIdx : toIdx + (toIdx > fromIdx ? 0 : 1);
 
@@ -9176,9 +9236,9 @@ function _notesTabPointerDown(e, div, row) {
     notesSave();
   }
 
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp);
-  div.setPointerCapture && div.setPointerCapture(e.pointerId);
+  document.addEventListener('pointermove', onMove, { passive: false }); // ★ passive:false 才能 preventDefault
+  document.addEventListener('pointerup',     onUp);
+  document.addEventListener('pointercancel', onUp); // ★ 處理來電、切 App 等中斷情境
 }
 
 function notesRenderTabs() {
