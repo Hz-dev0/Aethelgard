@@ -1819,10 +1819,6 @@
   .notes-tab:hover .tab-del-btn { opacity: 0.6; }
   .notes-tab.tab-dragging { opacity: 0.4; cursor: grabbing; }
   .notes-tab.tab-drag-over { border-bottom: 2px solid var(--green); background: rgba(58,110,165,0.1); }
-  /* ★ 拖拉時禁止整列選字，消除手機長按選文字的干擾 */
-  .notes-tabs-row.is-dragging { user-select: none; -webkit-user-select: none; }
-  /* ★ tab 本身加 touch-action:pan-y，允許垂直滾動但不攔截水平拖拉事件 */
-  .notes-tab { touch-action: pan-y; }
   #notes-add-tab-btn {
     position: absolute; right: 10px; bottom: 4px;
     background: none; border: none; color: var(--green);
@@ -8783,13 +8779,13 @@ let _notesLoaded = false;
 
 // ── Window accessor: 讓 IIFE 外的 _doSyncToCloud 安全讀取 IIFE 內部的 notes 狀態 ──
 window._notesGetSyncPayload = function() {
-  if (!_notesLoaded) return undefined; // 尚未載入，不送（讓 GAS 保留雲端資料）
+  if (!_notesLoaded) return undefined;
   if (!Array.isArray(notesFolderData) || notesFolderData.length === 0) return undefined;
-  // ★ fix：不用 Date.now() fallback，避免每次呼叫都產生新時間戳導致 hash 永遠不同
-  // _notesMemUpdatedAt 只在使用者實際編輯（syncNotesToCloud）後才更新
   return {
     tabs: notesFolderData,
     lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0,
+    lastEditedTab:  typeof window._notesLastEditedTab  === 'number' ? window._notesLastEditedTab  : (notesTabIndex || 0),
+    lastEditedPage: typeof window._notesLastEditedPage === 'number' ? window._notesLastEditedPage : (notesFolderData[notesTabIndex]?.currentPage ?? 0),
     updatedAt: window._notesMemUpdatedAt || 0
   };
 };
@@ -8848,9 +8844,13 @@ function notesSave() {
   try { notesFlush(); } catch(e) {}
   const _saveTs = Date.now();
   try {
+    // lastEditedTab / lastEditedPage 只在使用者真正打字時更新（由 notesAutoSave 設定）
+    // lastTab 仍保留為「目前顯示的 tab」，供其他邏輯使用
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
       tabs: notesFolderData,
       lastTab: notesTabIndex,
+      lastEditedTab:  typeof window._notesLastEditedTab  === 'number' ? window._notesLastEditedTab  : notesTabIndex,
+      lastEditedPage: typeof window._notesLastEditedPage === 'number' ? window._notesLastEditedPage : (notesFolderData[notesTabIndex]?.currentPage ?? 0),
       updatedAt: _saveTs
     }));
   } catch(e) {}
@@ -8887,6 +8887,11 @@ function notesLoad() {
       }
       notesFolderData = d.tabs;
       notesTabIndex = Math.min(d.lastTab || 0, notesFolderData.length - 1);
+      // 還原最後編輯位置（若有記錄就用，否則 fallback 到 lastTab）
+      if (typeof d.lastEditedTab === 'number') {
+        window._notesLastEditedTab  = Math.min(d.lastEditedTab, notesFolderData.length - 1);
+        window._notesLastEditedPage = d.lastEditedPage ?? 0;
+      }
       _notesLoaded = true;
     }
   } catch(e) {
@@ -8927,6 +8932,11 @@ function notesLoadFromData(notes) {
   } else {
     notesFolderData = notes.tabs;
     notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
+    // 雲端帶來的 lastEditedTab/Page：只在本 session 沒有本地編輯紀錄時才採用
+    if (!window._notesUserEdited && typeof notes.lastEditedTab === 'number') {
+      window._notesLastEditedTab  = Math.min(notes.lastEditedTab, notesFolderData.length - 1);
+      window._notesLastEditedPage = notes.lastEditedPage ?? 0;
+    }
   }
 
   _notesLoaded = true; // 已從雲端載入，後續 sync 可安全帶上 notes
@@ -8950,7 +8960,9 @@ function notesClearAll() {
   // 2. 重置記憶體資料（使用者主動斷線，重置 loaded 旗標）
   _notesLoaded = false;
   window._notesMemUpdatedAt = 0;
-  window._notesUserEdited = false; // ★ 重置「使用者已編輯」旗標
+  window._notesUserEdited = false;
+  window._notesLastEditedTab  = undefined;
+  window._notesLastEditedPage = undefined;
   notesFolderData = [{ name: '筆記', pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 }];
   notesTabIndex = 0;
   // 3. 直接清空所有筆記相關 DOM（無論是否可見）
@@ -8983,6 +8995,9 @@ function notesAutoSave() {
   notesFlush();
   // ★ Bug 3 fix：標記本 session 使用者確實編輯過，讓 _pickNotes 知道記憶體版本是真實的
   window._notesUserEdited = true;
+  // ★ 記錄「最後編輯的 tab 和 page」，切回筆記頁時恢復到這裡
+  window._notesLastEditedTab  = notesTabIndex;
+  window._notesLastEditedPage = notesFolderData[notesTabIndex]?.currentPage ?? 0;
   clearTimeout(notesSaveTimer);
   notesSaveTimer = setTimeout(notesSave, 600);
 }
@@ -9083,14 +9098,11 @@ function notesRefreshPreviews() {
 // Uses Pointer Events instead of HTML5 drag API — works reliably in overflow
 // containers and with child elements.
 
-let _tabPointerDrag = null;
+let _tabPointerDrag = null; // { fromIdx, clone, startX, startY, moved }
 
 function _notesTabPointerDown(e, div, row) {
-  if (e.button !== undefined && e.button !== 0) return;
+  if (e.button !== undefined && e.button !== 0) return; // left button only
   if (e.target.classList.contains('tab-del-btn')) return;
-
-  // ★ 立即捕獲 pointer，確保手機上 pointermove 不會因為離開元素而中斷
-  if (div.setPointerCapture) div.setPointerCapture(e.pointerId);
 
   const fromIdx = parseInt(div.dataset.tabIdx);
   const startX = e.clientX;
@@ -9098,132 +9110,79 @@ function _notesTabPointerDown(e, div, row) {
   let moved = false;
   let clone = null;
   let insertMarker = null;
-  let cloneOffsetX = 0;        // ★ 快取 clone 的初始 left，避免每幀 getBoundingClientRect
-  let cloneTop = 0;
-  let _lastTargetEl = null;    // ★ 快取上一個 hover target，減少 classList 操作次數
-  let _rafId = null;           // ★ rAF handle，節流 DOM 更新到每幀最多一次
-
-  // ★ 預先快取所有 tab 的位置（pointerdown 時只算一次，移動時不再 getBoundingClientRect）
-  let _tabRects = [];
-  function _cacheTabRects() {
-    _tabRects = Array.from(row.querySelectorAll('.notes-tab')).map(el => ({
-      el,
-      rect: el.getBoundingClientRect()
-    }));
-  }
-
-  // ★ 從快取座標找 hover target，不觸發 reflow
-  function _findTarget(x) {
-    for (const { el, rect } of _tabRects) {
-      if (el === div) continue;
-      if (x >= rect.left && x <= rect.right) return { el, rect };
-    }
-    return null;
-  }
 
   function onMove(ev) {
-    // ★ 手機上必須 preventDefault 阻止頁面滾動干擾拖拉
-    if (moved) ev.preventDefault();
-
     const dx = ev.clientX - startX;
     const dy = ev.clientY - startY;
 
+    if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+
     if (!moved) {
-      // 水平位移 > 4px 才判定為拖拉（垂直位移大但水平小的情況讓給頁面滾動）
-      if (Math.abs(dx) < 4) return;
       moved = true;
-      _tabPointerDrag = true;
-
+      // Create floating clone
       const rect = div.getBoundingClientRect();
-      cloneOffsetX = rect.left - startX;  // ★ 計算手指位置到 clone 左邊的偏移
-      cloneTop = rect.top;
-
-      // 浮動 clone
       clone = div.cloneNode(true);
-      clone.style.cssText =
-        'position:fixed;z-index:99999;pointer-events:none;opacity:0.88;' +
-        'width:' + rect.width + 'px;' +
-        'left:' + rect.left + 'px;' +
-        'top:' + cloneTop + 'px;' +
-        'border-radius:8px 8px 0 0;' +
-        'box-shadow:0 4px 16px rgba(58,110,165,0.3);' +
-        'transition:none;cursor:grabbing;' +
-        'background:var(--bg2);border:1px solid rgba(58,110,165,0.35);' +
-        'will-change:left;';   // ★ 提示瀏覽器這個元素會頻繁移動，提前合成層
+      clone.style.cssText = [
+        'position:fixed',
+        'z-index:99999',
+        'pointer-events:none',
+        'opacity:0.85',
+        'width:' + rect.width + 'px',
+        'left:' + rect.left + 'px',
+        'top:' + rect.top + 'px',
+        'border-radius:8px 8px 0 0',
+        'box-shadow:0 4px 16px rgba(58,110,165,0.3)',
+        'transition:none',
+        'cursor:grabbing',
+        'background:var(--bg2)',
+        'border:1px solid rgba(58,110,165,0.35)'
+      ].join(';');
       document.body.appendChild(clone);
       div.style.opacity = '0.3';
 
-      // 插入指示線（fixed 定位，只改 left/top，不改 cssText）
+      // Insert marker line
       insertMarker = document.createElement('div');
-      insertMarker.style.cssText =
-        'position:fixed;width:3px;height:28px;background:var(--green);' +
-        'border-radius:3px;pointer-events:none;display:none;z-index:99998;' +
-        'will-change:left,top;';
-      document.body.appendChild(insertMarker);
-
-      row.classList.add('is-dragging'); // ★ 禁止拖拉期間選字
-      _cacheTabRects(); // ★ 只在拖拉開始時快取一次
+      insertMarker.style.cssText = 'width:3px;height:28px;background:var(--green);border-radius:3px;flex-shrink:0;pointer-events:none;align-self:center;';
+      document.body.appendChild(insertMarker); // will be moved into row
     }
 
-    // ★ 用 rAF 節流：每幀最多更新一次 DOM，避免 60fps 輸入事件造成過多 reflow
-    if (_rafId) return;
-    _rafId = requestAnimationFrame(() => {
-      _rafId = null;
-      if (!clone) return;
+    // Move clone
+    clone.style.left = (ev.clientX - startX + parseFloat(clone.style.left)) + 'px';
+    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
 
-      // ★ 直接設 left，不再累加舊 left（避免誤差累積），使用快取的偏移
-      clone.style.left = (ev.clientX + cloneOffsetX) + 'px';
-
-      // ★ 用快取座標找 target，零 reflow
-      const hit = _findTarget(ev.clientX);
-      const targetEl = hit ? hit.el : null;
-
-      if (targetEl !== _lastTargetEl) {
-        // 只在 target 改變時才操作 classList
-        if (_lastTargetEl) _lastTargetEl.classList.remove('tab-drag-over');
-        if (targetEl) targetEl.classList.add('tab-drag-over');
-        _lastTargetEl = targetEl;
-      }
-
-      if (hit) {
-        const { rect: tr } = hit;
-        const insertLeft = ev.clientX < tr.left + tr.width / 2 ? tr.left - 3 : tr.right - 1;
-        // ★ 只改 left/top，不重寫整個 cssText
-        insertMarker.style.left = insertLeft + 'px';
-        insertMarker.style.top  = (tr.top + 4) + 'px';
-        insertMarker.style.display = 'block';
-      } else {
-        insertMarker.style.display = 'none';
-      }
-    });
-  }
-
-  function _cleanup() {
-    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup',   onUp);
-    document.removeEventListener('pointercancel', onUp);
-    if (clone)        { clone.remove();        clone = null; }
-    if (insertMarker) { insertMarker.remove();  insertMarker = null; }
-    div.style.opacity = '';
-    if (_lastTargetEl) { _lastTargetEl.classList.remove('tab-drag-over'); _lastTargetEl = null; }
-    row.classList.remove('is-dragging');
-    // ★ 短暫延遲清除旗標，讓同一個 pointerup 冒泡到 onclick 時仍能判斷是否為拖拉
-    setTimeout(() => { _tabPointerDrag = false; }, 80);
+    // Find target tab
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
+    if (target && target !== div) {
+      target.classList.add('tab-drag-over');
+      // Position marker
+      const tr = target.getBoundingClientRect();
+      const rr = row.getBoundingClientRect();
+      const half = ev.clientX < tr.left + tr.width / 2;
+      insertMarker.style.cssText = insertMarker.style.cssText +
+        ';position:fixed;top:' + (tr.top + 4) + 'px;left:' + (half ? tr.left - 3 : tr.right - 1) + 'px';
+      insertMarker.style.display = 'block';
+    } else {
+      if (insertMarker) insertMarker.style.display = 'none';
+    }
   }
 
   function onUp(ev) {
-    const wasMoved = moved;
-    _cleanup();
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
 
-    if (!wasMoved) return; // 只是點擊，交給 onclick
+    if (clone) clone.remove();
+    if (insertMarker) insertMarker.remove();
+    div.style.opacity = '';
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
 
-    // ★ 用快取座標判斷落點，不需要再 elementFromPoint（pointer capture 保證座標可信）
-    const hit = _findTarget(ev.clientX);
-    if (!hit) return;
+    if (!moved) return; // was a click, not a drag — onclick will handle it
 
-    const { el: targetEl, rect: tr } = hit;
-    const toIdx = parseInt(targetEl.dataset.tabIdx);
+    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
+    if (!target || target === div) return;
+
+    const toIdx = parseInt(target.dataset.tabIdx);
+    const tr = target.getBoundingClientRect();
     const insertBefore = ev.clientX < tr.left + tr.width / 2;
     const finalIdx = insertBefore ? toIdx : toIdx + (toIdx > fromIdx ? 0 : 1);
 
@@ -9236,9 +9195,9 @@ function _notesTabPointerDown(e, div, row) {
     notesSave();
   }
 
-  document.addEventListener('pointermove', onMove, { passive: false }); // ★ passive:false 才能 preventDefault
-  document.addEventListener('pointerup',     onUp);
-  document.addEventListener('pointercancel', onUp); // ★ 處理來電、切 App 等中斷情境
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  div.setPointerCapture && div.setPointerCapture(e.pointerId);
 }
 
 function notesRenderTabs() {
@@ -9775,11 +9734,19 @@ function notesWirePageCtx() {
 // ── Show / Hide notes page ─────────────────────────────
 function notesShow() {
   _notesIsVisible = true;
-  // 若記憶體已有雲端載入的資料，跳過 notesLoad()（避免空的 localStorage 蓋掉雲端資料）
   if (!_notesLoaded || notesFolderData.length === 0) {
     notesLoad();
   }
   notesEnsureDefaults();
+  // ★ 切到筆記頁：恢復到最後編輯的 tab 和 page（而非上次顯示的位置）
+  if (typeof window._notesLastEditedTab === 'number') {
+    const targetTab = Math.min(window._notesLastEditedTab, notesFolderData.length - 1);
+    notesTabIndex = targetTab;
+    const tab = notesFolderData[targetTab];
+    if (tab && typeof window._notesLastEditedPage === 'number') {
+      tab.currentPage = Math.min(window._notesLastEditedPage, tab.pages.length - 1);
+    }
+  }
   notesRenderTabs();
   // Show the import/export button in the header
   const ioBtn = document.getElementById('notes-io-btn');
