@@ -100,7 +100,6 @@
         window._fbUid = user.uid;
         try { localStorage.setItem('aethelgard_fb_uid', user.uid); } catch(e) {}
         try { localStorage.setItem('aethelgard_fb_owner_uid', user.uid); } catch(e) {}
-        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
       } else {
         // ── 匿名使用者（訪客）：設 ownerUid = 讓 _onFirebaseReady 決定 ──
         window._fbUid = user.uid;
@@ -112,13 +111,25 @@
             window._fbUid = sessionUid;
           }
         } catch(e) {}
-        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+      }
+      // 觸發 ready 流程（_onFirebaseReady 內部會判斷 Owner / Guest）
+      if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+      // 若 init() 已在等待 _onFirebaseReadyCallback，直接 resolve
+      if (typeof window._onFirebaseReadyCallback === 'function') {
+        window._onFirebaseReadyCallback();
       }
     } else {
-      // ── 未登入：什麼都不做，等待外部呼叫登入 ──
-      // 頁面啟動時由 _onFirebaseReady 流程決定要顯示 Owner 登入框 or 訪客驗證碼框
-      // 先觸發 ready 讓 init 可以跑（可能無網路）
-      if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+      // ── 未登入：自動進行匿名登入，以進入訪客 OTP 流程 ──
+      try {
+        await setPersistence(auth, browserSessionPersistence);
+        await signInAnonymously(auth);
+        // 匿名登入成功後，onAuthStateChanged 會再次觸發（user != null 的分支）
+      } catch(e) {
+        console.error('匿名登入失敗', e);
+        // 即使失敗也觸發 ready，讓 init 可以跑（離線場景）
+        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+        if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+      }
     }
   });
 </script>
