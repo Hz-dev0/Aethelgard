@@ -3099,7 +3099,19 @@ function _startRealtimeListener(uid) {
     const localFingerprint  = _taskFingerprint(state.tasks);
     console.log('[snapshot] remote tasks:', data.tasks.length, 'local tasks:', state.tasks.length);
     console.log('[snapshot] fingerprint 相同?', remoteFingerprint === localFingerprint);
-    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints) { console.log('[snapshot] ❌ 資料一致，略過'); return; }
+    // ★ Bug 1 fix：也比對筆記 updatedAt，避免「只改筆記」時被誤判為資料一致而跳過
+    const remoteNotesTs = (data.notes && data.notes.updatedAt) || 0;
+    const localNotesTs = (() => {
+      try {
+        const memTs = window._notesMemUpdatedAt || 0;
+        const lsRaw = localStorage.getItem('innerflow_notes_v1');
+        const lsTs = lsRaw ? (JSON.parse(lsRaw).updatedAt || 0) : 0;
+        return Math.max(memTs, lsTs);
+      } catch(e) { return 0; }
+    })();
+    const notesUnchanged = remoteNotesTs <= localNotesTs;
+    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints && notesUnchanged) { console.log('[snapshot] ❌ 資料一致（含筆記），略過'); return; }
+    if (!notesUnchanged) console.log('[snapshot] 筆記有更新 remote:', remoteNotesTs, 'local:', localNotesTs);
 
     console.log('[snapshot] ✅ 套用遠端資料');
     const dot = document.getElementById('syncDot');
@@ -3159,7 +3171,7 @@ function _startRealtimeListener(uid) {
 
 // syncToCloud 寫入時，短暫標記「忽略接下來 3 秒的 snapshot」避免自我觸發
 function _markSyncWrite() {
-  _snapshotIgnoreUntil = Date.now() + 5000;
+  _snapshotIgnoreUntil = Date.now() + 2000; // ★ Bug 4 fix：從 5000 縮短到 2000ms，減少錯過對方更新的時間窗口
 }
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
@@ -3206,7 +3218,8 @@ window._onFirebaseReady = async function() {
         window._fbUid = OWNER_UID;
         try { localStorage.setItem('innerflow_fb_uid', OWNER_UID); } catch(e) {}
         if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-        if (typeof _startRealtimeListener === 'function') _startRealtimeListener(OWNER_UID);
+        // ★ Bug 2 fix：不在此處呼叫 _startRealtimeListener，init() 的第 5299 行已統一負責
+        // 避免重複綁定導致第一次推送被舊 listener 的 unsubscribe 取消
         if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
         return;
       }
@@ -3649,14 +3662,13 @@ function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
     const cloudTs = cloudNotes.updatedAt || 0;
-    // 透過 accessor 取得記憶體版本（無痕模式下 localStorage 無資料，但記憶體可能有較新的版本）
-    // 注意：_pickNotes 在 IIFE 初始化前就可能被呼叫（saveApiUrl 首次連線），
-    // 此時 accessor 尚未註冊，安全降級為只比較 localStorage。
+    // ★ Bug 3 fix：只有使用者在本 session 真正編輯過（_notesUserEdited=true）才採信記憶體時間戳
+    // 否則頁面剛開啟時 _notesMemUpdatedAt 也可能 > cloudTs，導致永遠拒絕雲端更新
     const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
-    if (memPayload) {
+    if (memPayload && window._notesUserEdited) {
       const memTs = window._notesMemUpdatedAt || 0;
       if (memTs > cloudTs) {
-        // 記憶體版本較新（使用者在此次 session 中已編輯過）→ 保留記憶體
+        console.log('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
         return memPayload;
       }
     }
@@ -3667,7 +3679,9 @@ function _pickNotes(cloudNotes) {
     const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
       !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
     );
-    return (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+    const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+    console.log('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
+    return chosen;
   } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
 }
 // ── Notes cloud sync helper — debounced 5s to avoid pushing on every keystroke ──
@@ -3728,7 +3742,7 @@ function syncNotesToCloud() {
       console.warn('[notes] 直接寫入失敗，降級走 syncToCloud', e);
       syncToCloud();
     }
-  }, 2000); // ★ 從 5000ms 縮短到 2000ms，減少關頁前遺失的時間窗口
+  }, 1000); // ★ 提高同步頻率：5000→2000→1000ms，盡快推送筆記
 }
 
 // ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
@@ -3870,7 +3884,7 @@ function syncToCloud() {
   _syncDebounceTimer = setTimeout(() => {
     _syncDebounceTimer = null;
     _doSyncToCloud();
-  }, 600);
+  }, 300); // ★ 提高同步頻率：600 → 300ms
 }
 
 // ── _doSyncToCloud：實際執行 Firebase 寫入 ──
@@ -3966,14 +3980,13 @@ function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
     const cloudTs = cloudNotes.updatedAt || 0;
-    // 透過 accessor 取得記憶體版本（無痕模式下 localStorage 無資料，但記憶體可能有較新的版本）
-    // 注意：_pickNotes 在 IIFE 初始化前就可能被呼叫（saveApiUrl 首次連線），
-    // 此時 accessor 尚未註冊，安全降級為只比較 localStorage。
+    // ★ Bug 3 fix：只有使用者在本 session 真正編輯過（_notesUserEdited=true）才採信記憶體時間戳
+    // 否則頁面剛開啟時 _notesMemUpdatedAt 也可能 > cloudTs，導致永遠拒絕雲端更新
     const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
-    if (memPayload) {
+    if (memPayload && window._notesUserEdited) {
       const memTs = window._notesMemUpdatedAt || 0;
       if (memTs > cloudTs) {
-        // 記憶體版本較新（使用者在此次 session 中已編輯過）→ 保留記憶體
+        console.log('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
         return memPayload;
       }
     }
@@ -3984,7 +3997,9 @@ function _pickNotes(cloudNotes) {
     const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
       !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
     );
-    return (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+    const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+    console.log('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
+    return chosen;
   } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
 }
 
@@ -4056,7 +4071,7 @@ function syncToCloud() {
   if (!state._initDone) return;
   if (!_isFirebaseReady()) return;
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
-  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); }, 600);
+  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); }, 300); // ★ 提高同步頻率：600 → 300ms
 }
 
 async function _doSyncToCloud() {
@@ -8766,10 +8781,12 @@ let _notesLoaded = false;
 window._notesGetSyncPayload = function() {
   if (!_notesLoaded) return undefined; // 尚未載入，不送（讓 GAS 保留雲端資料）
   if (!Array.isArray(notesFolderData) || notesFolderData.length === 0) return undefined;
+  // ★ fix：不用 Date.now() fallback，避免每次呼叫都產生新時間戳導致 hash 永遠不同
+  // _notesMemUpdatedAt 只在使用者實際編輯（syncNotesToCloud）後才更新
   return {
     tabs: notesFolderData,
     lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0,
-    updatedAt: window._notesMemUpdatedAt || Date.now()
+    updatedAt: window._notesMemUpdatedAt || 0
   };
 };
 
@@ -8825,13 +8842,17 @@ window._notesDlg = _notesDlg;
 // ── Persistence ────────────────────────────────────────
 function notesSave() {
   try { notesFlush(); } catch(e) {}
+  const _saveTs = Date.now();
   try {
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
       tabs: notesFolderData,
       lastTab: notesTabIndex,
-      updatedAt: Date.now()
+      updatedAt: _saveTs
     }));
   } catch(e) {}
+  // ★ fix：確保 _notesMemUpdatedAt 與 localStorage updatedAt 一致
+  // 讓 _pickNotes 和 snapshot 比對時拿到同一個時間戳
+  window._notesMemUpdatedAt = _saveTs;
   try {
     if (typeof syncNotesToCloud === 'function') syncNotesToCloud();
   } catch(e) {}
@@ -8925,6 +8946,7 @@ function notesClearAll() {
   // 2. 重置記憶體資料（使用者主動斷線，重置 loaded 旗標）
   _notesLoaded = false;
   window._notesMemUpdatedAt = 0;
+  window._notesUserEdited = false; // ★ 重置「使用者已編輯」旗標
   notesFolderData = [{ name: '筆記', pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 }];
   notesTabIndex = 0;
   // 3. 直接清空所有筆記相關 DOM（無論是否可見）
@@ -8955,6 +8977,8 @@ function notesEnsureDefaults() {
 // ── Auto-save ──────────────────────────────────────────
 function notesAutoSave() {
   notesFlush();
+  // ★ Bug 3 fix：標記本 session 使用者確實編輯過，讓 _pickNotes 知道記憶體版本是真實的
+  window._notesUserEdited = true;
   clearTimeout(notesSaveTimer);
   notesSaveTimer = setTimeout(notesSave, 600);
 }
