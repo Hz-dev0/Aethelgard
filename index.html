@@ -20,17 +20,27 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import {
+    getAuth,
+    signInAnonymously,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    browserLocalPersistence,
+    browserSessionPersistence,
+    setPersistence
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
-    apiKey: "AIzaSyAvThGRXxl8uF5N4dvd0Svogrs0OXFe81U",
-    authDomain: "innerflow-bed27.firebaseapp.com",
-    databaseURL: "https://innerflow-bed27-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "innerflow-bed27",
-    storageBucket: "innerflow-bed27.firebasestorage.app",
-    messagingSenderId: "887869742958",
-    appId: "1:887869742958:web:cc0bead5c92c84c1026b7f"
+    apiKey: "AIzaSyD0S4gVD5OHiztOaL6JRMmWA0grH8NkOxU",
+    authDomain: "auroraenvoy.firebaseapp.com",
+    projectId: "auroraenvoy",
+    storageBucket: "auroraenvoy.firebasestorage.app",
+    messagingSenderId: "456319814884",
+    appId: "1:456319814884:web:06b046a8a1667d25ceb0f1"
   };
 
   const app = initializeApp(firebaseConfig);
@@ -43,32 +53,72 @@
   window._fbDoc = doc;
   window._fbGetDoc = getDoc;
   window._fbSetDoc = setDoc;
+  window._fbDeleteDoc = deleteDoc;
   window._fbOnSnapshot = onSnapshot;
+  window._fbCollection = collection;
+  window._fbGetDocs = getDocs;
 
-  // ── 匿名登入（背景靜默，使用者無感）──
+  // ── Owner 登入（信箱 + 密碼）：帶持久化，下次開頁自動免登入 ──
+  window._fbOwnerLogin = async function(email, password) {
+    await setPersistence(auth, browserLocalPersistence);
+    return signInWithEmailAndPassword(auth, email, password);
+  };
+
+  // ── Owner 強制登出所有訪客（刪除所有 /guest_access 文件）──
+  window._fbRevokeAllGuests = async function() {
+    try {
+      const snap = await getDocs(collection(db, 'guest_access'));
+      const dels = snap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(dels);
+      return true;
+    } catch(e) {
+      console.error('[revokeAllGuests] 失敗', e);
+      return false;
+    }
+  };
+
+  // ── 訪客無痕登入（signInAnonymously + sessionStorage persistence）──
+  window._fbGuestLogin = async function() {
+    await setPersistence(auth, browserSessionPersistence);
+    return signInAnonymously(auth);
+  };
+
+  // ── Owner 登出 ──
+  window._fbOwnerSignOut = async function() {
+    return signOut(auth);
+  };
+
+  // ── Auth 狀態監聽 ──
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      // 檢查是否有 UID override（跨裝置切換）
-      const override = localStorage.getItem('innerflow_fb_uid_override');
-      if (override && override !== user.uid) {
-        // 有 override：用 override UID 作為資料路徑，但仍用自己的帳號做 auth
-        // 安全規則需調整為允許同一 UID 讀寫（見說明）
-        window._fbUid = override;
-        window._fbAuthUid = user.uid; // 保留真實 auth uid 備用
+      window._fbAuthUid = user.uid;
+      // 是否為 email 登入的 Owner（isAnonymous = false）
+      window._fbIsOwner = !user.isAnonymous;
+
+      if (window._fbIsOwner) {
+        // ── Owner 裝置：直接用自己的 UID 作為資料路徑 ──
+        window._fbUid = user.uid;
+        try { localStorage.setItem('innerflow_fb_uid', user.uid); } catch(e) {}
+        try { localStorage.setItem('innerflow_fb_owner_uid', user.uid); } catch(e) {}
+        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
       } else {
+        // ── 匿名使用者（訪客）：設 ownerUid = 讓 _onFirebaseReady 決定 ──
         window._fbUid = user.uid;
         window._fbAuthUid = user.uid;
-        // 清除已過期的 override
-        try { localStorage.removeItem('innerflow_fb_uid_override'); } catch(e) {}
+        // 檢查 sessionStorage 備份（無痕模式跨重整用）
+        try {
+          const sessionUid = sessionStorage.getItem('innerflow_guest_uid');
+          if (sessionUid) {
+            window._fbUid = sessionUid;
+          }
+        } catch(e) {}
+        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
       }
-      try { localStorage.setItem('innerflow_fb_uid', window._fbUid); } catch(e) {}
-      if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
     } else {
-      try {
-        await signInAnonymously(auth);
-      } catch(e) {
-        console.error('Firebase 匿名登入失敗', e);
-      }
+      // ── 未登入：什麼都不做，等待外部呼叫登入 ──
+      // 頁面啟動時由 _onFirebaseReady 流程決定要顯示 Owner 登入框 or 訪客驗證碼框
+      // 先觸發 ready 讓 init 可以跑（可能無網路）
+      if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
     }
   });
 </script>
@@ -2860,6 +2910,17 @@
 
     <div class="api-modal-actions" style="margin-top:12px">
       <button class="api-btn-clear" id="apiClearBtn" onclick="clearApiUrl()" style="display:none">✕ 清除連線</button>
+      <!-- 🔴 Owner 專屬：強制登出所有訪客 -->
+      <button id="revokeGuestsBtn" onclick="revokeAllGuests()"
+        style="display:none;padding:9px 16px;background:transparent;color:var(--rose);border:1px solid rgba(192,86,90,0.3);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;transition:all 0.2s;margin-right:auto"
+        onmouseover="this.style.background='rgba(192,86,90,0.08)'" onmouseout="this.style.background='transparent'">
+        🔒 強制登出訪客
+      </button>
+      <button id="ownerSignOutBtn" onclick="ownerSignOut()"
+        style="display:none;padding:9px 16px;background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;transition:all 0.2s"
+        onmouseover="this.style.borderColor='var(--text-dim)'" onmouseout="this.style.borderColor=''">
+        登出
+      </button>
       <button class="api-btn-skip" onclick="closeApiModal()">關閉</button>
       <button class="api-btn-save" onclick="saveApiSettings()">儲存設定 →</button>
     </div>
@@ -2882,18 +2943,48 @@
 
 </div>
 
+<!-- ── Owner 登入鎖屏 ── -->
+<div id="ownerLoginOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,rgba(240,244,248,0.97) 0%,rgba(224,234,244,0.99) 100%);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
+  <div style="background:var(--bg2);border:1px solid rgba(74,130,196,0.3);border-radius:20px;padding:36px 32px;min-width:300px;max-width:380px;box-shadow:0 24px 64px rgba(58,110,165,0.2);text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">🔐</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green);margin-bottom:4px">InnerFlow</div>
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">請登入 Owner 帳號，或輸入訪客通行碼</div>
+    <input id="ownerEmailInput" type="email" placeholder="Owner 信箱"
+      style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+      onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+      onkeydown="if(event.key==='Enter')document.getElementById('ownerPasswordInput').focus()">
+    <input id="ownerPasswordInput" type="password" placeholder="密碼"
+      style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+      onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+      onkeydown="if(event.key==='Enter')submitOwnerLogin()">
+    <div id="ownerLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin-bottom:10px"></div>
+    <button onclick="submitOwnerLogin()"
+      style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:12px;transition:opacity 0.2s"
+      onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
+    <div style="height:1px;background:var(--border);margin-bottom:12px"></div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px">在公司？輸入 Owner 產生的 6 位數通行碼</div>
+    <button onclick="closeOwnerLoginOverlay();openGuestTokenOverlay()"
+      style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s"
+      onmouseover="this.style.borderColor='var(--green);this.style.color='var(--green)'"
+      onmouseout="this.style.borderColor='';this.style.color=''">
+      輸入訪客通行碼
+    </button>
+  </div>
+</div>
+
 <!-- 訪客通行碼 Overlay -->
 <div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:28px 24px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center">
-    <div style="font-size:20px;margin-bottom:6px;cursor:pointer;user-select:none" onclick="copyDeviceUid()" title="點擊複製裝置 ID">🔑</div>
-    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入臨時通行碼</div>
-    <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px">由你的白名單裝置產生，30 分鐘內有效</div>
+    <div style="font-size:20px;margin-bottom:6px">🔑</div>
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入訪客通行碼</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px">由 Owner 裝置產生，30 分鐘有效，用完即銷毀</div>
     <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
       placeholder="000000"
-      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px">
-    <div id="guestTokenError" style="font-size:11px;color:var(--red,#e05);min-height:16px;margin-bottom:10px"></div>
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px"
+      onkeydown="if(event.key==='Enter')submitGuestToken()">
+    <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <button onclick="closeGuestTokenOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">取消</button>
+      <button onclick="closeGuestTokenOverlay();openOwnerLoginOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">← 返回</button>
       <button onclick="submitGuestToken()" style="flex:2;padding:9px;border-radius:9px;border:none;background:var(--green);color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">進入</button>
     </div>
   </div>
@@ -3177,58 +3268,204 @@ function _markSyncWrite() {
 // ── Firebase 就緒回呼（由 module script 呼叫）──
 let _firebaseReadyFired = false;
 window._onFirebaseReady = async function() {
-  if (_firebaseReadyFired) return;
-  _firebaseReadyFired = true;
+  // 允許多次觸發（Owner 登入後需要重跑）
   const btn = document.getElementById('settingsBtn');
   if (btn) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
 
-  // ★ 架構改為：所有裝置永遠讀寫同一個 OWNER_UID
-  // 信任裝置（白名單）→ 直接使用 OWNER_UID，無需驗證
-  // 訪客裝置 → 第一次輸入通行碼，之後永久記住，不再過期切換
-  const WHITELIST = [
-    '4SjrQvNrgtRmD0y5BJ9s4KW1JA43', // ★ 手機，主裝置 OWNER
-    'B53QVIoHSBZq6woxzhJX0b3Z8D82',
-    '21TsXzZ9IDOz5Xlq5VBECSxOY7L2',
-    'UjpfEGR8vmbOxQHRb28ft6L0gZH3'
-  ];
-  const OWNER_UID = WHITELIST[0]; // 手機 UID 為所有資料的唯一儲存位置
+  const authUid = window._fbAuthUid || '';
 
-  const authUid = window._fbAuthUid || window._fbUid || '';
-
-  // ── 信任裝置：直接切換到 OWNER_UID ──
-  if (WHITELIST.includes(authUid)) {
-    if (authUid !== OWNER_UID) {
-      console.log('[whitelist] 切換到 owner UID:', OWNER_UID);
-    }
-    window._fbUid = OWNER_UID;
-    try { localStorage.setItem('innerflow_fb_uid', OWNER_UID); } catch(e) {}
+  // ── 情況 1：Owner（email 登入）→ 直接用自己的 UID，無需任何驗證 ──
+  if (window._fbIsOwner && authUid) {
+    window._fbUid = authUid;
+    try { localStorage.setItem('innerflow_fb_uid', authUid); } catch(e) {}
+    try { localStorage.setItem('innerflow_fb_owner_uid', authUid); } catch(e) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
     return;
   }
 
-  // ── 訪客裝置：查詢是否已有永久授權（grant） ──
+  // ── 情況 2：無 authUid（尚未登入）→ 顯示 Owner 登入鎖屏 ──
+  if (!authUid) {
+    setTimeout(openOwnerLoginOverlay, 400);
+    return;
+  }
+
+  // ── 情況 3：匿名（訪客）→ 檢查是否有有效通行證 ──
+  // 先查 /guest_access/{guestUid}
   try {
-    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const snap = await getDoc(doc(window._fbDb, 'guest_access', authUid));
+    const snap = await window._fbGetDoc(window._fbDoc(window._fbDb, 'guest_access', authUid));
     if (snap.exists()) {
       const ga = snap.data();
-      // ★ 永久授權：只要 granted=true 就直接放行，不再檢查 expiresAt
-      if (ga.granted === true || (ga.ownerUid && ga.ownerUid === OWNER_UID)) {
-        window._fbUid = OWNER_UID;
-        try { localStorage.setItem('innerflow_fb_uid', OWNER_UID); } catch(e) {}
+      const now = Date.now();
+      const ownerUid = ga.ownerUid || '';
+      // 通行證有效（未過期）
+      if (ownerUid && ga.expiresAt > now) {
+        window._fbUid = ownerUid;
+        try { sessionStorage.setItem('innerflow_guest_uid', ownerUid); } catch(e) {}
+        try { localStorage.setItem('innerflow_fb_uid', ownerUid); } catch(e) {}
         if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-        // ★ Bug 2 fix：不在此處呼叫 _startRealtimeListener，init() 的第 5299 行已統一負責
-        // 避免重複綁定導致第一次推送被舊 listener 的 unsubscribe 取消
+        _firebaseReadyFired = true;
+        // 啟動即時安全鎖監聽
+        _startGuestAccessWatcher(authUid, ownerUid, ga.expiresAt);
         if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
         return;
       }
+      // 通行證已過期 → 清除並要求重新輸入
+      try { await window._fbDeleteDoc(window._fbDoc(window._fbDb, 'guest_access', authUid)); } catch(e) {}
     }
   } catch(e) { console.warn('guest_access 查詢失敗', e); }
 
-  // ── 訪客裝置首次使用：彈出通行碼輸入 ──
+  // ── 訪客首次使用 or 通行證過期：彈出驗證碼輸入框 ──
   setTimeout(openGuestTokenOverlay, 600);
 };
+
+// ── Owner 登入框 ──
+function openOwnerLoginOverlay() {
+  const el = document.getElementById('ownerLoginOverlay');
+  if (el) {
+    el.style.display = 'flex';
+    setTimeout(() => { const i = document.getElementById('ownerEmailInput'); if(i) i.focus(); }, 100);
+  }
+}
+window.openOwnerLoginOverlay = openOwnerLoginOverlay;
+
+function closeOwnerLoginOverlay() {
+  const el = document.getElementById('ownerLoginOverlay');
+  if (el) el.style.display = 'none';
+}
+window.closeOwnerLoginOverlay = closeOwnerLoginOverlay;
+
+async function submitOwnerLogin() {
+  const email = (document.getElementById('ownerEmailInput').value || '').trim();
+  const password = (document.getElementById('ownerPasswordInput').value || '');
+  const errEl = document.getElementById('ownerLoginError');
+  if (!email || !password) { errEl.textContent = '請輸入信箱與密碼'; return; }
+  errEl.textContent = '登入中…'; errEl.style.color = '';
+  try {
+    const cred = await window._fbOwnerLogin(email, password);
+    window._fbAuthUid = cred.user.uid;
+    window._fbIsOwner = true;
+    window._fbUid = cred.user.uid;
+    try { localStorage.setItem('innerflow_fb_uid', cred.user.uid); } catch(e2) {}
+    try { localStorage.setItem('innerflow_fb_owner_uid', cred.user.uid); } catch(e2) {}
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    closeOwnerLoginOverlay();
+    showToast('🔐 Owner 已登入，資料同步中…');
+    // 重新觸發 ready 流程
+    _firebaseReadyFired = false;
+    if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+  } catch(e) {
+    const codeMap = {
+      'auth/invalid-credential': '信箱或密碼錯誤',
+      'auth/user-not-found': '找不到此帳號',
+      'auth/wrong-password': '密碼錯誤',
+      'auth/invalid-email': '信箱格式不正確',
+      'auth/too-many-requests': '嘗試次數過多，請稍後再試',
+    };
+    errEl.textContent = codeMap[e.code] || ('登入失敗：' + e.message);
+    errEl.style.color = 'var(--rose)';
+  }
+}
+window.submitOwnerLogin = submitOwnerLogin;
+
+// ── Owner 登出 ──
+async function ownerSignOut() {
+  try {
+    await window._fbOwnerSignOut();
+    localStorage.removeItem('innerflow_fb_uid');
+    localStorage.removeItem('innerflow_fb_owner_uid');
+    window._fbUid = '';
+    window._fbAuthUid = '';
+    window._fbIsOwner = false;
+    showToast('🔓 已登出');
+    openOwnerLoginOverlay();
+  } catch(e) {
+    showToast('登出失敗：' + e.message);
+  }
+}
+window.ownerSignOut = ownerSignOut;
+
+// ── 強制登出所有訪客（Owner 專屬）──
+async function revokeAllGuests() {
+  if (!window._fbIsOwner) { showToast('❌ 只有 Owner 才能執行此操作'); return; }
+  const ok = await window._fbRevokeAllGuests();
+  if (ok) {
+    showToast('🔒 已強制登出所有訪客');
+  } else {
+    showToast('❌ 操作失敗，請稍後再試');
+  }
+}
+window.revokeAllGuests = revokeAllGuests;
+
+// ── 訪客即時安全鎖監聽（onSnapshot 監聽 /guest_access/{uid}）──
+let _guestAccessUnsubscribe = null;
+function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt) {
+  if (_guestAccessUnsubscribe) { _guestAccessUnsubscribe(); _guestAccessUnsubscribe = null; }
+  if (!window._fbOnSnapshot || !window._fbDb) return;
+
+  const ref = window._fbDoc(window._fbDb, 'guest_access', guestUid);
+  _guestAccessUnsubscribe = window._fbOnSnapshot(ref, (snap) => {
+    const now = Date.now();
+    // 通行證被刪除（Owner 強制登出）或已過期
+    const isRevoked = !snap.exists();
+    const isExpired = snap.exists() && snap.data().expiresAt <= now;
+    if (isRevoked || isExpired) {
+      _forceGuestLockout();
+    }
+  }, (err) => {
+    console.warn('[guestWatch] 監聽錯誤:', err.code);
+  });
+
+  // 本地計時器：到期時間到自動鎖定（雙保險）
+  const remaining = expiresAt - Date.now();
+  if (remaining > 0) {
+    setTimeout(() => _forceGuestLockout(), remaining);
+    // 提前 5 分鐘警告
+    if (remaining > 5 * 60 * 1000) {
+      setTimeout(() => showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'), remaining - 5 * 60 * 1000);
+    }
+  }
+}
+
+// ── 強制訪客鎖定：清除敏感資料並跳回鎖屏 ──
+function _forceGuestLockout() {
+  if (window._fbIsOwner) return; // Owner 不受此限制
+
+  // 停止所有監聽
+  if (_guestAccessUnsubscribe) { _guestAccessUnsubscribe(); _guestAccessUnsubscribe = null; }
+  if (typeof _fbUnsubscribe !== 'undefined' && _fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+
+  // 清空記憶體中的敏感資料
+  if (typeof state !== 'undefined') {
+    state.tasks = [];
+    state.sandbox = [];
+    state.rewards = [];
+    state.doneHistory = [];
+    state.routines = [];
+    state.customQuotes = [];
+    state.done = 0;
+    state.wishPoints = 0;
+    state._initDone = false;
+  }
+
+  // 清除 sessionStorage（無痕模式）
+  try { sessionStorage.removeItem('innerflow_guest_uid'); } catch(e) {}
+  window._fbUid = '';
+  window._fbAuthUid = '';
+  window._fbIsOwner = false;
+
+  // 立刻重繪為空
+  if (typeof renderAll === 'function') renderAll();
+
+  // 顯示訪客驗證碼輸入框（鎖屏效果）
+  setTimeout(() => {
+    showToast('🔒 通行證已失效，請重新輸入');
+    setTimeout(openGuestTokenOverlay, 800);
+  }, 50);
+}
+window._forceGuestLockout = _forceGuestLockout;
 
 function handleApiModalOverlayClick(e) {
   if (e.target === document.getElementById('apiModal')) closeApiModal();
@@ -3241,7 +3478,16 @@ function openApiModal() {
   const tokenDisplay = document.getElementById('tokenDisplay');
   if (tokenDisplay) tokenDisplay.textContent = '——————';
   const tokenStatus = document.getElementById('tokenStatus');
-  if (tokenStatus) tokenStatus.textContent = uid ? '✓ Firebase 已連線' : '正在連線 Firebase…';
+  if (tokenStatus) tokenStatus.textContent = uid ? (window._fbIsOwner ? '✓ Owner 已登入' : '✓ 訪客模式中') : '正在連線 Firebase…';
+
+  // 顯示 / 隱藏 Owner 專屬功能
+  const revokeBtn = document.getElementById('revokeGuestsBtn');
+  const signOutBtn = document.getElementById('ownerSignOutBtn');
+  const tokenSection = document.getElementById('tokenDurationPills');
+  const tokenGenBtn = tokenSection ? tokenSection.closest('div') : null;
+  if (revokeBtn) revokeBtn.style.display = window._fbIsOwner ? 'inline-block' : 'none';
+  if (signOutBtn) signOutBtn.style.display = window._fbIsOwner ? 'inline-block' : 'none';
+
   const savedTime = localStorage.getItem('innerflow_reset_time') || '04:00';
   document.getElementById('resetTimeInput').value = savedTime;
   const savedNeglect = localStorage.getItem('innerflow_neglect_days') || '7';
@@ -3269,6 +3515,11 @@ function selectTokenDuration(btn, minutes) {
 window.selectTokenDuration = selectTokenDuration;
 
 async function generateToken() {
+  if (!window._fbIsOwner) {
+    const ts = document.getElementById('tokenStatus');
+    if (ts) ts.textContent = '❌ 只有 Owner 才能產生通行碼';
+    return;
+  }
   if (!window._fbUid || !window._fbDb) {
     const ts = document.getElementById('tokenStatus');
     if (ts) ts.textContent = '尚未連線 Firebase，請稍候再試';
@@ -3282,8 +3533,9 @@ async function generateToken() {
     ? `${_selectedTokenMinutes} 分鐘`
     : `${_selectedTokenMinutes / 60} 小時`;
   try {
-    const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    await setDoc(doc(window._fbDb, 'tokens', code), { ownerUid, expiresAt, used: false });
+    await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), {
+      ownerUid, expiresAt, used: false
+    });
     const display = document.getElementById('tokenDisplay');
     const ts = document.getElementById('tokenStatus');
     if (display) {
@@ -3291,7 +3543,7 @@ async function generateToken() {
       display.style.cursor = 'pointer';
       display.onclick = () => { navigator.clipboard.writeText(code).then(() => { if (ts) ts.textContent = '✓ 已複製！'; }); };
     }
-    if (ts) ts.textContent = `${label}內有效，點擊數字複製`;
+    if (ts) ts.textContent = `${label}內有效 · 用完自動刪除 · 點數字複製`;
     if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
     _tokenExpireTimer = setTimeout(() => {
       if (display) { display.textContent = '——————'; display.style.cursor = ''; display.onclick = null; }
@@ -3323,25 +3575,7 @@ function copyDeviceUid() {
     document.getElementById('guestTokenError').textContent = uid;
   });
 }
-function _startGuestExpireTimer(expiresAt) {
-  const remaining = expiresAt - Date.now();
-  if (remaining <= 0) return;
 
-  // 提前 5 分鐘提醒（只在剩餘時間夠長時才設）
-  const warnAt = remaining - 5 * 60 * 1000;
-  if (warnAt > 0) {
-    setTimeout(() => {
-      showToast('⚠️ 訪客通行碼將在 5 分鐘後過期，請到信任裝置重新產生');
-    }, warnAt);
-  }
-
-  setTimeout(() => {
-    // ★ 過期時：不刪資料、不切換 UID（window._fbUid 繼續維持 OWNER_UID）
-    // 只彈出驗證框讓使用者輸入新通行碼，輸入成功後繼續正常同步
-    showToast('⏰ 訪客通行碼已過期，請輸入新通行碼繼續');
-    setTimeout(openGuestTokenOverlay, 1000);
-  }, remaining);
-}
 
 async function submitGuestToken() {
   const input = document.getElementById('guestTokenInput');
@@ -3350,41 +3584,43 @@ async function submitGuestToken() {
   if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
   try {
-    const { doc, getDoc, updateDoc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const snap = await getDoc(doc(window._fbDb, 'tokens', code));
-    if (!snap.exists()) { errEl.textContent = '通行碼不存在'; return; }
+    const tokenRef = window._fbDoc(window._fbDb, 'tokens', code);
+    const snap = await window._fbGetDoc(tokenRef);
+    if (!snap.exists()) { errEl.textContent = '通行碼不存在或已被使用'; return; }
     const data = snap.data();
-    // ★ 允許同一通行碼在有效期內重複輸入（訪客過期後重新驗證用）
-    // 只有「已過期」才拒絕，不檢查 used 旗標
-    // if (data.used) { errEl.textContent = '通行碼已使用過'; return; }
-    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期'; return; }
-    await updateDoc(doc(window._fbDb, 'tokens', code), {
-      used: true,
-      usedByUid: window._fbAuthUid
-    });
-    await setDoc(doc(window._fbDb, 'guest_access', window._fbAuthUid), {
-      ownerUid: data.ownerUid,
+    if (data.used) { errEl.textContent = '通行碼已被使用過'; return; }
+    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期，請重新申請'; return; }
+
+    // ── 【用完即刪】：立即刪除 /tokens/{code}，確保一次性使用 ──
+    await window._fbDeleteDoc(tokenRef);
+
+    // ── 建立有時效的訪客通行證 /guest_access/{guestUid} ──
+    const guestUid = window._fbAuthUid;
+    const ownerUid = data.ownerUid;
+    const passExpiresAt = Date.now() + 30 * 60 * 1000; // 30 分鐘
+    await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
+      ownerUid: ownerUid,
       grantedAt: Date.now(),
-      expiresAt: data.expiresAt
+      expiresAt: passExpiresAt
     });
-    window._fbUid = data.ownerUid;
-    localStorage.setItem('innerflow_fb_uid', data.ownerUid);
-    // ★ 修正 Bug 1：無痕模式下 localStorage 關分頁後會清空；
-    //   用 sessionStorage 備份 ownerUid，讓同一次訪客 session 內重整頁面仍能找回 UID
-    try { sessionStorage.setItem('innerflow_guest_uid', data.ownerUid); } catch(e) {}
-    _startGuestExpireTimer(data.expiresAt);
-    // ★ 修正：UID 切換後清除 hash 快取，防止 syncToCloud 誤判「沒有變化」而跳過推送
+
+    // 切換 UID 到 owner 資料路徑
+    window._fbUid = ownerUid;
+    try { localStorage.setItem('innerflow_fb_uid', ownerUid); } catch(e) {}
+    try { sessionStorage.setItem('innerflow_guest_uid', ownerUid); } catch(e) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-    // ★ 重新綁定即時監聽到新的 UID
-    _startRealtimeListener(data.ownerUid);
-    showToast('🔑 訪客模式已啟用，正在載入資料…');
-    // ★ 修正 Bug 3：先通知 init() 繼續執行 loadFromCloud()，
-    //   等資料有機會渲染後再關閉 overlay，避免競態導致 UI 顯示空白
+
+    // ── 啟動即時安全鎖監聽 ──
+    _startGuestAccessWatcher(guestUid, ownerUid, passExpiresAt);
+    _startRealtimeListener(ownerUid);
+
+    showToast('🔑 訪客模式已啟用（30分鐘），正在載入資料…');
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
     await new Promise(r => setTimeout(r, 800));
     closeGuestTokenOverlay();
   } catch(e) {
     errEl.textContent = '驗證失敗：' + e.message;
+    errEl.style.color = 'var(--rose)';
   }
 }
 
@@ -3731,8 +3967,8 @@ function syncNotesToCloud() {
     if (!notesPayload) { syncToCloud(); return; }
 
     try {
-      const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+      const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+      const { updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
       await updateDoc(ref, { notes: notesPayload });
       _notesDirty = false;
       console.log('[notes] 直接寫入 Firestore 成功');
@@ -3749,7 +3985,6 @@ function syncNotesToCloud() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && _notesDirty) {
     clearTimeout(_notesSyncTimer);
-    // 用 sendBeacon 或同步方式確保資料送出
     const notesPayload = (function() {
       try {
         const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
@@ -3766,8 +4001,8 @@ document.addEventListener('visibilitychange', () => {
     })();
     if (notesPayload && window._fbUid && window._fbDb) {
       import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
-        .then(({ doc, updateDoc }) => {
-          const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+        .then(({ updateDoc }) => {
+          const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
           return updateDoc(ref, { notes: notesPayload });
         })
         .then(() => { _notesDirty = false; console.log('[notes] visibilitychange 緊急推送成功'); })
@@ -4387,7 +4622,6 @@ async function forceSyncNotes() {
     if (statusEl) statusEl.textContent = '❌ 尚未連線 Firebase';
     return;
   }
-  // 確認筆記有資料
   const notesPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
   if (!notesPayload) {
     if (statusEl) statusEl.textContent = '❌ 筆記尚未載入或無資料';
@@ -4395,9 +4629,9 @@ async function forceSyncNotes() {
   }
   if (statusEl) statusEl.textContent = '同步中…';
   try {
-    // 直接寫入 Firestore，不走 debounce
-    const { doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const ref = doc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+    const ref = window._fbDoc(window._fbDb, 'users', window._fbUid, 'data', 'main');
+    // 使用 setDoc merge 方式更新 notes 欄位
+    const { getFirestore, doc: fDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     await updateDoc(ref, { notes: notesPayload });
     if (statusEl) statusEl.textContent = '✓ 筆記已推送至雲端！tabs: ' + notesPayload.tabs.length;
     showToast('✓ 筆記已同步');
