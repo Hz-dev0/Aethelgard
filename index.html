@@ -3301,6 +3301,13 @@ window._onFirebaseReady = async function() {
     window._fbUid = authUid;
     try { localStorage.setItem('aethelgard_fb_uid', authUid); } catch(e) {}
     try { localStorage.setItem('aethelgard_fb_owner_uid', authUid); } catch(e) {}
+    // 信任裝置自動登入：從 sessionStorage 還原密碼快取，供 generateToken 使用
+    if (!window._fbOwnerPasswordCache) {
+      try {
+        const _savedPw = sessionStorage.getItem('aethelgard_owner_pw');
+        if (_savedPw) window._fbOwnerPasswordCache = _savedPw;
+      } catch(e) {}
+    }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
@@ -3363,8 +3370,9 @@ async function submitOwnerLogin() {
     window._fbOwnerPasswordCache = password;
     try { localStorage.setItem('aethelgard_fb_uid', cred.user.uid); } catch(e2) {}
     try { localStorage.setItem('aethelgard_fb_owner_uid', cred.user.uid); } catch(e2) {}
-    // 信任裝置：儲存 email（下次開啟自動填入），不儲存密碼
+    // 信任裝置：儲存 email 到 localStorage（下次自動填入），密碼存 sessionStorage（重開瀏覽器自動清除）
     try { localStorage.setItem('aethelgard_owner_email', email); } catch(e2) {}
+    try { sessionStorage.setItem('aethelgard_owner_pw', password); } catch(e2) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     closeOwnerLoginOverlay();
     showToast('🔐 Owner 已登入，資料同步中…');
@@ -3398,6 +3406,7 @@ async function ownerSignOut() {
     window._fbGuestSessionActive = false;
     window._fbOwnerEmailCache = '';
     window._fbOwnerPasswordCache = '';
+    try { sessionStorage.removeItem('aethelgard_owner_pw'); } catch(e2) {}
     showToast('🔓 已登出');
     openOwnerLoginOverlay();
   } catch(e) {
@@ -3543,30 +3552,6 @@ async function generateToken() {
     ? window._fbGetOwnerEmail()
     : (window._fbOwnerEmailCache || '');
   let ownerPassword = window._fbOwnerPasswordCache || '';
-
-  // 信任裝置自動登入後無 password cache → 請 Owner 重新輸入密碼
-  if (!ownerPassword) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '需要再次確認密碼才能產生通行碼';
-    const promptPw = prompt(
-      (ownerEmail ? `帳號：${ownerEmail}\n` : '') +
-      '請輸入 Owner 密碼以產生通行碼：'
-    );
-    if (!promptPw) {
-      if (ts) ts.textContent = '已取消';
-      return;
-    }
-    // 驗證密碼正確性
-    try {
-      if (ts) ts.textContent = '驗證密碼中…';
-      await window._fbOwnerLogin(ownerEmail, promptPw);
-      ownerPassword = promptPw;
-      window._fbOwnerPasswordCache = promptPw;
-    } catch(e) {
-      if (ts) ts.textContent = '❌ 密碼錯誤，請再試一次';
-      return;
-    }
-  }
 
   if (!ownerEmail || !ownerPassword) {
     const ts = document.getElementById('tokenStatus');
