@@ -3171,7 +3171,8 @@ async function _fbSave(payload) {
   if (!window._fbUid || !window._fbDb) return false;
   try {
     const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
-    await window._fbSetDoc(ref, _stripUndefined(payload));
+    // ★ 使用 merge:true，避免任務同步時意外覆蓋掉 notes 等其他欄位
+    await window._fbSetDoc(ref, _stripUndefined(payload), { merge: true });
     return true;
   } catch(e) { console.warn('Firebase 寫入失敗', e); return false; }
 }
@@ -4190,103 +4191,6 @@ function loadStateLocal() {
 }
 
 // ── syncToCloud：對外入口，帶 debounce（600ms）──
-function syncToCloud() {
-  saveStateLocal(); // 立即寫本地，UI 不等雲端
-
-  if (!state._initDone) return;
-  if (!window._fbUid) return; // Firebase 尚未就緒
-
-  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
-  _syncDebounceTimer = setTimeout(() => {
-    _syncDebounceTimer = null;
-    _doSyncToCloud();
-  }, 300); // ★ 提高同步頻率：600 → 300ms
-}
-
-// ── _doSyncToCloud：實際執行 Firebase 寫入 ──
-async function _doSyncToCloud() {
-  if (!window._fbUid) return;
-  if (isSyncing) { _pendingSync = true; return; }
-  if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
-
-  const _payload = {
-    tasks: state.tasks,
-    sandbox: state.sandbox,
-    done: state.done,
-    rewards: state.rewards || [],
-    customQuotes: state.customQuotes || [],
-    energy: state.energy || 0,
-    doneHistory: (state.doneHistory || []).filter(h => {
-      if (!h.completedAt) return true;
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
-    }),
-    todayOrder: state.todayOrder || [],
-    lotteryState: lotteryState,
-    wishPoints: state.wishPoints || 0,
-    morningDialogShownDate: state.morningDialogShownDate || null,
-    routines: state.routines || [],
-    routineResetDate: state.routineResetDate || null,
-    settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' }
-  };
-
-  {
-    const _notesPayload = (function(){
-      try {
-        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
-        if (p) return p;
-      } catch(e) {}
-      try {
-        const raw = localStorage.getItem('aethelgard_notes_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
-        }
-      } catch(e) {}
-      return undefined;
-    })();
-    if (_notesPayload) _payload.notes = _notesPayload;
-  }
-
-  const _hash = _quickHash(_payload);
-  if (_hash && _hash === _lastSyncHash) {
-    const dot = document.getElementById('syncDot');
-    if (dot && dot.className !== 'sync-dot synced') dot.className = 'sync-dot synced';
-    return;
-  }
-
-  isSyncing = true;
-  _pendingSync = false;
-  let _retryScheduled = false;
-  const dot = document.getElementById('syncDot');
-  if (dot) dot.className = 'sync-dot syncing';
-  try {
-    const ok = await _fbSave(_payload);
-    if (!ok) throw new Error('Firebase 寫入回傳 false');
-    _markSyncWrite(); // ★ 告知 snapshot 監聽器：接下來 3 秒的更新是自己寫的，忽略
-    _lastSyncHash = _hash;
-    if (dot) dot.className = 'sync-dot synced';
-    _syncRetryCount = 0;
-    _notesDirty = false;
-  } catch (e) {
-    console.warn('Firebase 同步失敗', e);
-    if (dot) dot.className = 'sync-dot error';
-    if (_syncRetryCount < 3) {
-      _syncRetryCount++;
-      _retryScheduled = true;
-      const delay = _syncRetryCount * 3000;
-      isSyncing = false;
-      _syncRetryTimer = setTimeout(() => { _syncRetryTimer = null; _doSyncToCloud(); }, delay);
-    }
-  } finally {
-    if (!_retryScheduled) {
-      isSyncing = false;
-      if (_pendingSync) { _pendingSync = false; _doSyncToCloud(); }
-    }
-  }
-}
-
 // ── 安全寫入 localStorage（無痕模式 Safari 會拋出 QuotaExceededError）──
 function _lsSafeSet(key, value) {
   try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
@@ -4454,6 +4358,7 @@ async function _doSyncToCloud() {
   try {
     const ok = await _fbSave(_payload);
     if (!ok) throw new Error('Firebase save failed');
+    _markSyncWrite(); // ★ 告知 snapshot 監聽器：接下來 2 秒的更新是自己寫的，忽略
     _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
@@ -5635,6 +5540,8 @@ async function init() {
     const ok = await loadFromCloud();
     // ── initDone 在雲端資料回來後立刻設定，讓後續呼叫的 syncToCloud 能正常推送 ──
     state._initDone = true;
+    // ★ 載入完成後清除「使用者已編輯」旗標，避免下次 snapshot 到來時誤判本機版本比雲端新
+    window._notesUserEdited = false;
     // ★ 啟動即時監聽：init 完成後才開始，避免和初次讀取競態
     if (window._fbUid) _startRealtimeListener(window._fbUid);
     if (ok) {
