@@ -3537,6 +3537,42 @@ async function generateToken() {
     if (ts) ts.textContent = '尚未連線 Firebase，請稍候再試';
     return;
   }
+
+  // 取得 Owner email 與 password
+  const ownerEmail = window._fbGetOwnerEmail
+    ? window._fbGetOwnerEmail()
+    : (window._fbOwnerEmailCache || '');
+  let ownerPassword = window._fbOwnerPasswordCache || '';
+
+  // 信任裝置自動登入後無 password cache → 請 Owner 重新輸入密碼
+  if (!ownerPassword) {
+    const ts = document.getElementById('tokenStatus');
+    if (ts) ts.textContent = '需要再次確認密碼才能產生通行碼';
+    const promptPw = prompt(
+      (ownerEmail ? `帳號：${ownerEmail}\n` : '') +
+      '請輸入 Owner 密碼以產生通行碼：'
+    );
+    if (!promptPw) {
+      if (ts) ts.textContent = '已取消';
+      return;
+    }
+    // 驗證密碼正確性
+    try {
+      if (ts) ts.textContent = '驗證密碼中…';
+      await window._fbOwnerLogin(ownerEmail, promptPw);
+      ownerPassword = promptPw;
+      window._fbOwnerPasswordCache = promptPw;
+    } catch(e) {
+      if (ts) ts.textContent = '❌ 密碼錯誤，請再試一次';
+      return;
+    }
+  }
+
+  if (!ownerEmail || !ownerPassword) {
+    const ts = document.getElementById('tokenStatus');
+    if (ts) ts.textContent = '❌ 找不到登入憑證，請重新登入後再產生';
+    return;
+  }
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const TOKEN_DURATION = _selectedTokenMinutes * 60 * 1000;
   const expiresAt = Date.now() + TOKEN_DURATION;
@@ -3544,17 +3580,6 @@ async function generateToken() {
   const label = _selectedTokenMinutes < 60
     ? `${_selectedTokenMinutes} 分鐘`
     : `${_selectedTokenMinutes / 60} 小時`;
-  // 取得 Owner email（供訪客 session 登入用）
-  const ownerEmail = window._fbGetOwnerEmail
-    ? window._fbGetOwnerEmail()
-    : (window._fbOwnerEmailCache || '');
-  // 取得 Owner password（加密後存入，訪客只能用一次）
-  const ownerPassword = window._fbOwnerPasswordCache || '';
-  if (!ownerEmail || !ownerPassword) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '❌ 找不到登入憑證，請重新登入後再產生';
-    return;
-  }
   try {
     await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), {
       ownerUid, ownerEmail, ownerPassword, expiresAt, used: false
@@ -5566,24 +5591,13 @@ async function init() {
   renderTree();
   renderSandbox();
 
-  // ── Firebase 模式：永遠嘗試雲端同步（UID 由匿名登入自動取得）──
-  // 先用本地快取立刻顯示任務，不等 Firebase
-  try {
-    const _preLocal = JSON.parse(localStorage.getItem('aethelgard_state_local') || 'null');
-    if (_preLocal && Array.isArray(_preLocal.routines) && _preLocal.routines.length > 0) {
-      state.routines = _preLocal.routines;
-      state.routineResetDate = _preLocal.routineResetDate || null;
-    }
-  } catch(e) {}
-  if (loadStateLocal()) {
-    renderEnergyDots(); renderSandbox(); renderAll(); initRoutines(); checkTaskDates();
-  }
+  // ── Firebase 模式：等待登入後再載入資料 ──
+  // 不在登入前預載本地快取，避免顯示「連不上，已從本地恢復」且確保訪客看到空資料
 
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot syncing';
 
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
-  // 最多等 30 秒（Owner 需要手動輸入，不能太短）
   await new Promise((resolve) => {
     if (window._fbUid) { resolve(); return; }
     let _resolved = false;
@@ -5596,6 +5610,21 @@ async function init() {
   {
     const btn = document.getElementById('settingsBtn');
     if (btn && window._fbUid) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
+
+    // 只有 Owner（非訪客）且已登入時，才用本地快取做預顯示（加速啟動）
+    if (window._fbIsOwner && window._fbUid) {
+      try {
+        const _preLocal = JSON.parse(localStorage.getItem('aethelgard_state_local') || 'null');
+        if (_preLocal && Array.isArray(_preLocal.routines) && _preLocal.routines.length > 0) {
+          state.routines = _preLocal.routines;
+          state.routineResetDate = _preLocal.routineResetDate || null;
+        }
+      } catch(e) {}
+      if (loadStateLocal()) {
+        renderEnergyDots(); renderSandbox(); renderAll(); initRoutines(); checkTaskDates();
+      }
+    }
+
     const ok = await loadFromCloud();
     // ── initDone 在雲端資料回來後立刻設定，讓後續呼叫的 syncToCloud 能正常推送 ──
     state._initDone = true;
