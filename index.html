@@ -3649,28 +3649,32 @@ async function submitGuestToken() {
       return;
     }
 
-    // ── 【用完即刪】：立即刪除 /tokens/{code}，確保一次性使用 ──
-    await window._fbDeleteDoc(tokenRef);
-
-    // ── 以 Owner email/password 做 session 登入（browserSessionPersistence）──
-    // 這樣 auth.token.email != null，Firestore rules 全部通過
+    // ── 先登入（需要 email/password），登入後才有 auth 權限操作 Firestore ──
     errEl.textContent = '登入中…'; errEl.style.color = '';
     window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = false;            // 訪客不是 Owner
-    // 提前設好 ownerUid，讓 onAuthStateChanged 觸發時 _onFirebaseReady 能走「情況 2」
     window._fbUid = ownerUid;
     const cred = await window._fbGuestElevate(ownerEmail, ownerPassword);
-    const guestAuthUid = cred.user.uid;   // 與 Owner 相同的 Firebase UID
+    const guestAuthUid = cred.user.uid;
     window._fbAuthUid = guestAuthUid;
 
-    // ── 建立有時效的訪客通行證（現在有 email，rules 允許寫入）──
-    const TOKEN_DURATION = data.expiresAt - Date.now(); // 使用 token 剩餘時間
+    // ── 登入後才刪除 token（此時 auth 已就緒，rules 允許操作）──
+    try { await window._fbDeleteDoc(tokenRef); } catch(delErr) {
+      console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
+    }
+
+    // ── 建立有時效的訪客通行證 ──
+    const TOKEN_DURATION = data.expiresAt - Date.now();
     const passExpiresAt = Date.now() + Math.min(TOKEN_DURATION, _selectedTokenMinutes * 60 * 1000);
-    await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestAuthUid + '_guest_' + Date.now()), {
-      ownerUid: ownerUid,
-      grantedAt: Date.now(),
-      expiresAt: passExpiresAt
-    });
+    try {
+      await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestAuthUid + '_guest_' + Date.now()), {
+        ownerUid: ownerUid,
+        grantedAt: Date.now(),
+        expiresAt: passExpiresAt
+      });
+    } catch(gaErr) {
+      console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
+    }
 
     // ── 切換 UID 到 owner 資料路徑 ──
     window._fbUid = ownerUid;
