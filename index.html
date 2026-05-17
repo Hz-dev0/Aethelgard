@@ -2998,48 +2998,392 @@
 
 <!-- ── 統一鎖屏（訪客通行碼為主，Owner 登入為次要按鈕）── -->
 <!-- 預設 display:flex，讓頁面一開始就顯示鎖屏，不閃過主介面 -->
-<div id="ownerLoginOverlay" style="display:flex;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,rgba(240,244,248,0.97) 0%,rgba(224,234,244,0.99) 100%);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
-  <div id="ownerLoginCard" style="background:var(--bg2);border:1px solid rgba(74,130,196,0.3);border-radius:20px;padding:36px 32px;min-width:300px;max-width:380px;box-shadow:0 24px 64px rgba(58,110,165,0.2);text-align:center">
-    <div style="font-size:32px;margin-bottom:8px">🔑</div>
-    <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green);margin-bottom:4px">Aethelgard</div>
-    <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">輸入通行碼以進入</div>
+<style>
+  @keyframes lockFadeIn {
+    from { opacity:0; transform:translateY(18px) scale(0.97); }
+    to   { opacity:1; transform:translateY(0)    scale(1); }
+  }
+  @keyframes lockOrb1 {
+    0%,100% { transform:translate(0,0) scale(1); }
+    50%     { transform:translate(18px,-22px) scale(1.07); }
+  }
+  @keyframes lockOrb2 {
+    0%,100% { transform:translate(0,0) scale(1); }
+    50%     { transform:translate(-14px,16px) scale(0.95); }
+  }
+  @keyframes lockShimmer {
+    from { background-position:200% center; }
+    to   { background-position:-200% center; }
+  }
+  @keyframes lockPulseRing {
+    0%   { box-shadow:0 0 0 0 rgba(58,110,165,0.35); }
+    70%  { box-shadow:0 0 0 12px rgba(58,110,165,0); }
+    100% { box-shadow:0 0 0 0 rgba(58,110,165,0); }
+  }
+  @keyframes lockDotBounce {
+    0%,100% { transform:scaleY(1); opacity:0.45; }
+    50%     { transform:scaleY(1.7); opacity:1; }
+  }
+
+  #ownerLoginOverlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* ── 背景：多層漸層 + 磨砂 ── */
+  #ownerLoginOverlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(58,110,165,0.13) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(130,154,177,0.10) 0%, transparent 55%),
+      linear-gradient(160deg, #e8f0f8 0%, #f4f7fc 45%, #e2eaf4 100%);
+    backdrop-filter: blur(20px);
+  }
+
+  /* ── 裝飾光暈球 ── */
+  .lock-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(48px);
+  }
+  .lock-orb-1 {
+    width: 340px; height: 340px;
+    top: -80px; left: -60px;
+    background: radial-gradient(circle, rgba(58,110,165,0.18) 0%, transparent 70%);
+    animation: lockOrb1 8s ease-in-out infinite;
+  }
+  .lock-orb-2 {
+    width: 260px; height: 260px;
+    bottom: -60px; right: -40px;
+    background: radial-gradient(circle, rgba(130,154,177,0.15) 0%, transparent 70%);
+    animation: lockOrb2 10s ease-in-out infinite;
+  }
+  .lock-orb-3 {
+    width: 180px; height: 180px;
+    top: 35%; right: 12%;
+    background: radial-gradient(circle, rgba(100,160,210,0.09) 0%, transparent 70%);
+    animation: lockOrb1 13s ease-in-out infinite reverse;
+  }
+
+  /* ── 主卡片 ── */
+  #ownerLoginCard {
+    position: relative;
+    z-index: 1;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(58,110,165,0.18);
+    border-radius: 24px;
+    padding: 40px 36px 32px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    box-shadow:
+      0 2px 0 rgba(255,255,255,0.9) inset,
+      0 32px 72px rgba(58,110,165,0.16),
+      0 8px 20px rgba(58,110,165,0.08);
+    backdrop-filter: blur(16px);
+    animation: lockFadeIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
+    text-align: center;
+  }
+
+  /* ── Logo 區 ── */
+  .lock-logo-wrap {
+    margin-bottom: 28px;
+  }
+  .lock-icon-ring {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(58,110,165,0.12) 0%, rgba(130,154,177,0.08) 100%);
+    border: 1.5px solid rgba(58,110,165,0.22);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+    font-size: 22px;
+    animation: lockPulseRing 3s ease-out infinite;
+  }
+  .lock-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 24px;
+    letter-spacing: 0.02em;
+    background: linear-gradient(135deg, #2a5a9a 0%, #3A6EA5 50%, #829AB1 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: lockShimmer 4s linear infinite;
+    margin-bottom: 4px;
+  }
+  .lock-subtitle {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+
+  /* ── 通行碼輸入 ── */
+  .lock-input-group {
+    margin-bottom: 6px;
+  }
+  .lock-input-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    text-align: left;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  #guestTokenInput {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 30px;
+    font-family: 'DM Serif Display', serif;
+    font-weight: 400;
+    letter-spacing: 0.28em;
+    padding: 14px 10px;
+    background: rgba(240,244,248,0.7);
+    border: 1.5px solid rgba(58,110,165,0.18);
+    border-radius: 14px;
+    color: var(--text);
+    outline: none;
+    margin-bottom: 6px;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
+  }
+  #guestTokenInput:focus {
+    border-color: var(--green);
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 0 0 3px rgba(58,110,165,0.10), 0 1px 0 rgba(255,255,255,0.8) inset;
+  }
+  #guestTokenInput::placeholder { color: rgba(30,45,69,0.18); letter-spacing: 0.24em; }
+
+  #guestTokenError {
+    font-size: 11px;
+    color: var(--rose);
+    min-height: 18px;
+    margin-bottom: 10px;
+    text-align: center;
+    transition: opacity 0.2s;
+  }
+
+  /* ── 進入按鈕 ── */
+  .lock-submit-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #3A6EA5 0%, #4a82c4 100%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba(58,110,165,0.35), 0 1px 3px rgba(58,110,165,0.2);
+  }
+  .lock-submit-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.14) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .lock-submit-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(58,110,165,0.42), 0 2px 6px rgba(58,110,165,0.2);
+  }
+  .lock-submit-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(58,110,165,0.28);
+  }
+
+  /* ── Divider ── */
+  .lock-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    color: var(--text-faint);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .lock-divider::before, .lock-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Owner 折疊按鈕 ── */
+  #ownerLoginToggleBtn {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.03em;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+  #ownerLoginToggleBtn:hover {
+    border-color: rgba(58,110,165,0.4);
+    color: var(--green);
+    background: rgba(58,110,165,0.04);
+  }
+
+  /* ── Owner 展開區 ── */
+  #ownerLoginSection {
+    display: none;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    animation: lockFadeIn 0.25s ease both;
+  }
+
+  #ownerEmailInput, #ownerPasswordInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    background: rgba(240,244,248,0.7);
+    border: 1.5px solid rgba(58,110,165,0.15);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 13.5px;
+    outline: none;
+    font-family: inherit;
+    margin-bottom: 10px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
+  }
+  #ownerEmailInput:focus, #ownerPasswordInput:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(58,110,165,0.10), 0 1px 0 rgba(255,255,255,0.8) inset;
+    background: rgba(255,255,255,0.9);
+  }
+  #ownerEmailInput::placeholder, #ownerPasswordInput::placeholder {
+    color: rgba(30,45,69,0.25);
+  }
+
+  #ownerLoginError {
+    font-size: 11px;
+    color: var(--rose);
+    min-height: 18px;
+    margin-bottom: 10px;
+    text-align: left;
+  }
+
+  .lock-owner-submit {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(58,110,165,0.3);
+    background: rgba(58,110,165,0.07);
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+  }
+  .lock-owner-submit:hover {
+    background: rgba(58,110,165,0.13);
+    border-color: var(--green);
+  }
+
+  /* ── 底部裝飾波浪點 ── */
+  .lock-wave-dots {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 22px;
+  }
+  .lock-wave-dot {
+    width: 3px;
+    height: 10px;
+    border-radius: 2px;
+    background: rgba(58,110,165,0.25);
+    animation: lockDotBounce 1.4s ease-in-out infinite;
+  }
+  .lock-wave-dot:nth-child(2) { animation-delay: 0.15s; }
+  .lock-wave-dot:nth-child(3) { animation-delay: 0.30s; }
+  .lock-wave-dot:nth-child(4) { animation-delay: 0.45s; }
+  .lock-wave-dot:nth-child(5) { animation-delay: 0.60s; }
+</style>
+
+<div id="ownerLoginOverlay">
+  <div class="lock-orb lock-orb-1"></div>
+  <div class="lock-orb lock-orb-2"></div>
+  <div class="lock-orb lock-orb-3"></div>
+
+  <div id="ownerLoginCard">
+    <!-- Logo 區 -->
+    <div class="lock-logo-wrap">
+      <div class="lock-icon-ring">🔑</div>
+      <div class="lock-title">Aethelgard</div>
+      <div class="lock-subtitle">輸入通行碼以進入</div>
+    </div>
 
     <!-- 主要：訪客通行碼輸入 -->
     <div id="guestTokenSection">
-      <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
-        placeholder="000000"
-        style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px;transition:border-color 0.2s"
-        onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
-        onkeydown="if(event.key==='Enter')submitGuestToken()">
-      <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
-      <button onclick="submitGuestToken()"
-        style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:16px;transition:opacity 0.2s"
-        onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">進入 →</button>
+      <div class="lock-input-group">
+        <span class="lock-input-label">通行碼</span>
+        <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
+          placeholder=""
+          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='rgba(58,110,165,0.18)'"
+          onkeydown="if(event.key==='Enter')submitGuestToken()">
+      </div>
+      <div id="guestTokenError"></div>
+      <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
     </div>
 
-    <!-- 次要：Owner 登入（按鈕展開） -->
+    <!-- Divider -->
+    <div class="lock-divider"></div>
+
+    <!-- 次要：信任裝置登入（按鈕展開） -->
     <div>
-      <button onclick="toggleOwnerLoginSection()"
-        id="ownerLoginToggleBtn"
-        style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px"
-        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
-        onmouseout="this.style.borderColor='';this.style.color=''">
-        <span>🔐</span><span>Owner 登入</span><span id="ownerLoginToggleArrow" style="font-size:10px;transition:transform 0.2s">▼</span>
+      <button id="ownerLoginToggleBtn" onclick="toggleOwnerLoginSection()">
+        <span>信任裝置登入</span>
+        <span id="ownerLoginToggleArrow" style="font-size:10px;transition:transform 0.2s;margin-left:2px">▼</span>
       </button>
-      <div id="ownerLoginSection" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div id="ownerLoginSection">
         <input id="ownerEmailInput" type="email" placeholder="Owner 信箱"
-          style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='rgba(58,110,165,0.15)'"
           onkeydown="if(event.key==='Enter')document.getElementById('ownerPasswordInput').focus()">
         <input id="ownerPasswordInput" type="password" placeholder="密碼"
-          style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='rgba(58,110,165,0.15)'"
           onkeydown="if(event.key==='Enter')submitOwnerLogin()">
-        <div id="ownerLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin-bottom:10px"></div>
-        <button onclick="submitOwnerLogin()"
-          style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s"
-          onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
+        <div id="ownerLoginError"></div>
+        <button class="lock-owner-submit" onclick="submitOwnerLogin()">登入 Owner →</button>
       </div>
+    </div>
+
+    <!-- 底部裝飾 -->
+    <div class="lock-wave-dots">
+      <div class="lock-wave-dot"></div>
+      <div class="lock-wave-dot"></div>
+      <div class="lock-wave-dot"></div>
+      <div class="lock-wave-dot"></div>
+      <div class="lock-wave-dot"></div>
     </div>
   </div>
 </div>
