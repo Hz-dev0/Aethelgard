@@ -2966,49 +2966,66 @@
 
 </div>
 
-<!-- ── Owner 登入鎖屏 ── -->
-<div id="ownerLoginOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,rgba(240,244,248,0.97) 0%,rgba(224,234,244,0.99) 100%);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
-  <div style="background:var(--bg2);border:1px solid rgba(74,130,196,0.3);border-radius:20px;padding:36px 32px;min-width:300px;max-width:380px;box-shadow:0 24px 64px rgba(58,110,165,0.2);text-align:center">
-    <div style="font-size:32px;margin-bottom:8px">🔐</div>
+<!-- ── 統一鎖屏（訪客通行碼為主，Owner 登入為次要按鈕）── -->
+<!-- 預設 display:flex，讓頁面一開始就顯示鎖屏，不閃過主介面 -->
+<div id="ownerLoginOverlay" style="display:flex;position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,rgba(240,244,248,0.97) 0%,rgba(224,234,244,0.99) 100%);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
+  <div id="ownerLoginCard" style="background:var(--bg2);border:1px solid rgba(74,130,196,0.3);border-radius:20px;padding:36px 32px;min-width:300px;max-width:380px;box-shadow:0 24px 64px rgba(58,110,165,0.2);text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">🔑</div>
     <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green);margin-bottom:4px">Aethelgard</div>
-    <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">請登入 Owner 帳號，或輸入訪客通行碼</div>
-    <input id="ownerEmailInput" type="email" placeholder="Owner 信箱"
-      style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
-      onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
-      onkeydown="if(event.key==='Enter')document.getElementById('ownerPasswordInput').focus()">
-    <input id="ownerPasswordInput" type="password" placeholder="密碼"
-      style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
-      onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
-      onkeydown="if(event.key==='Enter')submitOwnerLogin()">
-    <div id="ownerLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin-bottom:10px"></div>
-    <button onclick="submitOwnerLogin()"
-      style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:12px;transition:opacity 0.2s"
-      onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
-    <div style="height:1px;background:var(--border);margin-bottom:12px"></div>
-    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px">在公司？輸入 Owner 產生的 6 位數通行碼</div>
-    <button onclick="closeOwnerLoginOverlay();openGuestTokenOverlay()"
-      style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s"
-      onmouseover="this.style.borderColor='var(--green);this.style.color='var(--green)'"
-      onmouseout="this.style.borderColor='';this.style.color=''">
-      輸入訪客通行碼
-    </button>
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">輸入通行碼以進入</div>
+
+    <!-- 主要：訪客通行碼輸入 -->
+    <div id="guestTokenSection">
+      <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
+        placeholder="000000"
+        style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px;transition:border-color 0.2s"
+        onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+        onkeydown="if(event.key==='Enter')submitGuestToken()">
+      <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
+      <button onclick="submitGuestToken()"
+        style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:16px;transition:opacity 0.2s"
+        onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">進入 →</button>
+    </div>
+
+    <!-- 次要：Owner 登入（按鈕展開） -->
+    <div>
+      <button onclick="toggleOwnerLoginSection()"
+        id="ownerLoginToggleBtn"
+        style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px"
+        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+        onmouseout="this.style.borderColor='';this.style.color=''">
+        <span>🔐</span><span>Owner 登入</span><span id="ownerLoginToggleArrow" style="font-size:10px;transition:transform 0.2s">▼</span>
+      </button>
+      <div id="ownerLoginSection" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <input id="ownerEmailInput" type="email" placeholder="Owner 信箱"
+          style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+          onkeydown="if(event.key==='Enter')document.getElementById('ownerPasswordInput').focus()">
+        <input id="ownerPasswordInput" type="password" placeholder="密碼"
+          style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+          onkeydown="if(event.key==='Enter')submitOwnerLogin()">
+        <div id="ownerLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin-bottom:10px"></div>
+        <button onclick="submitOwnerLogin()"
+          style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s"
+          onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- 訪客通行碼 Overlay -->
+<!-- 訪客通行碼 Overlay（保留但不再使用，改為整合進主鎖屏） -->
 <div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:28px 24px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center">
     <div style="font-size:20px;margin-bottom:6px">🔑</div>
     <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入訪客通行碼</div>
     <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px">由 Owner 裝置產生，有效期依設定，用完即銷毀</div>
-    <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
+    <input id="guestTokenInput2" type="text" inputmode="numeric" maxlength="6"
       placeholder="000000"
-      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px"
-      onkeydown="if(event.key==='Enter')submitGuestToken()">
-    <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px">
+    <div id="guestTokenError2" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
-      <button onclick="closeGuestTokenOverlay();openOwnerLoginOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">← 返回</button>
-      <button onclick="submitGuestToken()" style="flex:2;padding:9px;border-radius:9px;border:none;background:var(--green);color:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">進入</button>
+      <button onclick="closeGuestTokenOverlay()" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;font-family:inherit">← 返回</button>
     </div>
   </div>
 </div>
@@ -3323,27 +3340,89 @@ window._onFirebaseReady = async function() {
     return;
   }
 
-  // ── 情況 3：未登入 → 顯示 Owner 登入鎖屏 ──
-  setTimeout(openOwnerLoginOverlay, 400);
+  // ── 情況 3：未登入 → 確保鎖屏顯示（已預設 display:flex，這裡只做補強）──
+  openOwnerLoginOverlay();
 };
 
-// ── Owner 登入框 ──
+// ── 切換 Owner 登入區域展開/收合 ──
+function toggleOwnerLoginSection() {
+  const section = document.getElementById('ownerLoginSection');
+  const arrow = document.getElementById('ownerLoginToggleArrow');
+  if (!section) return;
+  const isOpen = section.style.display !== 'none';
+  section.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
+  if (!isOpen) {
+    // 展開時自動填入儲存的信箱
+    setTimeout(() => {
+      const savedEmail = localStorage.getItem('aethelgard_owner_email') || '';
+      const emailInput = document.getElementById('ownerEmailInput');
+      const pwInput = document.getElementById('ownerPasswordInput');
+      if (emailInput && savedEmail && !emailInput.value) {
+        emailInput.value = savedEmail;
+        if (pwInput) pwInput.focus();
+      } else if (emailInput) {
+        emailInput.focus();
+      }
+    }, 50);
+  }
+}
+window.toggleOwnerLoginSection = toggleOwnerLoginSection;
+
+// ── Owner 登入框（鎖屏為主畫面，已預設顯示）──
 function openOwnerLoginOverlay() {
   const el = document.getElementById('ownerLoginOverlay');
   if (!el) return;
-  el.style.display = 'flex';
-  setTimeout(() => {
-    // 信任裝置：自動填入上次登入的信箱
-    const savedEmail = localStorage.getItem('aethelgard_owner_email') || '';
-    const emailInput = document.getElementById('ownerEmailInput');
-    const pwInput = document.getElementById('ownerPasswordInput');
-    if (emailInput && savedEmail && !emailInput.value) {
-      emailInput.value = savedEmail;
-      // 若有儲存的 email 就直接 focus 密碼欄
-      if (pwInput) { pwInput.focus(); } else { emailInput.focus(); }
-    } else if (emailInput) {
-      emailInput.focus();
+  // 還原回通行碼輸入畫面（不是載入提示）
+  const card = document.getElementById('ownerLoginCard');
+  if (card) {
+    // 如果已被替換成載入中畫面，恢復原本內容
+    if (!document.getElementById('guestTokenSection')) {
+      card.innerHTML = `
+        <div style="font-size:32px;margin-bottom:8px">🔑</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green);margin-bottom:4px">Aethelgard</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">輸入通行碼以進入</div>
+        <div id="guestTokenSection">
+          <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
+            placeholder="000000"
+            style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+            onkeydown="if(event.key==='Enter')submitGuestToken()">
+          <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
+          <button onclick="submitGuestToken()"
+            style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:16px;transition:opacity 0.2s"
+            onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">進入 →</button>
+        </div>
+        <div>
+          <button onclick="toggleOwnerLoginSection()"
+            id="ownerLoginToggleBtn"
+            style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px"
+            onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+            onmouseout="this.style.borderColor='';this.style.color=''">
+            <span>🔐</span><span>Owner 登入</span><span id="ownerLoginToggleArrow" style="font-size:10px;transition:transform 0.2s">▼</span>
+          </button>
+          <div id="ownerLoginSection" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <input id="ownerEmailInput" type="email" placeholder="Owner 信箱"
+              style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+              onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+              onkeydown="if(event.key==='Enter')document.getElementById('ownerPasswordInput').focus()">
+            <input id="ownerPasswordInput" type="password" placeholder="密碼"
+              style="width:100%;box-sizing:border-box;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;outline:none;font-family:inherit;margin-bottom:10px;transition:border-color 0.2s"
+              onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
+              onkeydown="if(event.key==='Enter')submitOwnerLogin()">
+            <div id="ownerLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin-bottom:10px"></div>
+            <button onclick="submitOwnerLogin()"
+              style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s"
+              onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
+          </div>
+        </div>`;
     }
+  }
+  el.style.display = 'flex';
+  // focus 通行碼輸入
+  setTimeout(() => {
+    const tokenInput = document.getElementById('guestTokenInput');
+    if (tokenInput) tokenInput.focus();
   }, 100);
 }
 window.openOwnerLoginOverlay = openOwnerLoginOverlay;
@@ -3374,10 +3453,15 @@ async function submitOwnerLogin() {
     // 信任裝置：儲存 email 到 localStorage（下次自動填入），密碼存 sessionStorage（重開瀏覽器自動清除）
     try { localStorage.setItem('aethelgard_owner_email', email); } catch(e2) {}
     try { sessionStorage.setItem('aethelgard_owner_pw', password); } catch(e2) {}
+    // 切換鎖屏為載入狀態（登入成功後資料同步前不讓使用者看到背後介面）
+    const _card = document.getElementById('ownerLoginCard');
+    if (_card) {
+      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
+        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
+        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">Owner 已登入，正在載入資料…</div>';
+    }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
-    closeOwnerLoginOverlay();
-    showToast('🔐 Owner 已登入，資料同步中…');
-    // 重新觸發 ready 流程
+    // 重新觸發 ready 流程（init 完成後會呼叫 closeOwnerLoginOverlay）
     _firebaseReadyFired = false;
     if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
@@ -3408,8 +3492,18 @@ async function ownerSignOut() {
     window._fbOwnerEmailCache = '';
     window._fbOwnerPasswordCache = '';
     try { sessionStorage.removeItem('aethelgard_owner_pw'); } catch(e2) {}
+    // 登出後隱藏 syncDot，回到鎖屏
+    const dot = document.getElementById('syncDot');
+    if (dot) dot.style.display = 'none';
     showToast('🔓 已登出');
     openOwnerLoginOverlay();
+    // 清空通行碼輸入
+    setTimeout(() => {
+      const ti = document.getElementById('guestTokenInput');
+      if (ti) { ti.value = ''; ti.focus(); }
+      const err = document.getElementById('guestTokenError');
+      if (err) { err.textContent = ''; }
+    }, 100);
   } catch(e) {
     showToast('登出失敗：' + e.message);
   }
@@ -3477,14 +3571,10 @@ function _forceGuestLockout() {
   // 立刻重繪為空
   if (typeof renderAll === 'function') renderAll();
 
-  // 顯示訪客 OTP 輸入框（鎖屏），不顯示 Owner 登入
+  // 顯示主鎖屏（通行碼輸入）
   setTimeout(() => {
     showToast('🔒 通行證已失效，請重新輸入通行碼');
-    const input = document.getElementById('guestTokenInput');
-    if (input) input.value = '';
-    const errEl = document.getElementById('guestTokenError');
-    if (errEl) { errEl.textContent = ''; errEl.style.color = ''; }
-    setTimeout(openGuestTokenOverlay, 800);
+    setTimeout(openOwnerLoginOverlay, 800);
   }, 50);
 }
 window._forceGuestLockout = _forceGuestLockout;
@@ -3612,8 +3702,10 @@ function copyDeviceUid() {
 
 
 async function submitGuestToken() {
+  // 主鎖屏中的 input（id="guestTokenInput"）
   const input = document.getElementById('guestTokenInput');
   const errEl = document.getElementById('guestTokenError');
+  if (!input || !errEl) return;
   const code = (input.value || '').trim();
   if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
@@ -3681,14 +3773,11 @@ async function submitGuestToken() {
     const labelMin = Math.round(remaining / 60000);
     const label = labelMin < 60 ? labelMin + ' 分鐘' : Math.round(labelMin/60) + ' 小時';
 
-    // ── 先關閉訪客 overlay，再用 ownerLoginOverlay 當載入遮罩（防止背後介面透出）──
-    closeGuestTokenOverlay();
-    // 用 ownerLoginOverlay 當全屏遮罩，直到資料載入完成才隱藏
+    // ── 切換主鎖屏為載入提示（防止背後介面透出）──
     const _loadingOverlay = document.getElementById('ownerLoginOverlay');
     if (_loadingOverlay) {
       _loadingOverlay.style.display = 'flex';
-      // 把內部卡片換成簡單的載入提示，不讓使用者誤以為要重新登入
-      const _card = _loadingOverlay.querySelector('div');
+      const _card = document.getElementById('ownerLoginCard');
       if (_card) {
         _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔑</div>'
           + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
@@ -5496,15 +5585,10 @@ document.addEventListener('click', (e) => {
 
 // ── Init ──
 async function init() {
-  // 立即渲染生命樹骨架（雲端載入前先顯示三個目標圓形卡，數字後來再更新）
-  renderTree();
-  renderSandbox();
-
-  // ── Firebase 模式：等待登入後再載入資料 ──
-  // 不在登入前預載本地快取，避免顯示「連不上，已從本地恢復」且確保訪客看到空資料
-
+  // ── 鎖屏期間：不渲染任何主介面內容，syncDot 也先隱藏 ──
+  // 鎖屏 overlay 已預設 display:flex，無需額外呼叫 openOwnerLoginOverlay
   const dot = document.getElementById('syncDot');
-  if (dot) dot.className = 'sync-dot syncing';
+  if (dot) dot.style.display = 'none'; // 登入前隱藏同步燈
 
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
   await new Promise((resolve) => {
@@ -5520,8 +5604,12 @@ async function init() {
     const btn = document.getElementById('settingsBtn');
     if (btn && window._fbUid) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
 
+    // ── 登入成功：恢復顯示 syncDot，開始載入 ──
+    if (dot) { dot.style.display = ''; dot.className = 'sync-dot syncing'; }
+
     // ── 關閉登入 / 載入遮罩（含訪客模式用 ownerLoginOverlay 當橋接遮罩的情境）──
-    closeOwnerLoginOverlay();
+    // 注意：closeOwnerLoginOverlay 在雲端資料回來後才呼叫（見下方），
+    // 這裡先渲染骨架（背後介面，被遮罩蓋住），等資料齊全再揭幕。
 
     // 只有 Owner（非訪客）且已登入時，才用本地快取做預顯示（加速啟動）
     if (window._fbIsOwner && window._fbUid) {
@@ -5580,6 +5668,8 @@ async function init() {
       checkTaskDates();
       // 雲端資料回來後才初始化例行任務（避免競態）
       initRoutines();
+      // ── 資料全部就緒，現在才關閉鎖屏 ──
+      closeOwnerLoginOverlay();
       // Show recurring morning dialog if not yet shown today
       maybeShowRecurMorningDialog();
       // 推送本次 init 中任何本地變動（orphan cleanup、checkMissedReset、routines reset 等）
@@ -5591,13 +5681,16 @@ async function init() {
       const localOk = loadStateLocal();
       if (localOk) {
         // 有本地備份（舊裝置離線）→ 先顯示本地資料，背景重試
-        showToast('⚠️ 雲端讀取失敗，已從本地備份還原');
         state._initDone = true;
         renderEnergyDots(); renderSandbox(); renderAll();
         checkMissedReset(); checkTaskDates(); initRoutines();
+        // 資料從本地恢復，關閉鎖屏後再顯示 toast
+        closeOwnerLoginOverlay();
+        showToast('⚠️ 雲端讀取失敗，已從本地備份還原');
         maybeShowRecurMorningDialog();
       } else {
-        // 新裝置，本地也沒資料 → 顯示提示，持續重試
+        // 新裝置，本地也沒資料 → 關閉鎖屏顯示空介面，繼續背景重試
+        closeOwnerLoginOverlay();
         showToast('⏳ 正在連線雲端，請稍候…');
       }
 
@@ -5619,6 +5712,7 @@ async function init() {
           saveLottery();
           renderEnergyDots(); renderSandbox(); renderAll();
           checkMissedReset(); checkTaskDates(); initRoutines();
+          closeOwnerLoginOverlay();
           maybeShowRecurMorningDialog();
           syncToCloud();
           showToast('✓ 雲端資料已載入');
