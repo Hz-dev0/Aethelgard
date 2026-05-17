@@ -109,8 +109,8 @@
           window._fbIsOwner = false;
           window._fbUid = '';
           // 觸發鎖屏（未通過驗證的匿名登入）
+          // 注意：不呼叫 _onFirebaseReadyCallback，避免 init() 提前 resolve 跳過驗證
           if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
-          if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
           return;
         }
         // 若 _fbGuestSessionActive，window._fbUid 已被 submitGuestToken 切換為 ownerUid，不覆寫
@@ -124,10 +124,8 @@
       // ── 未登入：顯示鎖屏 ──
       window._fbIsOwner = false;
       window._fbUid = '';
+      // 注意：不呼叫 _onFirebaseReadyCallback，避免 init() 提前 resolve 跳過驗證
       if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
-      if (typeof window._onFirebaseReadyCallback === 'function') {
-        window._onFirebaseReadyCallback();
-      }
     }
   });
 </script>
