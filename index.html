@@ -2996,7 +2996,7 @@
 </div>
 
 <!-- 訪客通行碼 Overlay -->
-<div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
+<div id="guestTokenOverlay" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.55);align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:28px 24px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center">
     <div style="font-size:20px;margin-bottom:6px">🔑</div>
     <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">輸入訪客通行碼</div>
@@ -3679,10 +3679,25 @@ async function submitGuestToken() {
 
     const labelMin = Math.round(remaining / 60000);
     const label = labelMin < 60 ? labelMin + ' 分鐘' : Math.round(labelMin/60) + ' 小時';
-    showToast('🔑 訪客模式已啟用（' + label + '），正在載入資料…');
-    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
-    await new Promise(r => setTimeout(r, 800));
+
+    // ── 先關閉訪客 overlay，再用 ownerLoginOverlay 當載入遮罩（防止背後介面透出）──
     closeGuestTokenOverlay();
+    // 用 ownerLoginOverlay 當全屏遮罩，直到資料載入完成才隱藏
+    const _loadingOverlay = document.getElementById('ownerLoginOverlay');
+    if (_loadingOverlay) {
+      _loadingOverlay.style.display = 'flex';
+      // 把內部卡片換成簡單的載入提示，不讓使用者誤以為要重新登入
+      const _card = _loadingOverlay.querySelector('div');
+      if (_card) {
+        _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔑</div>'
+          + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
+          + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">訪客模式啟用中，正在載入資料…</div>';
+      }
+    }
+
+    showToast('🔑 訪客模式已啟用（' + label + '），正在載入資料…');
+    // 觸發 init 流程（資料載入後 init 會自行呼叫 closeOwnerLoginOverlay）
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
   } catch(e) {
     window._fbGuestSessionActive = false;
     errEl.textContent = '驗證失敗：' + e.message;
@@ -5599,6 +5614,9 @@ async function init() {
   {
     const btn = document.getElementById('settingsBtn');
     if (btn && window._fbUid) { btn.classList.add('connected'); btn.textContent = '☁ Connected'; }
+
+    // ── 關閉登入 / 載入遮罩（含訪客模式用 ownerLoginOverlay 當橋接遮罩的情境）──
+    closeOwnerLoginOverlay();
 
     // 只有 Owner（非訪客）且已登入時，才用本地快取做預顯示（加速啟動）
     if (window._fbIsOwner && window._fbUid) {
