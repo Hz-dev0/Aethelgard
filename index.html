@@ -102,12 +102,16 @@
           try { localStorage.setItem('aethelgard_fb_uid', user.uid); } catch(e) {}
           try { localStorage.setItem('aethelgard_fb_owner_uid', user.uid); } catch(e) {}
         }
-        // 訪客 session 走匿名，不走此分支；_fbGuestSessionActive 情況由 submitGuestToken 管理
       } else {
-        // ── 匿名登入：可能是訪客（已由 submitGuestToken 設好 _fbOwnerUid）或初始匿名 ──
+        // ── 匿名登入：只有在已有 _fbGuestSessionActive 時才視為有效訪客 ──
+        // 無痕模式下 Firebase 可能自動匿名登入，但沒有通過 OTP 驗證，不應放行
         if (!window._fbGuestSessionActive) {
           window._fbIsOwner = false;
           window._fbUid = '';
+          // 觸發鎖屏（未通過驗證的匿名登入）
+          if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+          if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+          return;
         }
         // 若 _fbGuestSessionActive，window._fbUid 已被 submitGuestToken 切換為 ownerUid，不覆寫
       }
@@ -2398,7 +2402,44 @@
   .routine-item:hover .routine-drag-handle { opacity: 0.6; }
   .routine-drag-handle:active { cursor: grabbing; }
   .routine-item.dragging-routine { opacity: 0.35; border-style: dashed; }
-  .routine-item.drag-over-routine { border-color: var(--green); background: rgba(58,110,165,0.07); transform: scale(1.01); }
+  /* ── Pull-to-Refresh ── */
+  .ptr-indicator {
+    position: fixed;
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(-60px);
+    z-index: 60;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(58,110,165,0.12);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .ptr-indicator.ptr-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(8px);
+  }
+  .ptr-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: ptrSpin 0.7s linear infinite;
+    display: none;
+  }
+  .ptr-indicator.ptr-loading .ptr-spinner { display: block; }
+  .ptr-indicator.ptr-loading .ptr-arrow { display: none; }
+  @keyframes ptrSpin { to { transform: rotate(360deg); } }
+  @media (min-width: 681px) { .ptr-indicator { display: none !important; } }
 
 </style>
 </head>
@@ -2670,6 +2711,13 @@
       <button class="routine-add-btn" onclick="addRoutineItem()">新增</button>
     </div>
   </div>
+</div>
+
+<!-- Pull-to-Refresh Indicator -->
+<div class="ptr-indicator" id="ptrIndicator">
+  <span class="ptr-arrow" id="ptrArrow">↓</span>
+  <div class="ptr-spinner"></div>
+  <span id="ptrText">下拉重整</span>
 </div>
 
 <!-- Mobile Bottom Nav -->
@@ -3743,7 +3791,13 @@ async function submitGuestToken() {
 
     showToast('🔑 訪客模式已啟用（' + label + '），正在載入資料…');
     // 觸發 init 流程（資料載入後 init 會自行呼叫 closeOwnerLoginOverlay）
-    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+    // 若 init 已在等待 _onFirebaseReadyCallback，直接呼叫；否則設定後讓 init 自行觸發
+    if (typeof window._onFirebaseReadyCallback === 'function') {
+      window._onFirebaseReadyCallback();
+    } else {
+      // init 尚未執行到等待點，預先設定一個 callback 讓 init 的 Promise resolve
+      window._fbGuestReadyResolve && window._fbGuestReadyResolve();
+    }
   } catch(e) {
     window._fbGuestSessionActive = false;
     errEl.textContent = '驗證失敗：' + e.message;
@@ -5548,12 +5602,16 @@ async function init() {
 
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
   await new Promise((resolve) => {
+    // 若 Firebase auth 已就緒且有有效 UID，直接 resolve
     if (window._fbUid) { resolve(); return; }
     let _resolved = false;
-    window._onFirebaseReadyCallback = () => { if (!_resolved) { _resolved = true; resolve(); } };
+    const _doResolve = () => { if (!_resolved) { _resolved = true; resolve(); } };
+    window._onFirebaseReadyCallback = _doResolve;
+    // 提供給 submitGuestToken 在 init 尚未到達等待點時呼叫
+    window._fbGuestReadyResolve = _doResolve;
     // 無 timeout：等使用者登入，不強制 resolve（init 在登入前不繼續）
     // 保留一個 safety net 避免極端情況卡死
-    setTimeout(() => { if (!_resolved && window._fbUid) { _resolved = true; resolve(); } }, 30000);
+    setTimeout(() => { if (!_resolved && window._fbUid) _doResolve(); }, 30000);
   });
 
   {
@@ -6581,6 +6639,7 @@ function getNeglectDays() {
 
 function isNeglected(t) {
   if (t.done || t.recurring) return false;
+  if (t.taskDate) return false; // 有設定截止日期的任務不計算久未完成
   const days = getNeglectDays();
   const history = state.doneHistory || [];
   // Match by taskId (precise) — history entries store taskId as the original task's numeric id
@@ -7330,13 +7389,16 @@ function onTaskUncompleted(task) {
   const isDaily  = goal === '日常';
 
   if (!isCharge) {
-    if (state.wishPoints === undefined) state.wishPoints = 0;
-    state.wishPoints = Math.max(0, state.wishPoints - 1);
-    saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
-    renderRewards();
     if (!isDaily) {
+      // 核心任務：取消翻牌機會
       const minDone = (lotteryState.todayFlipped || 0);
       if (lotteryState.todayDone > minDone) lotteryState.todayDone--;
+    } else {
+      // 日常任務：取消碎片（日常任務才有給碎片）
+      if (state.wishPoints === undefined) state.wishPoints = 0;
+      state.wishPoints = Math.max(0, state.wishPoints - 1);
+      saveStateLocal();
+      renderRewards();
     }
   }
   checkRandomMissionProgress();
@@ -10389,7 +10451,81 @@ document.addEventListener('visibilitychange', async () => {
 
 
 // ══════════════════════════════════════════════════════════
-// ── 例行任務 (Routine Tasks) ──────────────────────────────
+// ── Pull-to-Refresh ──────────────────────────────────────
+(function() {
+  if (window.matchMedia('(min-width: 681px)').matches) return; // 桌機不啟用
+  const THRESHOLD = 72;
+  let _startY = 0, _pulling = false, _loading = false;
+  const indicator = document.getElementById('ptrIndicator');
+  const ptrText   = document.getElementById('ptrText');
+  const ptrArrow  = document.getElementById('ptrArrow');
+
+  function getScrollEl() {
+    // 找出目前可見頁面的 main 捲動容器
+    return document.querySelector('main') || document.body;
+  }
+
+  document.addEventListener('touchstart', e => {
+    if (_loading) return;
+    const scrollEl = getScrollEl();
+    if (scrollEl.scrollTop > 0) return; // 非頂部不觸發
+    _startY = e.touches[0].clientY;
+    _pulling = true;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!_pulling || _loading) return;
+    const dy = e.touches[0].clientY - _startY;
+    if (dy <= 0) { _pulling = false; return; }
+    const scrollEl = getScrollEl();
+    if (scrollEl.scrollTop > 0) { _pulling = false; return; }
+    if (dy > 12) {
+      indicator.classList.add('ptr-visible');
+      if (dy >= THRESHOLD) {
+        ptrText.textContent = '放開以重整';
+        ptrArrow.style.transform = 'rotate(180deg)';
+      } else {
+        ptrText.textContent = '下拉重整';
+        ptrArrow.style.transform = '';
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', async e => {
+    if (!_pulling || _loading) { _pulling = false; return; }
+    const dy = e.changedTouches[0].clientY - _startY;
+    _pulling = false;
+    if (dy < THRESHOLD) {
+      indicator.classList.remove('ptr-visible');
+      ptrArrow.style.transform = '';
+      return;
+    }
+    // 觸發重整
+    _loading = true;
+    indicator.classList.add('ptr-loading');
+    ptrText.textContent = '同步中…';
+    ptrArrow.style.transform = '';
+    if (navigator.vibrate) navigator.vibrate(20);
+    try {
+      if (window._fbUid) {
+        const ok = await loadFromCloud();
+        if (ok) {
+          renderEnergyDots(); renderSandbox(); renderAll(); checkTaskDates(); initRoutines();
+          showToast('✓ 已重整');
+        } else {
+          showToast('⚠️ 同步失敗，請稍後再試');
+        }
+      }
+    } catch(err) {
+      showToast('⚠️ 重整失敗');
+    } finally {
+      _loading = false;
+      indicator.classList.remove('ptr-visible', 'ptr-loading');
+    }
+  }, { passive: true });
+})();
+
+
 // ══════════════════════════════════════════════════════════
 
 // 每日重置：若上次重置週期已過，清空例行任務的 done 狀態
