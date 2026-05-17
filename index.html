@@ -4132,15 +4132,12 @@ async function submitGuestToken() {
     }
 
     showToast('🔑 訪客模式已啟用（' + label + '），正在載入資料…');
-    // ★ Fix：統一呼叫路徑，不論 init 是否已到達等待點都能正確 resolve
-    // _onFirebaseReadyCallback / _fbGuestReadyResolve 在 init 開頭就已設定（提前就位）
+    // ★ Fix：統一呼叫，不論 init 是否已到達等待點都能正確 resolve
     if (typeof window._onFirebaseReadyCallback === 'function') {
       window._onFirebaseReadyCallback();
     } else if (typeof window._fbGuestReadyResolve === 'function') {
       window._fbGuestReadyResolve();
     }
-    // ★ 額外保險：若兩者都尚未設定（極端情況），設旗標讓 init 的輪詢 safety net 接手
-    // （_fbUid 已在上方設為 ownerUid，輪詢會在 1 秒內偵測到並 resolve）
   } catch(e) {
     window._fbGuestSessionActive = false;
     errEl.textContent = '驗證失敗：' + e.message;
@@ -5944,36 +5941,23 @@ async function init() {
   if (dot) dot.style.display = 'none'; // 登入前隱藏同步燈
 
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
-  // ★ Fix：先在 Promise 外就設好 callback，消除 submitGuestToken 與 init 的競態條件
-  //   （若 submitGuestToken 比 init 跑得更快，callback 也能被找到並呼叫）
+  // ★ Fix：提前設好 callback，消除 submitGuestToken 與 init 的競態條件
   let _initResolved = false;
   let _initResolveRef = null;
   const _earlyResolve = () => {
-    if (!_initResolved) {
-      _initResolved = true;
-      if (_initResolveRef) _initResolveRef();
-    }
+    if (!_initResolved) { _initResolved = true; if (_initResolveRef) _initResolveRef(); }
   };
   window._onFirebaseReadyCallback = _earlyResolve;
   window._fbGuestReadyResolve     = _earlyResolve;
 
   await new Promise((resolve) => {
-    // 若 Firebase auth 已就緒且有有效 UID，直接 resolve
     if (window._fbUid || _initResolved) { resolve(); return; }
     _initResolveRef = resolve;
-    // 無 timeout：等使用者登入，不強制 resolve（init 在登入前不繼續）
-    // Safety net：每秒輪詢一次，涵蓋訪客 session 已就緒但 callback 時序差的極端情況
+    // Safety net：每秒輪詢，涵蓋極端時序差的情況
     const _safetyTimer = setInterval(() => {
-      if (window._fbUid || _initResolved) {
-        clearInterval(_safetyTimer);
-        resolve();
-      }
+      if (window._fbUid || _initResolved) { clearInterval(_safetyTimer); resolve(); }
     }, 1000);
-    // 30 秒強制釋放（避免永久卡死），但只有在 UID 已設定時才放行
-    setTimeout(() => {
-      clearInterval(_safetyTimer);
-      if (window._fbUid) resolve();
-    }, 30000);
+    setTimeout(() => { clearInterval(_safetyTimer); if (window._fbUid) resolve(); }, 30000);
   });
 
   {
