@@ -3884,15 +3884,38 @@ async function revokeAllGuests() {
 window.revokeAllGuests = revokeAllGuests;
 
 // ── 訪客安全鎖（純計時器，訪客現在以 Owner email session 登入）──
-// onSnapshot 已不需要，改為由 submitGuestToken 設定計時器
-let _guestAccessUnsubscribe = null; // 保留變數名稱供相容
+// ── 訪客安全鎖：onSnapshot 監聽 guest_access/{uid}，Owner 刪除時即時鎖頁 ──
+let _guestAccessUnsubscribe = null;
 function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt) {
-  // 此函式保留以防舊呼叫點，實際邏輯已移至 submitGuestToken 的 setTimeout
+  // 先清除舊監聽，避免重複
+  if (_guestAccessUnsubscribe) { _guestAccessUnsubscribe(); _guestAccessUnsubscribe = null; }
+
+  // ① onSnapshot：Owner 主動刪除 guest_access → 即時鎖頁
+  if (window._fbOnSnapshot && window._fbDb && window._fbDoc) {
+    const ref = window._fbDoc(window._fbDb, 'guest_access', guestUid);
+    _guestAccessUnsubscribe = window._fbOnSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        // 文件被 Owner 刪除
+        _forceGuestLockout();
+        return;
+      }
+      const d = snap.data();
+      const ms = typeof d.expiresAt === 'number' ? d.expiresAt : (d.expiresAt?.toMillis?.() ?? 0);
+      if (Date.now() > ms) {
+        _forceGuestLockout();
+      }
+    }, () => {
+      // 監聽失敗（permission denied）代表文件已被刪
+      _forceGuestLockout();
+    });
+  }
+
+  // ② setTimeout 備援：確保到期時一定鎖頁（onSnapshot 萬一斷線也有保障）
   const remaining = expiresAt - Date.now();
   if (remaining > 0) {
     setTimeout(() => { if (!window._fbIsOwner) _forceGuestLockout(); }, remaining);
     if (remaining > 5 * 60 * 1000) {
-      setTimeout(() => showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'), remaining - 5 * 60 * 1000);
+      setTimeout(() => { if (!window._fbIsOwner) showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'); }, remaining - 5 * 60 * 1000);
     }
   }
 }
@@ -4009,7 +4032,7 @@ async function generateToken() {
     : `${_selectedTokenMinutes / 60} 小時`;
   try {
     await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), {
-      ownerUid, expiresAt, used: false
+      ownerUid, expiresAt
     });
     const display = document.getElementById('tokenDisplay');
     const ts = document.getElementById('tokenStatus');
@@ -4065,7 +4088,6 @@ async function submitGuestToken() {
     const snap = await window._fbGetDoc(tokenRef);
     if (!snap.exists()) { errEl.textContent = '通行碼不存在或已被使用'; return; }
     const data = snap.data();
-    if (data.used) { errEl.textContent = '通行碼已被使用過'; return; }
     if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期，請重新申請'; return; }
 
     const ownerUid = data.ownerUid;
@@ -4108,15 +4130,10 @@ async function submitGuestToken() {
       console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
     }
 
-    // ── 啟動到期計時器 ──
-    const remaining = passExpiresAt - Date.now();
-    if (remaining > 5 * 60 * 1000) {
-      setTimeout(() => showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'), remaining - 5 * 60 * 1000);
-    }
-    setTimeout(() => {
-      if (!window._fbIsOwner) _forceGuestLockout();
-    }, remaining);
+    // ── 啟動 onSnapshot 監聽 + 到期計時器（統一由 _startGuestAccessWatcher 管理）──
+    _startGuestAccessWatcher(guestUid, ownerUid, passExpiresAt);
 
+    const remaining = passExpiresAt - Date.now();
     const labelMin = Math.round(remaining / 60000);
     const label = labelMin < 60 ? labelMin + ' 分鐘' : Math.round(labelMin/60) + ' 小時';
 
