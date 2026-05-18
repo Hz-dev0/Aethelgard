@@ -3755,6 +3755,14 @@ window._onFirebaseReady = async function() {
     try { localStorage.setItem('aethelgard_fb_uid', authUid); } catch(e) {}
     try { localStorage.setItem('aethelgard_fb_owner_uid', authUid); } catch(e) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    // ★ Fix：Owner 自動免登入時，立即把鎖屏換成「載入中」畫面，
+    //   避免在 loadFromCloud() 完成前，OTP 輸入格一閃而過。
+    const _card = document.getElementById('ownerLoginCard');
+    if (_card && document.getElementById('guestTokenSection')) {
+      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
+        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
+        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">正在載入資料…</div>';
+    }
     _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
     return;
