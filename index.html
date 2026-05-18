@@ -3123,7 +3123,7 @@
     text-transform: uppercase;
   }
 
-  /* ── 通行碼輸入 ── */
+  /* ── 通行碼輸入（OTP 格子）── */
   .lock-input-group {
     margin-bottom: 6px;
   }
@@ -3132,35 +3132,86 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-faint);
-    text-align: left;
+    text-align: center;
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
 
+  /* Hidden real input — keeps submitGuestToken() working unchanged */
   #guestTokenInput {
-    width: 100%;
-    box-sizing: border-box;
-    text-align: center;
-    font-size: 30px;
-    font-family: 'DM Serif Display', serif;
-    font-weight: 400;
-    letter-spacing: 0.28em;
-    padding: 14px 10px;
-    background: rgba(240,244,248,0.7);
-    border: 1.5px solid rgba(58,110,165,0.18);
-    border-radius: 14px;
-    color: var(--text);
-    outline: none;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+  }
+
+  /* OTP visual grid */
+  .otp-grid {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
     margin-bottom: 6px;
-    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
   }
-  #guestTokenInput:focus {
+  .otp-cell {
+    width: 42px;
+    height: 52px;
+    border-radius: 12px;
+    background: rgba(240,244,248,0.8);
+    border: 1.5px solid rgba(58,110,165,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px;
+    color: var(--text);
+    cursor: text;
+    position: relative;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s, transform 0.12s;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.85) inset, 0 2px 6px rgba(58,110,165,0.06);
+    user-select: none;
+  }
+  .otp-cell.otp-active {
     border-color: var(--green);
-    background: rgba(255,255,255,0.9);
-    box-shadow: 0 0 0 3px rgba(58,110,165,0.10), 0 1px 0 rgba(255,255,255,0.8) inset;
+    background: rgba(255,255,255,0.95);
+    box-shadow: 0 0 0 3px rgba(58,110,165,0.12), 0 1px 0 rgba(255,255,255,0.85) inset;
   }
-  #guestTokenInput::placeholder { color: rgba(30,45,69,0.18); letter-spacing: 0.24em; }
+  .otp-cell.otp-filled {
+    border-color: rgba(58,110,165,0.35);
+    background: rgba(255,255,255,0.9);
+  }
+  .otp-cell.otp-pop {
+    animation: otpPop 0.18s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .otp-cell.otp-error {
+    border-color: var(--rose) !important;
+    animation: otpShake 0.38s ease both;
+  }
+  /* blinking cursor */
+  .otp-cell.otp-active::after {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 26px;
+    background: var(--green);
+    border-radius: 2px;
+    animation: otpBlink 1s step-end infinite;
+    position: absolute;
+  }
+  .otp-cell.otp-active.otp-has-digit::after { display: none; }
+
+  @keyframes otpBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes otpPop {
+    0%   { transform: scale(0.82); opacity: 0.5; }
+    100% { transform: scale(1);    opacity: 1;   }
+  }
+  @keyframes otpShake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-5px); }
+    40%     { transform: translateX(5px); }
+    60%     { transform: translateX(-4px); }
+    80%     { transform: translateX(4px); }
+  }
 
   #guestTokenError {
     font-size: 11px;
@@ -3345,10 +3396,19 @@
     <div id="guestTokenSection">
       <div class="lock-input-group">
         <span class="lock-input-label">通行碼</span>
+        <!-- Hidden input keeps submitGuestToken() working unchanged -->
         <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
-          placeholder=""
-          onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='rgba(58,110,165,0.18)'"
+          autocomplete="one-time-code" tabindex="-1"
           onkeydown="if(event.key==='Enter')submitGuestToken()">
+        <!-- OTP visual grid (tapping focuses a hidden real input) -->
+        <div class="otp-grid" id="otpGrid">
+          <div class="otp-cell" data-idx="0"></div>
+          <div class="otp-cell" data-idx="1"></div>
+          <div class="otp-cell" data-idx="2"></div>
+          <div class="otp-cell" data-idx="3"></div>
+          <div class="otp-cell" data-idx="4"></div>
+          <div class="otp-cell" data-idx="5"></div>
+        </div>
       </div>
       <div id="guestTokenError"></div>
       <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
@@ -3789,8 +3849,11 @@ function openOwnerLoginOverlay() {
   el.style.display = 'flex';
   // focus 通行碼輸入
   setTimeout(() => {
-    const tokenInput = document.getElementById('guestTokenInput');
-    if (tokenInput) tokenInput.focus();
+    if (typeof window._otpReset === 'function') window._otpReset();
+    else {
+      const tokenInput = document.getElementById('guestTokenInput');
+      if (tokenInput) tokenInput.focus();
+    }
   }, 100);
 }
 window.openOwnerLoginOverlay = openOwnerLoginOverlay;
@@ -3860,8 +3923,11 @@ async function ownerSignOut() {
     openOwnerLoginOverlay();
     // 清空通行碼輸入
     setTimeout(() => {
-      const ti = document.getElementById('guestTokenInput');
-      if (ti) { ti.value = ''; ti.focus(); }
+      if (typeof window._otpReset === 'function') window._otpReset();
+      else {
+        const ti = document.getElementById('guestTokenInput');
+        if (ti) { ti.value = ''; ti.focus(); }
+      }
       const err = document.getElementById('guestTokenError');
       if (err) { err.textContent = ''; }
     }, 100);
@@ -4081,7 +4147,11 @@ async function submitGuestToken() {
   const errEl = document.getElementById('guestTokenError');
   if (!input || !errEl) return;
   const code = (input.value || '').trim();
-  if (!/^\d{6}$/.test(code)) { errEl.textContent = '請輸入 6 位數字'; return; }
+  if (!/^\d{6}$/.test(code)) {
+    errEl.textContent = '請輸入 6 位數字';
+    if (typeof window._otpFlashError === 'function') window._otpFlashError();
+    return;
+  }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
   try {
     const tokenRef = window._fbDoc(window._fbDb, 'tokens', code);
@@ -4160,8 +4230,133 @@ async function submitGuestToken() {
     window._fbGuestSessionActive = false;
     errEl.textContent = '驗證失敗：' + e.message;
     errEl.style.color = 'var(--rose)';
+    if (typeof window._otpFlashError === 'function') window._otpFlashError();
   }
 }
+
+// ── OTP 格子控制器 ──────────────────────────────────────────────
+(function() {
+  function initOtp() {
+    const grid = document.getElementById('otpGrid');
+    const hidden = document.getElementById('guestTokenInput');
+    if (!grid || !hidden) return;
+
+    const cells = Array.from(grid.querySelectorAll('.otp-cell'));
+    let digits = ['','','','','',''];
+    let activeIdx = 0;
+
+    function render(focusIdx) {
+      cells.forEach((cell, i) => {
+        cell.classList.remove('otp-active','otp-filled','otp-has-digit');
+        const d = digits[i];
+        cell.textContent = d || '';
+        if (d) {
+          cell.classList.add('otp-filled','otp-has-digit');
+        }
+        if (i === focusIdx) {
+          cell.classList.add('otp-active');
+          if (d) cell.classList.add('otp-has-digit');
+        }
+      });
+      hidden.value = digits.join('');
+      activeIdx = focusIdx;
+    }
+
+    function focusCell(idx) {
+      idx = Math.max(0, Math.min(5, idx));
+      hidden.focus();
+      render(idx);
+    }
+
+    function flashError() {
+      cells.forEach(c => {
+        c.classList.add('otp-error');
+        setTimeout(() => c.classList.remove('otp-error'), 400);
+      });
+    }
+
+    // tap any cell → focus that position
+    cells.forEach((cell, i) => {
+      cell.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        focusCell(i);
+      });
+    });
+
+    // keyboard input on hidden field
+    hidden.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { submitGuestToken(); return; }
+
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        if (digits[activeIdx]) {
+          digits[activeIdx] = '';
+          render(activeIdx);
+        } else if (activeIdx > 0) {
+          digits[activeIdx - 1] = '';
+          render(activeIdx - 1);
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft' && activeIdx > 0) { e.preventDefault(); focusCell(activeIdx - 1); return; }
+      if (e.key === 'ArrowRight' && activeIdx < 5) { e.preventDefault(); focusCell(activeIdx + 1); return; }
+    });
+
+    hidden.addEventListener('input', e => {
+      // Handle paste or autocomplete filling multiple digits at once
+      const raw = (hidden.value || '').replace(/\D/g,'').slice(0, 6);
+      if (raw.length > 1) {
+        digits = raw.padEnd(6,'').split('').slice(0,6);
+        hidden.value = raw;
+        const nextEmpty = digits.findIndex(d => !d);
+        render(nextEmpty < 0 ? 5 : nextEmpty);
+        if (raw.length === 6) submitGuestToken();
+        return;
+      }
+      // single char via input event (some mobile keyboards)
+      const ch = raw.slice(-1);
+      if (ch && /\d/.test(ch)) {
+        digits[activeIdx] = ch;
+        const cell = cells[activeIdx];
+        cell.classList.add('otp-pop');
+        setTimeout(() => cell.classList.remove('otp-pop'), 200);
+        const next = activeIdx < 5 ? activeIdx + 1 : 5;
+        render(next);
+        if (digits.every(d => d)) submitGuestToken();
+      }
+      hidden.value = digits.join('');
+    });
+
+    // expose reset for ownerSignOut / openOwnerLoginOverlay
+    window._otpReset = function() {
+      digits = ['','','','','',''];
+      hidden.value = '';
+      render(0);
+      focusCell(0);
+    };
+
+    // expose error flash for submitGuestToken failure
+    window._otpFlashError = flashError;
+
+    render(0);
+
+    // auto-focus when lock screen opens
+    const observer = new MutationObserver(() => {
+      const overlay = document.getElementById('ownerLoginOverlay');
+      if (overlay && overlay.style.display !== 'none') {
+        setTimeout(() => focusCell(0), 80);
+      }
+    });
+    const overlay = document.getElementById('ownerLoginOverlay');
+    if (overlay) observer.observe(overlay, { attributes: true, attributeFilter: ['style'] });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOtp);
+  } else {
+    initOtp();
+  }
+})();
 
 function setApiStatus(type, msg) {
   const el = document.getElementById('apiStatus');
@@ -9804,7 +9999,7 @@ function notesRefreshPreviews() {
 // Uses Pointer Events instead of HTML5 drag API — works reliably in overflow
 // containers and with child elements.
 
-let _tabPointerDrag = false; // true while dragging, suppresses click
+let _tabPointerDrag = null; // { fromIdx, clone, startX, startY, moved }
 
 function _notesTabPointerDown(e, div, row) {
   if (e.button !== undefined && e.button !== 0) return; // left button only
@@ -9825,7 +10020,6 @@ function _notesTabPointerDown(e, div, row) {
 
     if (!moved) {
       moved = true;
-      _tabPointerDrag = true;
       // Create floating clone
       const rect = div.getBoundingClientRect();
       clone = div.cloneNode(true);
@@ -9853,8 +10047,9 @@ function _notesTabPointerDown(e, div, row) {
       document.body.appendChild(insertMarker); // will be moved into row
     }
 
-    // Move clone — follow finger/cursor centered on the tab
-    clone.style.left = ev.clientX - (parseFloat(clone.style.width) / 2) + 'px';
+    // Move clone
+    clone.style.left = (ev.clientX - startX + parseFloat(clone.style.left)) + 'px';
+    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
 
     // Find target tab
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
@@ -9882,13 +10077,7 @@ function _notesTabPointerDown(e, div, row) {
     div.style.opacity = '';
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
 
-    if (!moved) {
-      _tabPointerDrag = false;
-      return; // was a click, not a drag — onclick will handle it
-    }
-
-    // Small delay before resetting flag so the onclick handler sees it as a drag
-    setTimeout(() => { _tabPointerDrag = false; }, 50);
+    if (!moved) return; // was a click, not a drag — onclick will handle it
 
     const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
     if (!target || target === div) return;
@@ -9909,8 +10098,7 @@ function _notesTabPointerDown(e, div, row) {
 
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
-  // NOTE: Do NOT use setPointerCapture here — it routes all pointer events to this
-  // element, which breaks document.elementFromPoint() in onUp on mobile browsers.
+  div.setPointerCapture && div.setPointerCapture(e.pointerId);
 }
 
 function notesRenderTabs() {
