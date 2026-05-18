@@ -9804,7 +9804,7 @@ function notesRefreshPreviews() {
 // Uses Pointer Events instead of HTML5 drag API — works reliably in overflow
 // containers and with child elements.
 
-let _tabPointerDrag = null; // { fromIdx, clone, startX, startY, moved }
+let _tabPointerDrag = false; // true while dragging, suppresses click
 
 function _notesTabPointerDown(e, div, row) {
   if (e.button !== undefined && e.button !== 0) return; // left button only
@@ -9825,6 +9825,7 @@ function _notesTabPointerDown(e, div, row) {
 
     if (!moved) {
       moved = true;
+      _tabPointerDrag = true;
       // Create floating clone
       const rect = div.getBoundingClientRect();
       clone = div.cloneNode(true);
@@ -9852,9 +9853,8 @@ function _notesTabPointerDown(e, div, row) {
       document.body.appendChild(insertMarker); // will be moved into row
     }
 
-    // Move clone
-    clone.style.left = (ev.clientX - startX + parseFloat(clone.style.left)) + 'px';
-    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
+    // Move clone — follow finger/cursor centered on the tab
+    clone.style.left = ev.clientX - (parseFloat(clone.style.width) / 2) + 'px';
 
     // Find target tab
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
@@ -9882,7 +9882,13 @@ function _notesTabPointerDown(e, div, row) {
     div.style.opacity = '';
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
 
-    if (!moved) return; // was a click, not a drag — onclick will handle it
+    if (!moved) {
+      _tabPointerDrag = false;
+      return; // was a click, not a drag — onclick will handle it
+    }
+
+    // Small delay before resetting flag so the onclick handler sees it as a drag
+    setTimeout(() => { _tabPointerDrag = false; }, 50);
 
     const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
     if (!target || target === div) return;
@@ -9903,7 +9909,8 @@ function _notesTabPointerDown(e, div, row) {
 
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
-  div.setPointerCapture && div.setPointerCapture(e.pointerId);
+  // NOTE: Do NOT use setPointerCapture here — it routes all pointer events to this
+  // element, which breaks document.elementFromPoint() in onUp on mobile browsers.
 }
 
 function notesRenderTabs() {
