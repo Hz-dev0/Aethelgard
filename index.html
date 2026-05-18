@@ -3667,6 +3667,9 @@ function _startRealtimeListener(uid) {
 
     renderEnergyDots(); renderSandbox(); renderAll(); initRoutines();
     if (dot) dot.className = 'sync-dot synced';
+    // ★ Fix：訪客模式下 snapshot 可能比 loadFromCloud 更早拿到資料，
+    //   此時 closeOwnerLoginOverlay 尚未被 init() 呼叫，需在這裡主動關閉載入遮罩。
+    if (typeof closeOwnerLoginOverlay === 'function') closeOwnerLoginOverlay();
     showToast('🔄 已同步其他裝置的更新');
   }, (err) => {
     console.warn('[realtime] 監聽錯誤:', err.code, err.message);
@@ -4113,8 +4116,6 @@ async function submitGuestToken() {
     setTimeout(() => {
       if (!window._fbIsOwner) _forceGuestLockout();
     }, remaining);
-
-    _startRealtimeListener(ownerUid);
 
     const labelMin = Math.round(remaining / 60000);
     const label = labelMin < 60 ? labelMin + ' 分鐘' : Math.round(labelMin/60) + ' 小時';
