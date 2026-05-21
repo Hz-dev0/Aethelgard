@@ -1,5 +1,5 @@
 const _swVersion = new URL(location.href).searchParams.get('v') || 'v5';
-const CACHE_NAME = 'Aethelgard-' + _swVersion;
+const CACHE_NAME = 'aethelgard-' + _swVersion;
 
 const ASSETS = [
   '/Aethelgard/',
