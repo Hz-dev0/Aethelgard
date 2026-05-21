@@ -177,6 +177,13 @@
     max-width: 100%;
     width: 100%;
   }
+  /* 主介面內容預設隱藏，驗證完成後才顯示，防止重整閃過介面 */
+  body > *:not(#ownerLoginOverlay) {
+    visibility: hidden;
+  }
+  body.auth-ready > *:not(#ownerLoginOverlay) {
+    visibility: visible;
+  }
 
   /* Ambient background */
   body::before {
@@ -3024,13 +3031,19 @@
   }
 
   #ownerLoginOverlay {
-    display: none;
+    display: flex;
     position: fixed;
     inset: 0;
     z-index: 10000;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    transition: opacity 0.35s ease;
+    opacity: 1;
+  }
+  #ownerLoginOverlay.hiding {
+    opacity: 0;
+    pointer-events: none;
   }
 
   /* ── 背景：多層漸層 + 磨砂 ── */
@@ -3889,6 +3902,8 @@ function openOwnerLoginOverlay() {
     }
   }
   el.style.display = 'flex';
+  // 重新顯示鎖屏時，確保主介面不可見
+  document.body.classList.remove('auth-ready');
   // focus 通行碼輸入
   setTimeout(() => {
     if (typeof window._otpReset === 'function') window._otpReset();
@@ -3902,7 +3917,14 @@ window.openOwnerLoginOverlay = openOwnerLoginOverlay;
 
 function closeOwnerLoginOverlay() {
   const el = document.getElementById('ownerLoginOverlay');
-  if (el) el.style.display = 'none';
+  if (!el) return;
+  el.classList.add('hiding');
+  setTimeout(() => {
+    el.style.display = 'none';
+    el.classList.remove('hiding');
+    // 驗證完成，顯示主介面
+    document.body.classList.add('auth-ready');
+  }, 350);
 }
 window.closeOwnerLoginOverlay = closeOwnerLoginOverlay;
 
