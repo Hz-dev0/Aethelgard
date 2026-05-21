@@ -3137,23 +3137,16 @@
     margin-bottom: 12px;
   }
 
-  /* Hidden real input — keeps submitGuestToken() working unchanged */
-  #guestTokenInput {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-    width: 1px;
-    height: 1px;
-  }
-
-  /* OTP visual grid */
+  /* OTP visual grid — 每格是真實 input，不再用隱藏 input */
   .otp-grid {
     display: flex;
     gap: 8px;
     justify-content: center;
     margin-bottom: 6px;
+    direction: ltr;
   }
-  .otp-cell {
+  /* 每格真實 input */
+  .otp-cell-input {
     width: 42px;
     height: 52px;
     border-radius: 12px;
@@ -3166,41 +3159,37 @@
     font-size: 26px;
     color: var(--text);
     cursor: text;
-    position: relative;
+    text-align: center;
+    outline: none;
+    padding: 0;
+    caret-color: transparent;
     transition: border-color 0.18s, box-shadow 0.18s, background 0.18s, transform 0.12s;
     box-shadow: 0 1px 0 rgba(255,255,255,0.85) inset, 0 2px 6px rgba(58,110,165,0.06);
-    user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+    /* 防止行動端自動大寫/自動更正 */
+    autocorrect: off;
+    autocapitalize: off;
+    spellcheck: false;
   }
-  .otp-cell.otp-active {
+  .otp-cell-input:focus {
     border-color: var(--green);
     background: rgba(255,255,255,0.95);
     box-shadow: 0 0 0 3px rgba(58,110,165,0.12), 0 1px 0 rgba(255,255,255,0.85) inset;
+    caret-color: var(--green);
   }
-  .otp-cell.otp-filled {
+  .otp-cell-input.otp-filled {
     border-color: rgba(58,110,165,0.35);
     background: rgba(255,255,255,0.9);
   }
-  .otp-cell.otp-pop {
+  .otp-cell-input.otp-pop {
     animation: otpPop 0.18s cubic-bezier(0.34,1.56,0.64,1) both;
   }
-  .otp-cell.otp-error {
+  .otp-cell-input.otp-error {
     border-color: var(--rose) !important;
     animation: otpShake 0.38s ease both;
   }
-  /* blinking cursor */
-  .otp-cell.otp-active::after {
-    content: '';
-    display: block;
-    width: 2px;
-    height: 26px;
-    background: var(--green);
-    border-radius: 2px;
-    animation: otpBlink 1s step-end infinite;
-    position: absolute;
-  }
-  .otp-cell.otp-active.otp-has-digit::after { display: none; }
 
-  @keyframes otpBlink { 0%,100%{opacity:1} 50%{opacity:0} }
   @keyframes otpPop {
     0%   { transform: scale(0.82); opacity: 0.5; }
     100% { transform: scale(1);    opacity: 1;   }
@@ -3424,19 +3413,29 @@
     <div id="guestTokenSection">
       <div class="lock-input-group">
         <span class="lock-input-label">通行碼</span>
-        <!-- Hidden input keeps submitGuestToken() working unchanged -->
-        <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
-          autocomplete="one-time-code" tabindex="-1"
-          onkeydown="if(event.key==='Enter')submitGuestToken()">
-        <!-- OTP visual grid (tapping focuses a hidden real input) -->
+        <!-- 6 個真實 input 格子，直接接收鍵盤，無隱藏 input -->
         <div class="otp-grid" id="otpGrid">
-          <div class="otp-cell" data-idx="0"></div>
-          <div class="otp-cell" data-idx="1"></div>
-          <div class="otp-cell" data-idx="2"></div>
-          <div class="otp-cell" data-idx="3"></div>
-          <div class="otp-cell" data-idx="4"></div>
-          <div class="otp-cell" data-idx="5"></div>
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="0">
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="1">
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="2">
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="3">
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="4">
+          <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*"
+            maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false" dir="ltr" data-idx="5">
         </div>
+        <!-- 保留 guestTokenInput 供 submitGuestToken() 讀取，但由 JS 同步更新 -->
+        <input id="guestTokenInput" type="hidden">
       </div>
       <div id="guestTokenError"></div>
       <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
@@ -3847,15 +3846,20 @@ function openOwnerLoginOverlay() {
         <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green);margin-bottom:4px">Aethelgard</div>
         <div style="font-size:12px;color:var(--text-faint);margin-bottom:24px;letter-spacing:0.04em">輸入通行碼以進入</div>
         <div id="guestTokenSection">
-          <input id="guestTokenInput" type="text" inputmode="numeric" maxlength="6"
-            placeholder="000000"
-            style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;font-family:monospace;font-weight:700;letter-spacing:0.2em;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:10px;transition:border-color 0.2s"
-            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor=''"
-            onkeydown="if(event.key==='Enter')submitGuestToken()">
-          <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px"></div>
-          <button onclick="submitGuestToken()"
-            style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:16px;transition:opacity 0.2s"
-            onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">進入 →</button>
+          <div class="lock-input-group">
+            <span class="lock-input-label">通行碼</span>
+            <div class="otp-grid" id="otpGrid">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="0">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="1">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="2">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="3">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="4">
+              <input class="otp-cell-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" dir="ltr" data-idx="5">
+            </div>
+            <input id="guestTokenInput" type="hidden">
+          </div>
+          <div id="guestTokenError" style="font-size:11px;color:var(--rose,#e05);min-height:16px;margin-bottom:10px;text-align:center"></div>
+          <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
         </div>
         <div>
           <button onclick="toggleOwnerLoginSection()"
@@ -3880,6 +3884,8 @@ function openOwnerLoginOverlay() {
               onmouseover="this.style.opacity='0.87'" onmouseout="this.style.opacity='1'">登入 Owner →</button>
           </div>
         </div>`;
+      // 動態重建後重新初始化 OTP
+      setTimeout(() => { if (typeof window._initOtpFn === 'function') window._initOtpFn(); }, 0);
     }
   }
   el.style.display = 'flex';
@@ -4262,6 +4268,11 @@ async function submitGuestToken() {
     } else if (typeof window._fbGuestReadyResolve === 'function') {
       window._fbGuestReadyResolve();
     }
+    // ★ 保底：若 init() → loadFromCloud() 流程因任何原因未能關閉 overlay，
+    //   8 秒後強制關閉，防止永久卡在載入畫面
+    setTimeout(() => {
+      if (typeof closeOwnerLoginOverlay === 'function') closeOwnerLoginOverlay();
+    }, 8000);
   } catch(e) {
     window._fbGuestSessionActive = false;
     errEl.textContent = '驗證失敗：' + e.message;
@@ -4274,34 +4285,18 @@ async function submitGuestToken() {
 (function() {
   function initOtp() {
     const grid = document.getElementById('otpGrid');
-    const hidden = document.getElementById('guestTokenInput');
-    if (!grid || !hidden) return;
+    const hiddenInput = document.getElementById('guestTokenInput');
+    if (!grid) return;
 
-    const cells = Array.from(grid.querySelectorAll('.otp-cell'));
-    let digits = ['','','','','',''];
-    let activeIdx = 0;
+    // 取得 6 個真實 input 格子
+    const cells = Array.from(grid.querySelectorAll('.otp-cell-input'));
+    if (cells.length !== 6) return;
 
-    function render(focusIdx) {
-      cells.forEach((cell, i) => {
-        cell.classList.remove('otp-active','otp-filled','otp-has-digit');
-        const d = digits[i];
-        cell.textContent = d || '';
-        if (d) {
-          cell.classList.add('otp-filled','otp-has-digit');
-        }
-        if (i === focusIdx) {
-          cell.classList.add('otp-active');
-          if (d) cell.classList.add('otp-has-digit');
-        }
-      });
-      hidden.value = digits.join('');
-      activeIdx = focusIdx;
-    }
-
-    function focusCell(idx) {
-      idx = Math.max(0, Math.min(5, idx));
-      hidden.focus();
-      render(idx);
+    // 同步所有格子的值到 hiddenInput，供 submitGuestToken() 讀取
+    function syncHidden() {
+      const val = cells.map(c => c.value).join('');
+      if (hiddenInput) hiddenInput.value = val;
+      return val;
     }
 
     function flashError() {
@@ -4311,72 +4306,109 @@ async function submitGuestToken() {
       });
     }
 
-    // tap any cell → focus that position
+    // 聚焦指定格子（不用 select()，避免觸發額外 input 事件）
+    function focusCell(idx) {
+      idx = Math.max(0, Math.min(5, idx));
+      cells[idx].focus();
+    }
+
+    // 在 input 事件中延後移動焦點，確保當前事件完全結束
+    function moveFocus(idx) {
+      setTimeout(() => focusCell(idx), 0);
+    }
+
     cells.forEach((cell, i) => {
-      cell.addEventListener('pointerdown', e => {
+      // 點擊時聚焦，選取現有字元方便直接覆寫
+      cell.addEventListener('click', () => {
+        setTimeout(() => cell.select(), 0);
+      });
+
+      // keydown：導航、刪除、覆寫現有值
+      cell.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitGuestToken();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (cell.value) {
+            cell.value = '';
+            cell.classList.remove('otp-filled');
+            syncHidden();
+          } else if (i > 0) {
+            cells[i - 1].value = '';
+            cells[i - 1].classList.remove('otp-filled');
+            syncHidden();
+            focusCell(i - 1);
+          }
+          return;
+        }
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); focusCell(i - 1); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); focusCell(i + 1); return; }
+
+        // 格子已有值時按數字：先清空，讓 input 事件只看到 1 個新字
+        if (/^\d$/.test(e.key) && cell.value) {
+          cell.value = '';
+          cell.classList.remove('otp-filled');
+        }
+      });
+
+      // input：只負責把值正規化、更新 class、移動焦點
+      cell.addEventListener('input', () => {
+        const raw = cell.value.replace(/\D/g, '');
+
+        if (!raw) {
+          cell.value = '';
+          cell.classList.remove('otp-filled');
+          syncHidden();
+          return;
+        }
+
+        // 取第一個數字（正常情況 raw.length===1；防呆：取首碼）
+        const digit = raw[0];
+        cell.value = digit;
+        cell.classList.add('otp-filled');
+        cell.classList.add('otp-pop');
+        setTimeout(() => cell.classList.remove('otp-pop'), 200);
+        syncHidden();
+
+        if (i < 5) {
+          moveFocus(i + 1);
+        } else {
+          const all = syncHidden();
+          if (/^\d{6}$/.test(all)) setTimeout(() => submitGuestToken(), 0);
+        }
+      });
+
+      // paste：在任何格子貼上整段驗證碼
+      cell.addEventListener('paste', e => {
         e.preventDefault();
-        focusCell(i);
+        const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+        if (!pasted) return;
+        pasted.split('').forEach((d, j) => {
+          if (cells[j]) { cells[j].value = d; cells[j].classList.add('otp-filled'); }
+        });
+        moveFocus(Math.min(pasted.length, 5));
+        const all = syncHidden();
+        if (/^\d{6}$/.test(all)) setTimeout(() => submitGuestToken(), 0);
       });
     });
 
-    // keyboard input on hidden field
-    hidden.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { submitGuestToken(); return; }
-
-      if (e.key === 'Backspace') {
-        e.preventDefault();
-        if (digits[activeIdx]) {
-          digits[activeIdx] = '';
-          render(activeIdx);
-        } else if (activeIdx > 0) {
-          digits[activeIdx - 1] = '';
-          render(activeIdx - 1);
-        }
-        return;
-      }
-      if (e.key === 'ArrowLeft' && activeIdx > 0) { e.preventDefault(); focusCell(activeIdx - 1); return; }
-      if (e.key === 'ArrowRight' && activeIdx < 5) { e.preventDefault(); focusCell(activeIdx + 1); return; }
-    });
-
-    hidden.addEventListener('input', e => {
-      // Handle paste or autocomplete filling multiple digits at once
-      const raw = (hidden.value || '').replace(/\D/g,'').slice(0, 6);
-      if (raw.length > 1) {
-        digits = raw.padEnd(6,'').split('').slice(0,6);
-        hidden.value = raw;
-        const nextEmpty = digits.findIndex(d => !d);
-        render(nextEmpty < 0 ? 5 : nextEmpty);
-        if (raw.length === 6) submitGuestToken();
-        return;
-      }
-      // single char via input event (some mobile keyboards)
-      const ch = raw.slice(-1);
-      if (ch && /\d/.test(ch)) {
-        digits[activeIdx] = ch;
-        const cell = cells[activeIdx];
-        cell.classList.add('otp-pop');
-        setTimeout(() => cell.classList.remove('otp-pop'), 200);
-        const next = activeIdx < 5 ? activeIdx + 1 : 5;
-        render(next);
-        if (digits.every(d => d)) submitGuestToken();
-      }
-      hidden.value = digits.join('');
-    });
-
-    // expose reset for ownerSignOut / openOwnerLoginOverlay
+    // expose reset
     window._otpReset = function() {
-      digits = ['','','','','',''];
-      hidden.value = '';
-      render(0);
+      cells.forEach(c => { c.value = ''; c.classList.remove('otp-filled','otp-error','otp-pop'); });
+      if (hiddenInput) hiddenInput.value = '';
       focusCell(0);
     };
 
-    // expose error flash for submitGuestToken failure
+    // expose error flash
     window._otpFlashError = flashError;
 
-    render(0);
+    // auto-focus 第一格
+    focusCell(0);
 
-    // auto-focus when lock screen opens
+    // 當 overlay 重新顯示時，自動聚焦第一格
     const observer = new MutationObserver(() => {
       const overlay = document.getElementById('ownerLoginOverlay');
       if (overlay && overlay.style.display !== 'none') {
@@ -4392,6 +4424,7 @@ async function submitGuestToken() {
   } else {
     initOtp();
   }
+  window._initOtpFn = initOtp;
 })();
 
 function setApiStatus(type, msg) {
@@ -6205,8 +6238,8 @@ async function init() {
     // Safety net：每秒輪詢，涵蓋極端時序差的情況
     const _safetyTimer = setInterval(() => {
       if (window._fbUid || _initResolved) { clearInterval(_safetyTimer); resolve(); }
-    }, 1000);
-    setTimeout(() => { clearInterval(_safetyTimer); if (window._fbUid) resolve(); }, 30000);
+    }, 500);
+    setTimeout(() => { clearInterval(_safetyTimer); resolve(); }, 30000);
   });
 
   {
