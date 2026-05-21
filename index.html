@@ -3916,6 +3916,13 @@ function openOwnerLoginOverlay() {
 window.openOwnerLoginOverlay = openOwnerLoginOverlay;
 
 function closeOwnerLoginOverlay() {
+  // 守門：只有通過驗證才能關閉鎖屏
+  const isOwner = window._fbIsOwner === true;
+  const isGuest = window._fbGuestSessionActive === true && !!window._fbUid;
+  if (!isOwner && !isGuest) {
+    console.warn('[overlay] 嘗試關閉鎖屏但未通過驗證，攔截。');
+    return;
+  }
   const el = document.getElementById('ownerLoginOverlay');
   if (!el) return;
   el.classList.add('hiding');
@@ -6261,7 +6268,8 @@ async function init() {
     const _safetyTimer = setInterval(() => {
       if (window._fbUid || _initResolved) { clearInterval(_safetyTimer); resolve(); }
     }, 500);
-    setTimeout(() => { clearInterval(_safetyTimer); resolve(); }, 30000);
+    // 30 秒後只有在已驗證的情況下才 resolve，否則繼續等待
+    setTimeout(() => { clearInterval(_safetyTimer); if (window._fbUid || _initResolved) resolve(); }, 30000);
   });
 
   {
