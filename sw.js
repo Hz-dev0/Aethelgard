@@ -1,11 +1,11 @@
 const _swVersion = new URL(location.href).searchParams.get('v') || 'v5';
-const CACHE_NAME = 'innerflow-' + _swVersion;
+const CACHE_NAME = 'Aethelgard-' + _swVersion;
 
 const ASSETS = [
-  '/Innerflow/',
-  '/Innerflow/index.html',
-  '/Innerflow/manifest.json',
-  '/Innerflow/icon.png'
+  '/Aethelgard/',
+  '/Aethelgard/index.html',
+  '/Aethelgard/manifest.json',
+  '/Aethelgard/icon.png'
 ];
 
 self.addEventListener('install', e => {
