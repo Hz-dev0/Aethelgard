@@ -1,6 +1,6 @@
 {
-  "name": "內流 InnerFlow",
-  "short_name": "InnerFlow",
+  "name": "Aethelgard",
+  "short_name": "Aethelgard",
   "description": "為內驅力而生的任務工具",
   "start_url": ".",
   "display": "standalone",
@@ -9,13 +9,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://hz-dev0.github.io/Innerflow/icon.png",
+      "src": "https://hz-dev0.github.io/Aethelgard/icon.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://hz-dev0.github.io/Innerflow/icon.png",
+      "src": "https://hz-dev0.github.io/Aethelgard/icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
