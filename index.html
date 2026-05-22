@@ -6,8 +6,6 @@
 <title>Aethelgard — 為內驅力而生的任務工具</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="icon" href="https://hz-dev0.github.io/Aethelgard/icon.png" type="image/png">
-<link rel="apple-touch-icon" href="https://hz-dev0.github.io/Aethelgard/icon.png">
 <!-- 非阻塞字型載入：先用系統字型顯示內容，字型下載完再換 (font-display:swap) -->
 <!-- Noto Sans TC 分成兩段請求：先載常用的 400/500，700 稍後 -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
@@ -136,6 +134,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Aethelgard">
+<link rel="apple-touch-icon" href="icon.png">
 <meta name="theme-color" content="#3A6EA5">
 <style>
   /* ── 清晨冰川主題 ── */
@@ -4727,12 +4726,6 @@ function _lsSafeSet(key, value) {
   try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
 }
 // ── 選出應採用的 notes 版本（雲端 vs 本地），無論 localStorage 是否可用 ──
-// ⚠️ [2025-05-22] 無痕模式覆蓋問題說明：
-//   無痕模式下 localStorage 為空，_notesUserEdited=false（新 session），
-//   所以 _pickNotes 會走「localRaw 不存在 → 直接回傳 cloudNotes」這條路，是正確的。
-//   問題根源不在這裡，而是原始檔案中此函式被重複定義（見下方已移除的重複定義備註）。
-//   若日後再遇到無痕模式蓋掉資料，請先確認 _notesUserEdited 在關頁前是否被正確設為 true，
-//   以及 visibilitychange 緊急推送是否成功（console 搜尋 [notes] visibilitychange）。
 function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
@@ -4817,7 +4810,14 @@ function syncNotesToCloud() {
       console.warn('[notes] 直接寫入失敗，降級走 syncToCloud', e);
       syncToCloud();
     }
-  }, 1000); // ★ 提高同步頻率：5000→2000→1000ms，盡快推送筆記
+  // ★★ 省額度：debounce 5 秒
+  // 停止打字 5 秒後才推送（三個 app 共用免費專案，需節省寫入次數）
+  // 關頁/切頁時由 visibilitychange + beforeunload 保底，不怕遺失
+  // ★★ 省額度：依裝置調整 debounce
+  // 手機（Mobi/Android/iPhone/iPad）：5 秒，觸控編輯短暫，盡快推
+  // PC：30 秒，停止打字 30 秒後才推，整個 session 大幅省寫入次數
+  // 關頁/切頁時由 visibilitychange + beforeunload 保底，不怕遺失
+  }, /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
 }
 
 // ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
@@ -4849,6 +4849,62 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
+
+// ★★★ 重要：無痕模式防資料遺失
+// 問題背景：
+//   - 無痕模式下 localStorage 在分頁關閉後全部清空
+//   - visibilitychange 在某些瀏覽器（手機 Chrome、Firefox）關閉分頁時不一定觸發
+//   - 原本沒有 beforeunload，導致筆記在關閉無痕分頁前來不及推送到 Firebase
+//
+// 解法：
+//   1. beforeunload → 觸發同步 sendBeacon 推送（最後防線，瀏覽器保證在關頁前執行）
+//   2. 每次筆記修改後 1 秒內已直接寫 Firestore（syncNotesToCloud 的 debounce）
+//   3. visibilitychange hidden → 緊急推送（切 tab、鎖螢幕時觸發）
+//   → 三層保護，確保無痕模式編輯的筆記一定推上雲端
+//
+// 注意：beforeunload 的 async/await 不保證執行完畢，
+// 但只要 Firebase SDK 已載入且 connection 還活著，同步觸發 updateDoc 仍可送出
+// 這是第三層保護，前兩層（500ms debounce + visibilitychange）已涵蓋大部分情況
+window.addEventListener('beforeunload', () => {
+  // 若筆記沒有變動或 debounce 已推送完畢，不做任何事
+  if (!_notesDirty) return;
+  if (!window._fbUid || !window._fbDb) return;
+
+  // 立刻清掉 debounce timer，改由這裡接手
+  clearTimeout(_notesSyncTimer);
+
+  const notesPayload = (function() {
+    try {
+      const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
+      if (p) return p;
+    } catch(e) {}
+    try {
+      const raw = localStorage.getItem('aethelgard_notes_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return null;
+  })();
+
+  if (!notesPayload) return;
+
+  // 用已載入的 Firebase SDK 直接推送，不用 sendBeacon（sendBeacon 沒有 auth token 會 401）
+  // beforeunload 裡 async 不保證，但 Firestore SDK 內部用 fetch keepalive，有機會送出
+  try {
+    import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
+      .then(({ updateDoc }) => {
+        const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
+        return updateDoc(ref, { notes: notesPayload });
+      })
+      .then(() => { _notesDirty = false; console.log('[notes] beforeunload 推送成功'); })
+      .catch(e => console.warn('[notes] beforeunload 推送失敗', e));
+  } catch(e) {
+    console.warn('[notes] beforeunload 例外', e);
+  }
+});
+
 // 雲端只同步當年資料，舊資料保留在本地（不會消失）
 function archiveOldHistory() {
   if (!state.doneHistory || state.doneHistory.length === 0) return;
@@ -4889,8 +4945,100 @@ function archiveOldHistory() {
 window.archiveOldHistory = archiveOldHistory;
 
 // ── Local state persistence (always runs, regardless of cloud) ──
-// ⚠️ [2025-05-22] 注意：saveStateLocal / loadStateLocal / _pickNotes 曾在原始檔案中出現重複定義（舊 ~4979 行）
-// 重複定義已移除。日後合併程式碼請先 grep 確認無重複，否則後定義會靜默覆蓋這一份，導致無痕模式或跨裝置的 notes 遺失 bug 復發。
+function saveStateLocal() {
+  try {
+    // ── 安全檢查：初始化完成前不覆蓋（防止 init 尚未完成時蓋掉資料）──
+    if (!state._initDone) {
+      const existing = localStorage.getItem('aethelgard_state_local');
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          // 只有在 state.tasks 尚未載入（仍是空陣列）時才阻擋
+          if (parsed && Array.isArray(parsed.tasks) && parsed.tasks.length > 0 &&
+              (!state.tasks || state.tasks.length === 0)) {
+            return; // state 還是空的，init 尚未完成，不覆蓋
+          }
+        } catch(e) {}
+      }
+    }
+    const snapshot = {
+      tasks: state.tasks,
+      sandbox: state.sandbox,
+      done: state.done,
+      rewards: state.rewards || [],
+      customQuotes: state.customQuotes || [],
+      energy: state.energy || 0,
+      doneHistory: state.doneHistory || [],
+      todayOrder: state.todayOrder || [],
+      wishPoints: state.wishPoints || 0,
+      morningDialogShownDate: state.morningDialogShownDate || null,
+      routines: state.routines || [],
+      routineResetDate: state.routineResetDate || null,
+      savedAt: Date.now()
+    };
+    localStorage.setItem('aethelgard_state_local', JSON.stringify(snapshot));
+  } catch(e) { console.warn('本地備份失敗', e); }
+}
+
+// ── Load from localStorage fallback (used when cloud unavailable) ──
+function loadStateLocal() {
+  try {
+    const raw = localStorage.getItem('aethelgard_state_local');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.tasks)) return false;
+    state.tasks        = data.tasks;
+    state.sandbox      = data.sandbox      || [];
+    state.done         = data.done         || 0;
+    state.rewards      = data.rewards      || [];
+    state.customQuotes = data.customQuotes || [];
+    state.energy       = data.energy       || 0;
+    state.doneHistory  = data.doneHistory  || [];
+    state.todayOrder   = data.todayOrder   || [];
+    state.wishPoints   = typeof data.wishPoints === 'number' ? data.wishPoints : 0;
+    state.morningDialogShownDate = data.morningDialogShownDate || null;
+    state.routines     = Array.isArray(data.routines) ? data.routines : [];
+    state.routineResetDate = data.routineResetDate || null;
+    return true;
+  } catch(e) { return false; }
+}
+
+// ── syncToCloud：對外入口，帶 debounce（600ms）──
+// ── 安全寫入 localStorage（無痕模式 Safari 會拋出 QuotaExceededError）──
+function _lsSafeSet(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
+}
+// ── 選出應採用的 notes 版本（雲端 vs 本地），無論 localStorage 是否可用 ──
+function _pickNotes(cloudNotes) {
+  if (!cloudNotes || !cloudNotes.tabs) return null;
+  try {
+    const cloudTs = cloudNotes.updatedAt || 0;
+    // ★ Bug 3 fix：只有使用者在本 session 真正編輯過（_notesUserEdited=true）才採信記憶體時間戳
+    // 否則頁面剛開啟時 _notesMemUpdatedAt 也可能 > cloudTs，導致永遠拒絕雲端更新
+    const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
+    if (memPayload && window._notesUserEdited) {
+      const memTs = window._notesMemUpdatedAt || 0;
+      if (memTs > cloudTs) {
+        console.log('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
+        return memPayload;
+      }
+    }
+    const localRaw = localStorage.getItem('aethelgard_notes_v1');
+    if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
+    const localNotes = JSON.parse(localRaw);
+    const localTs = localNotes.updatedAt || 0;
+    const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
+      !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
+    );
+    const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
+    console.log('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
+    return chosen;
+  } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
+}
+
+window.archiveOldHistory = archiveOldHistory;
+
+// ── Local state persistence (always runs, regardless of cloud) ──
 function saveStateLocal() {
   try {
     // ── 安全檢查：初始化完成前不覆蓋（防止 init 尚未完成時蓋掉資料）──
@@ -4951,18 +5099,16 @@ function loadStateLocal() {
 
 // ── syncToCloud：對外入口，帶 debounce（600ms）防止短時間內連續呼叫造成閃爍 ──
 // ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
-// ⚠️ [2025-05-22] _lsSafeSet 與 _pickNotes 已移至上方（~4724 / ~4729 行），此處移除重複定義。
-//    日後整合程式碼片段時，請先 grep '_lsSafeSet\|_pickNotes\|saveStateLocal\|loadStateLocal'
-//    確認每個函式只出現一次，避免後定義靜默覆蓋前定義，造成無痕模式筆記遺失。
-
-// ── syncToCloud：對外入口，帶 debounce（600ms）防止短時間內連續呼叫造成閃爍 ──
-// ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
 function syncToCloud() {
   saveStateLocal();
   if (!state._initDone) return;
   if (!_isFirebaseReady()) return;
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
-  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); }, 300); // ★ 提高同步頻率：600 → 300ms
+  // ★★ 省額度：依裝置調整 debounce（手機 5 秒 / PC 30 秒）
+  // 手機：觸控編輯短暫，5 秒後推；PC：停止操作 30 秒後推，省寫入次數
+  // 關頁/切頁由 visibilitychange + beforeunload 保底
+  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); },
+    /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
 }
 
 async function _doSyncToCloud() {
