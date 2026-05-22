@@ -9855,8 +9855,8 @@ window._notesGetSyncPayload = function() {
   return {
     tabs: notesFolderData,
     lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0,
-    lastViewedTab:  typeof window._notesLastViewedTab  === 'number' ? window._notesLastViewedTab  : (notesTabIndex || 0),
-    lastViewedPage: typeof window._notesLastViewedPage === 'number' ? window._notesLastViewedPage : (notesFolderData[notesTabIndex]?.currentPage ?? 0),
+    lastViewedTab:  notesTabIndex,
+    lastViewedPage: notesFolderData[notesTabIndex]?.currentPage ?? 0,
     updatedAt: window._notesMemUpdatedAt || 0
   };
 };
@@ -9918,9 +9918,9 @@ function notesSave() {
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
       tabs: notesFolderData,
       lastTab: notesTabIndex,
-      // ★ 記錄「最後停留」的 tab/page，切回筆記頁時恢復到這裡
-      lastViewedTab:  typeof window._notesLastViewedTab  === 'number' ? window._notesLastViewedTab  : notesTabIndex,
-      lastViewedPage: typeof window._notesLastViewedPage === 'number' ? window._notesLastViewedPage : (notesFolderData[notesTabIndex]?.currentPage ?? 0),
+      // ★ 直接存當下位置，確保重整後也能回到正確的 tab/page
+      lastViewedTab:  notesTabIndex,
+      lastViewedPage: notesFolderData[notesTabIndex]?.currentPage ?? 0,
       updatedAt: _saveTs
     }));
   } catch(e) {}
@@ -9956,10 +9956,10 @@ function notesLoad() {
         return;
       }
       notesFolderData = d.tabs;
-      notesTabIndex = Math.min(d.lastTab || 0, notesFolderData.length - 1);
-      if (typeof d.lastViewedTab === 'number') {
-        window._notesLastViewedTab  = Math.min(d.lastViewedTab, notesFolderData.length - 1);
-        window._notesLastViewedPage = d.lastViewedPage ?? 0;
+      notesTabIndex = Math.min(typeof d.lastViewedTab === 'number' ? d.lastViewedTab : (d.lastTab || 0), notesFolderData.length - 1);
+      const _restoredTab = notesFolderData[notesTabIndex];
+      if (_restoredTab && typeof d.lastViewedPage === 'number') {
+        _restoredTab.currentPage = Math.min(d.lastViewedPage, (_restoredTab.pages?.length || 1) - 1);
       }
       _notesLoaded = true;
     }
@@ -10000,11 +10000,10 @@ function notesLoadFromData(notes) {
     notesTabIndex = Math.min(notesTabIndex, notesFolderData.length - 1);
   } else {
     notesFolderData = notes.tabs;
-    notesTabIndex = Math.min(notes.lastTab || 0, notesFolderData.length - 1);
-    // 雲端帶來的 lastViewed：只在本 session 尚未有「離開紀錄」時才採用
-    if (!window._notesViewedThisSession && typeof notes.lastViewedTab === 'number') {
-      window._notesLastViewedTab  = Math.min(notes.lastViewedTab, notesFolderData.length - 1);
-      window._notesLastViewedPage = notes.lastViewedPage ?? 0;
+    notesTabIndex = Math.min(typeof notes.lastViewedTab === 'number' ? notes.lastViewedTab : (notes.lastTab || 0), notesFolderData.length - 1);
+    const _restoredTab = notesFolderData[notesTabIndex];
+    if (_restoredTab && typeof notes.lastViewedPage === 'number') {
+      _restoredTab.currentPage = Math.min(notes.lastViewedPage, (_restoredTab.pages?.length || 1) - 1);
     }
   }
 
@@ -10030,9 +10029,6 @@ function notesClearAll() {
   _notesLoaded = false;
   window._notesMemUpdatedAt = 0;
   window._notesUserEdited = false;
-  window._notesLastViewedTab  = undefined;
-  window._notesLastViewedPage = undefined;
-  window._notesViewedThisSession = false;
   notesFolderData = [{ name: '筆記', pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 }];
   notesTabIndex = 0;
   // 3. 直接清空所有筆記相關 DOM（無論是否可見）
@@ -10805,14 +10801,11 @@ function notesShow() {
     notesLoad();
   }
   notesEnsureDefaults();
-  // ★ 恢復到上次離開時停留的 tab 和 page
-  if (typeof window._notesLastViewedTab === 'number' && notesFolderData.length > 0) {
-    const targetTab = Math.min(window._notesLastViewedTab, notesFolderData.length - 1);
-    notesTabIndex = targetTab;
-    const tab = notesFolderData[targetTab];
-    if (tab && typeof window._notesLastViewedPage === 'number') {
-      tab.currentPage = Math.min(window._notesLastViewedPage, tab.pages.length - 1);
-    }
+  // ★ 恢復到上次停留的 tab 和 page（直接由 notesLoad/notesLoadFromData 寫入 notesTabIndex 和 currentPage）
+  if (notesFolderData.length > 0) {
+    notesTabIndex = Math.min(notesTabIndex, notesFolderData.length - 1);
+    const tab = notesFolderData[notesTabIndex];
+    if (tab) tab.currentPage = Math.min(tab.currentPage ?? 0, tab.pages.length - 1);
   }
   notesRenderTabs();
   // Show the import/export button in the header
@@ -10822,10 +10815,7 @@ function notesShow() {
 
 function notesHide() {
   notesFlush();
-  // ★ 離開筆記頁時，記錄此刻停留的 tab 和 page
-  window._notesLastViewedTab  = notesTabIndex;
-  window._notesLastViewedPage = notesFolderData[notesTabIndex]?.currentPage ?? 0;
-  window._notesViewedThisSession = true; // 本 session 已有本地停留紀錄，不再採用雲端的
+  // ★ 離開時直接 save，notesSave() 會把當下 notesTabIndex 和 currentPage 存入
   clearTimeout(notesSaveTimer);
   notesSave();
   _notesIsVisible = false;
