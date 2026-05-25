@@ -7909,7 +7909,8 @@ function addTask() {
   _applyRecurUI('new', 'off');
   const rewardField = document.getElementById('newTaskReward');
   if (rewardField) rewardField.value = '';
-  _setGoalBtn('技能');
+  // ★ Fix：新增後保留上次選的分類，方便連續新增同類任務（不重置回預設「技能」）
+  // _setGoalBtn('技能');  ← 移除，保持現有選擇
   _setEnergyBtn('easy');
   // 不關閉 modal，清空後重新 focus，讓使用者可以連續新增（按取消或 Esc 離開）
   setTimeout(() => {
