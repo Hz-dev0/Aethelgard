@@ -3766,6 +3766,8 @@ function _startRealtimeListener(uid) {
     });
 
     renderEnergyDots(); renderSandbox(); renderAll(); initRoutines();
+    // ★ Fix：雲端推送後需重新檢查排定日期任務，確保幾天前設定「今天」的任務自動排入今日面板
+    checkTaskDates();
     if (dot) dot.className = 'sync-dot synced';
     // ★ Fix：訪客模式下 snapshot 可能比 loadFromCloud 更早拿到資料，
     //   此時 closeOwnerLoginOverlay 尚未被 init() 呼叫，需在這裡主動關閉載入遮罩。
@@ -9021,6 +9023,8 @@ function saveEdit() {
     t.recurInterval = 0;
   }
   closeModal('editModal');
+  // ★ Fix：編輯儲存後呼叫 checkTaskDates，確保日期設為今天（或已到期）的任務立即排入今日面板
+  checkTaskDates();
   renderTasks(); renderStats();
   showToast('✦ 任務已更新');
   syncToCloud();
@@ -9608,6 +9612,8 @@ function _applyDateChange(t, newDate) {
     t.status = null;
     t._scheduledByDate = false;
   }
+  // ★ Fix：日期變更後呼叫 checkTaskDates，確保設為今天（或已到期）的任務立即排入今日面板
+  checkTaskDates();
   renderTasks(); renderStats();
   showToast(newDate ? `📅 日期已更新為 ${newDate}` : '📅 日期已清除');
   syncToCloud();
