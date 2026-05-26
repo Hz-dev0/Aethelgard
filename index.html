@@ -4830,6 +4830,15 @@ function syncNotesToCloud() {
 
 // ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    // ★ 若有待推送的任務/例行任務變動（debounce 還沒送出），立即強制推送
+    if (typeof _syncDebounceTimer !== 'undefined' && _syncDebounceTimer !== null) {
+      clearTimeout(_syncDebounceTimer);
+      _syncDebounceTimer = null;
+      if (typeof _markSyncWrite === 'function') _markSyncWrite();
+      if (typeof _doSyncToCloud === 'function') _doSyncToCloud();
+    }
+  }
   if (document.visibilityState === 'hidden' && _notesDirty) {
     clearTimeout(_notesSyncTimer);
     const notesPayload = (function() {
@@ -4874,6 +4883,16 @@ document.addEventListener('visibilitychange', () => {
 // 但只要 Firebase SDK 已載入且 connection 還活著，同步觸發 updateDoc 仍可送出
 // 這是第三層保護，前兩層（500ms debounce + visibilitychange）已涵蓋大部分情況
 window.addEventListener('beforeunload', () => {
+  // ★ 緊急保底：若有待同步的任務狀態變動（debounce 還沒送出），強制同步
+  if (window._fbUid && window._fbDb && typeof state !== 'undefined' && state._initDone) {
+    if (_syncDebounceTimer !== null) {
+      clearTimeout(_syncDebounceTimer);
+      _syncDebounceTimer = null;
+    }
+    // 同步呼叫（不 await，瀏覽器不保證 async，但 Firestore SDK 用 fetch keepalive 有機會送出）
+    _doSyncToCloud();
+  }
+
   // 若筆記沒有變動或 debounce 已推送完畢，不做任何事
   if (!_notesDirty) return;
   if (!window._fbUid || !window._fbDb) return;
