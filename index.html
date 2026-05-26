@@ -3714,7 +3714,11 @@ function _startRealtimeListener(uid) {
       } catch(e) { return 0; }
     })();
     const notesUnchanged = remoteNotesTs <= localNotesTs;
-    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints && notesUnchanged) { console.log('[snapshot] ❌ 資料一致（含筆記），略過'); return; }
+    // ★ 也比對 routines（例行任務完成狀態），避免只改 routines/wishPoints 時被誤判為一致
+    const remoteRoutinesStr = JSON.stringify((data.routines || []).map(r => ({ id: r.id, done: !!r.done, doneDate: r.doneDate || null })).sort((a,b) => a.id - b.id));
+    const localRoutinesStr  = JSON.stringify((state.routines || []).map(r => ({ id: r.id, done: !!r.done, doneDate: r.doneDate || null })).sort((a,b) => a.id - b.id));
+    const routinesUnchanged = remoteRoutinesStr === localRoutinesStr;
+    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints && notesUnchanged && routinesUnchanged) { console.log('[snapshot] ❌ 資料一致（含筆記＋例行任務），略過'); return; }
     if (!notesUnchanged) console.log('[snapshot] 筆記有更新 remote:', remoteNotesTs, 'local:', localNotesTs);
 
     console.log('[snapshot] ✅ 套用遠端資料');
@@ -5315,6 +5319,7 @@ async function syncDotClicked() {
   _pendingSync = false;
   _syncRetryCount = 0;
   _notesDirty = true; // 手動同步強制帶上 notes，確保完整推送
+  _markSyncWrite(); // 先抑制 snapshot，避免推送中途被舊資料覆蓋
   if (typeof showToast === 'function') showToast('☁️ 同步中…');
   const dot = document.getElementById('syncDot');
   // 直接執行並等待結果，讓 toast 反映最終狀態
@@ -5561,6 +5566,7 @@ function allocateWishPoint(id) {
   r.allocatedPoints++;
   checkRewardUnlocks();
   renderRewards();
+  _markSyncWrite();
   syncToCloud();
 }
 
@@ -5569,6 +5575,7 @@ function deallocateWishPoint(id) {
   if (!r || !r.allocatedPoints || r.allocatedPoints <= 0) return;
   r.allocatedPoints--;
   renderRewards();
+  _markSyncWrite();
   syncToCloud();
 }
 
@@ -7593,8 +7600,9 @@ function toggleTask(id) {
   renderTree();
   renderTodayPanel();
   saveStateLocal(); // 確保 wishPoints 等狀態在 cloud sync 前已寫入本地
-  // ── Bug 1 fix：任務切換後立即推送，不走 debounce，避免 snapshot 在推送前用舊資料覆蓋 ──
+  // ── Bug fix：先標記忽略視窗，再推送，避免 snapshot 在 _fbSave() await 期間用舊資料覆蓋 ──
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
+  _markSyncWrite(); // 立即抑制 snapshot，不等 _fbSave() 完成
   _doSyncToCloud();
 }
 
@@ -11286,6 +11294,7 @@ function toggleRoutineItem(id) {
     saveStateLocal();   // 立即寫 localStorage，不等 async syncToCloud
     renderRewards();
     checkRandomMissionProgress();
+    _markSyncWrite(); // 抑制 snapshot，避免碎片被舊資料覆蓋
     syncToCloud();
     showToast('💎 +1 願望碎片');
   } else {
@@ -11293,6 +11302,7 @@ function toggleRoutineItem(id) {
     state.wishPoints = Math.max(0, state.wishPoints - 1);
     saveStateLocal();   // 立即寫 localStorage，不等 async syncToCloud
     renderRewards();
+    _markSyncWrite(); // 抑制 snapshot，避免碎片被舊資料覆蓋
     syncToCloud();
     showToast('💎 -1 願望碎片');
   }
