@@ -3778,9 +3778,11 @@ function _startRealtimeListener(uid) {
   });
 }
 
-// syncToCloud 寫入時，短暫標記「忽略接下來 3 秒的 snapshot」避免自我觸發
+// syncToCloud 寫入時，短暫標記「忽略接下來的 snapshot」避免自我觸發
 function _markSyncWrite() {
-  _snapshotIgnoreUntil = Date.now() + 2000; // ★ Bug 4 fix：從 5000 縮短到 2000ms，減少錯過對方更新的時間窗口
+  // 忽略視窗需大於最長 debounce（PC 30s）+ 網路延遲緩衝，避免自己的寫入還沒到 Firebase
+  // 就被 snapshot 用舊資料覆蓋（導致勾選後任務「回來」的根本原因）
+  _snapshotIgnoreUntil = Date.now() + 35000;
 }
 
 // ── Firebase 就緒回呼（由 module script 呼叫）──
@@ -5005,101 +5007,7 @@ function loadStateLocal() {
   } catch(e) { return false; }
 }
 
-// ── syncToCloud：對外入口，帶 debounce（600ms）──
-// ── 安全寫入 localStorage（無痕模式 Safari 會拋出 QuotaExceededError）──
-function _lsSafeSet(key, value) {
-  try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
-}
-// ── 選出應採用的 notes 版本（雲端 vs 本地），無論 localStorage 是否可用 ──
-function _pickNotes(cloudNotes) {
-  if (!cloudNotes || !cloudNotes.tabs) return null;
-  try {
-    const cloudTs = cloudNotes.updatedAt || 0;
-    // ★ Bug 3 fix：只有使用者在本 session 真正編輯過（_notesUserEdited=true）才採信記憶體時間戳
-    // 否則頁面剛開啟時 _notesMemUpdatedAt 也可能 > cloudTs，導致永遠拒絕雲端更新
-    const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
-    if (memPayload && window._notesUserEdited) {
-      const memTs = window._notesMemUpdatedAt || 0;
-      if (memTs > cloudTs) {
-        console.log('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
-        return memPayload;
-      }
-    }
-    const localRaw = localStorage.getItem('aethelgard_notes_v1');
-    if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
-    const localNotes = JSON.parse(localRaw);
-    const localTs = localNotes.updatedAt || 0;
-    const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
-      !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
-    );
-    const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
-    console.log('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
-    return chosen;
-  } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
-}
-
-window.archiveOldHistory = archiveOldHistory;
-
-// ── Local state persistence (always runs, regardless of cloud) ──
-function saveStateLocal() {
-  try {
-    // ── 安全檢查：初始化完成前不覆蓋（防止 init 尚未完成時蓋掉資料）──
-    if (!state._initDone) {
-      const existing = localStorage.getItem('aethelgard_state_local');
-      if (existing) {
-        try {
-          const parsed = JSON.parse(existing);
-          // 只有在 state.tasks 尚未載入（仍是空陣列）時才阻擋
-          if (parsed && Array.isArray(parsed.tasks) && parsed.tasks.length > 0 &&
-              (!state.tasks || state.tasks.length === 0)) {
-            return; // state 還是空的，init 尚未完成，不覆蓋
-          }
-        } catch(e) {}
-      }
-    }
-    const snapshot = {
-      tasks: state.tasks,
-      sandbox: state.sandbox,
-      done: state.done,
-      rewards: state.rewards || [],
-      customQuotes: state.customQuotes || [],
-      energy: state.energy || 0,
-      doneHistory: state.doneHistory || [],
-      todayOrder: state.todayOrder || [],
-      wishPoints: state.wishPoints || 0,
-      morningDialogShownDate: state.morningDialogShownDate || null,
-      routines: state.routines || [],
-      routineResetDate: state.routineResetDate || null,
-      savedAt: Date.now()
-    };
-    localStorage.setItem('aethelgard_state_local', JSON.stringify(snapshot));
-  } catch(e) { console.warn('本地備份失敗', e); }
-}
-
-// ── Load from localStorage fallback (used when cloud unavailable) ──
-function loadStateLocal() {
-  try {
-    const raw = localStorage.getItem('aethelgard_state_local');
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    if (!data || !Array.isArray(data.tasks)) return false;
-    state.tasks        = data.tasks;
-    state.sandbox      = data.sandbox      || [];
-    state.done         = data.done         || 0;
-    state.rewards      = data.rewards      || [];
-    state.customQuotes = data.customQuotes || [];
-    state.energy       = data.energy       || 0;
-    state.doneHistory  = data.doneHistory  || [];
-    state.todayOrder   = data.todayOrder   || [];
-    state.wishPoints   = typeof data.wishPoints === 'number' ? data.wishPoints : 0;
-    state.morningDialogShownDate = data.morningDialogShownDate || null;
-    state.routines     = Array.isArray(data.routines) ? data.routines : [];
-    state.routineResetDate = data.routineResetDate || null;
-    return true;
-  } catch(e) { return false; }
-}
-
-// ── syncToCloud：對外入口，帶 debounce（600ms）防止短時間內連續呼叫造成閃爍 ──
+// ── syncToCloud：對外入口，帶 debounce 防止短時間內連續呼叫造成閃爍 ──
 // ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
 function syncToCloud() {
   saveStateLocal();
@@ -7423,25 +7331,27 @@ function renderTodayPanel() {
   const todayStr = localDateStr();
   // 有效今日：重置時間決定，00:00~重置時間之間仍屬上個週期
   const effectiveTodayStr = localDateStr(new Date(getLastResetTimestamp()));
-  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && !t.done && t.status !== 'cancelled');
-  // 上個週期標記但未完成的任務（scheduledFor >= effectiveTodayStr 代表還在本週期，正常顯示）
-  // scheduledFor < effectiveTodayStr 才是真正的跨週期逾期，但仍顯示在面板讓使用者處理
+  // ── Bug 2 fix：不再用 !t.done 過濾，讓今日已完成任務也顯示在面板 ──
+  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled');
   const overdueTasks = state.tasks.filter(t =>
     t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled'
   );
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
 
-  // Apply saved order from state.todayOrder
+  // Apply saved order: undone first (by saved order), done sinks to bottom
   if (!state.todayOrder) state.todayOrder = [];
   const orderMap = {};
   state.todayOrder.forEach((id, i) => { orderMap[id] = i; });
   allToday.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1; // 已完成沉底
     const oa = orderMap[a.id] !== undefined ? orderMap[a.id] : 9999;
     const ob = orderMap[b.id] !== undefined ? orderMap[b.id] : 9999;
     return oa - ob;
   });
 
-  if (countBadge) countBadge.textContent = allToday.length;
+  // badge 只顯示未完成數量
+  const undoneCount = allToday.filter(t => !t.done).length;
+  if (countBadge) countBadge.textContent = undoneCount;
 
   if (allToday.length === 0) {
     list.innerHTML = '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
@@ -7450,26 +7360,23 @@ function renderTodayPanel() {
   const goalIconMap = { 技能:'🌟', 自我:'🌿', 日常:'🏠', 任意:'🌈' };
   list.innerHTML = allToday.map((t, idx) => {
     const gIcon = goalIconMap[t.goal] || '●';
-    // 逾期：scheduledFor 比有效今日（重置時間）舊，且非預排
-    // 4/30的任務在4/30 04:00重置前不算逾期，重置後才顯示逾期
     const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;
-    // 預排：00:00~重置時間之間標記，銀色條
     const isPreSched = isPreScheduled(t) && !t.done;
     const overdueStyle = isOverdue ? 'border-color:rgba(192,86,90,0.3);background:rgba(192,86,90,0.04);' : '';
     const stripeColor = isOverdue ? 'var(--rose)' : isPreSched ? 'rgba(160,170,185,0.75)' : '#C9A227';
     const stripeTitle = isOverdue ? '逾期 — 點擊取消標記' : isPreSched ? '預排於重置後執行 — 點擊取消' : '今日處理中 — 點擊取消標記';
     return `<div class="today-task-chip${t.done ? ' done-chip' : ''}"
-      style="${overdueStyle}cursor:grab;position:relative;padding-left:18px;overflow:hidden"
+      style="${overdueStyle}cursor:${t.done ? 'default' : 'grab'};position:relative;padding-left:18px;overflow:hidden"
       data-idx="${idx}" data-id="${t.id}"
-      draggable="true"
+      draggable="${!t.done}"
       onclick="navigateToTask(${t.id})"
-      ondragstart="todayChipDragStart(event,${idx})"
-      ondragover="todayChipDragOver(event,${idx})"
-      ondrop="todayChipDrop(event,${idx})"
-      ondragend="todayChipDragEnd(event)"
-      title="點擊跳轉到此任務（可拖曳排序）">
+      ondragstart="${!t.done ? `todayChipDragStart(event,${idx})` : ''}"
+      ondragover="${!t.done ? `todayChipDragOver(event,${idx})` : ''}"
+      ondrop="${!t.done ? `todayChipDrop(event,${idx})` : ''}"
+      ondragend="${!t.done ? 'todayChipDragEnd(event)' : ''}"
+      title="${t.done ? '已完成 — 點擊跳轉任務' : '點擊跳轉到此任務（可拖曳排序）'}">
       ${!t.done ? `<div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${stripeColor};border-radius:3px 0 0 3px;opacity:0.85;cursor:pointer;transition:width 0.15s,opacity 0.15s;flex-shrink:0" title="${stripeTitle}" onclick="event.stopPropagation();setTaskStatus(${t.id},'none')" ></div>` : ''}
-      <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序">⠿</span>
+      <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序" style="${t.done ? 'visibility:hidden' : ''}">⠿</span>
       <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id})">${t.done ? '✓' : ''}</div>
       <span class="today-chip-goal">${gIcon}</span>
       <span class="today-chip-name" style="${isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(t.name)}</span>
@@ -7522,9 +7429,9 @@ function todayChipDragOver(e, idx) {
 function todayChipDrop(e, toIdx) {
   e.preventDefault();
   if (_todayDragIdx === null || _todayDragIdx === toIdx) return;
-  // Get current ordered task list for today
+  // ── Bug 4 fix：與 renderTodayPanel 邏輯完全對齊，確保拖曳後排序正確 ──
   const todayStr = localDateStr();
-  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && !t.done && t.status !== 'cancelled');
+  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled');
   const overdueTasks = state.tasks.filter(t => t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled');
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
 
@@ -7532,6 +7439,7 @@ function todayChipDrop(e, toIdx) {
   const orderMap = {};
   state.todayOrder.forEach((id, i) => { orderMap[id] = i; });
   allToday.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
     const oa = orderMap[a.id] !== undefined ? orderMap[a.id] : 9999;
     const ob = orderMap[b.id] !== undefined ? orderMap[b.id] : 9999;
     return oa - ob;
@@ -7662,6 +7570,12 @@ function toggleTask(id) {
     if (t.reward) { setTimeout(() => showInstantRewardPopup(t.reward), 2900); }
     // Recalculate done count (interval task stays in array as done)
     state.done = state.tasks.filter(x => x.done).length;
+    // ── Bug 2 fix：完成當下立即寫 doneHistory，不等每日重置，防止 snapshot 覆蓋後紀錄消失 ──
+    if (!state.doneHistory) state.doneHistory = [];
+    const _histKey = t.id + '_' + t.completedAt;
+    if (!state.doneHistory.some(h => h.id === _histKey)) {
+      state.doneHistory.push({ id: _histKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: t.recurring || false });
+    }
   } else {
     t.completedAt = null; // clear completion date when unchecking
     // ── 間隔重複任務撤銷：刪除已排好的下次 clone，還原本任務為未完成 ──
@@ -7679,7 +7593,9 @@ function toggleTask(id) {
   renderTree();
   renderTodayPanel();
   saveStateLocal(); // 確保 wishPoints 等狀態在 cloud sync 前已寫入本地
-  syncToCloud();
+  // ── Bug 1 fix：任務切換後立即推送，不走 debounce，避免 snapshot 在推送前用舊資料覆蓋 ──
+  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
+  _doSyncToCloud();
 }
 
 function showCelebration(task) {
