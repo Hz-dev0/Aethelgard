@@ -11221,12 +11221,15 @@ document.addEventListener('visibilitychange', async () => {
 function maybeResetRoutines() {
   const thisCycleResetTs = getLastResetTimestamp();
   const thisCycleResetStr = String(thisCycleResetTs);
-  // 同一週期只執行一次（同時檢查 in-memory 快取與 state）
-  if (_routineResetDate === thisCycleResetStr) return;
   // state.routineResetDate 向下相容：可能是舊的日期字串或新的時間戳字串
   const storedTs = state.routineResetDate && /^\d{10,}$/.test(state.routineResetDate)
     ? parseInt(state.routineResetDate) : 0;
-  if (storedTs >= thisCycleResetTs) {
+  // ★ Fix：即使 in-memory 快取說已重置，仍要檢查是否有從雲端讀回來的舊勾選狀態需要清除
+  // （LAST_RESET_KEY 本地已更新，但雲端 routines 仍是 done=true 的情況）
+  const hasStaleRoutines = Array.isArray(state.routines) &&
+    state.routines.some(it => it.done && it.doneTs && it.doneTs < thisCycleResetTs);
+  if (_routineResetDate === thisCycleResetStr && !hasStaleRoutines) return;
+  if (storedTs >= thisCycleResetTs && !hasStaleRoutines) {
     _routineResetDate = thisCycleResetStr;
     return;
   }
