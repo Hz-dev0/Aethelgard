@@ -6156,6 +6156,10 @@ function runDailyReset() {
   if (resetCount > 0 || toDelete.length > 0) {
     showToast(`🔁 ${resetCount} 個重複任務已重置，新的一天開始！`);
     syncToCloud();
+  } else {
+    // ★ Fix：即使普通任務無重置，例行任務重置後仍需推送 routines 狀態和 routineResetDate 到雲端
+    // 否則雲端保留舊的 done=true，下次從雲端讀取時例行任務看起來沒有重置
+    syncToCloud();
   }
   // Always re-render so interval clones scheduled for today appear in today panel
   renderAll();
