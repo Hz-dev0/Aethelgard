@@ -7470,7 +7470,7 @@ function renderTodayPanel() {
       title="點擊跳轉到此任務（可拖曳排序）">
       ${!t.done ? `<div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${stripeColor};border-radius:3px 0 0 3px;opacity:0.85;cursor:pointer;transition:width 0.15s,opacity 0.15s;flex-shrink:0" title="${stripeTitle}" onclick="event.stopPropagation();setTaskStatus(${t.id},'none')" ></div>` : ''}
       <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序">⠿</span>
-      <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id});renderTodayPanel()">${t.done ? '✓' : ''}</div>
+      <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id})">${t.done ? '✓' : ''}</div>
       <span class="today-chip-goal">${gIcon}</span>
       <span class="today-chip-name" style="${isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(t.name)}</span>
       ${t.taskDate && !t.done && !isOverdue ? (() => {
