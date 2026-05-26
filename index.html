@@ -4831,12 +4831,13 @@ function syncNotesToCloud() {
 // ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    // ★ 若有待推送的任務/例行任務變動（debounce 還沒送出），立即強制推送
-    if (typeof _syncDebounceTimer !== 'undefined' && _syncDebounceTimer !== null) {
-      clearTimeout(_syncDebounceTimer);
-      _syncDebounceTimer = null;
-      if (typeof _markSyncWrite === 'function') _markSyncWrite();
-      if (typeof _doSyncToCloud === 'function') _doSyncToCloud();
+    // ★ 緊急推送：繞過 isSyncing 鎖，直接推送最新狀態（防止切 tab/重整時資料遺失）
+    if (typeof _emergencySave === 'function') {
+      if (typeof _syncDebounceTimer !== 'undefined' && _syncDebounceTimer !== null) {
+        clearTimeout(_syncDebounceTimer);
+        _syncDebounceTimer = null;
+      }
+      _emergencySave();
     }
   }
   if (document.visibilityState === 'hidden' && _notesDirty) {
@@ -4889,8 +4890,8 @@ window.addEventListener('beforeunload', () => {
       clearTimeout(_syncDebounceTimer);
       _syncDebounceTimer = null;
     }
-    // 同步呼叫（不 await，瀏覽器不保證 async，但 Firestore SDK 用 fetch keepalive 有機會送出）
-    _doSyncToCloud();
+    // ★ 用 _emergencySave 繞過 isSyncing 鎖，確保頁面關閉前一定推送
+    _emergencySave();
   }
 
   // 若筆記沒有變動或 debounce 已推送完畢，不做任何事
@@ -5044,13 +5045,9 @@ function syncToCloud() {
     /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
 }
 
-async function _doSyncToCloud() {
-  if (!_isFirebaseReady()) return;
-  if (isSyncing) { _pendingSync = true; return; }
-  if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
-
-  // ★ 先組出 payload，做 hash 比對，相同就靜默跳過（不發請求）
-  const _payload = {
+// ── 組建同步 payload（抽出供緊急推送複用）──
+function _buildSyncPayload() {
+  const p = {
     tasks: state.tasks,
     sandbox: state.sandbox,
     done: state.done,
@@ -5071,26 +5068,47 @@ async function _doSyncToCloud() {
     routineResetDate: state.routineResetDate || null,
     settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' }
   };
+  // 帶上 notes
+  const _notesPayload = (function(){
+    try {
+      const n = window._notesGetSyncPayload && window._notesGetSyncPayload();
+      if (n) return n;
+    } catch(e) {}
+    try {
+      const raw = localStorage.getItem('aethelgard_notes_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return undefined;
+  })();
+  if (_notesPayload) p.notes = _notesPayload;
+  return p;
+}
 
-  // 永遠帶上 notes（不限 _notesDirty），確保雲端不會遺漏筆記
-  {
-    const _notesPayload = (function(){
-      try {
-        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
-        if (p) return p;
-      } catch(e) {}
-      try {
-        const raw = localStorage.getItem('aethelgard_notes_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
-        }
-      } catch(e) {}
-      return undefined;
-    })();
-    console.log('[sync] notes payload:', _notesPayload ? 'ok updatedAt=' + _notesPayload.updatedAt : 'MISSING');
-    if (_notesPayload) _payload.notes = _notesPayload;
-  }
+// ── 緊急推送：繞過 isSyncing 鎖，直接呼叫 _fbSave（用於 beforeunload / visibilitychange）──
+function _emergencySave() {
+  if (!_isFirebaseReady()) return;
+  const payload = _buildSyncPayload();
+  const hash = _quickHash(payload);
+  if (hash && hash === _lastSyncHash) return; // 資料沒變，不推
+  console.log('[emergencySave] 緊急推送 tasks:', payload.tasks.length, 'wishPoints:', payload.wishPoints);
+  _fbSave(payload).then(ok => {
+    if (ok) { _lastSyncHash = hash; console.log('[emergencySave] 成功'); }
+    else console.warn('[emergencySave] 失敗');
+  }).catch(e => console.warn('[emergencySave] 例外', e));
+}
+window._emergencySave = _emergencySave;
+
+async function _doSyncToCloud() {
+  if (!_isFirebaseReady()) return;
+  if (isSyncing) { _pendingSync = true; return; }
+  if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
+
+  // ★ 先組出 payload，做 hash 比對，相同就靜默跳過（不發請求）
+  const _payload = _buildSyncPayload();
+  console.log('[sync] notes payload:', _payload.notes ? 'ok updatedAt=' + _payload.notes.updatedAt : 'MISSING');
 
   // ★ Hash 防重：資料未變動就靜默跳過，不耗費任何網路
   const _hash = _quickHash(_payload);
