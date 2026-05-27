@@ -11226,8 +11226,9 @@ function maybeResetRoutines() {
     ? parseInt(state.routineResetDate) : 0;
   // ★ Fix：即使 in-memory 快取說已重置，仍要檢查是否有從雲端讀回來的舊勾選狀態需要清除
   // （LAST_RESET_KEY 本地已更新，但雲端 routines 仍是 done=true 的情況）
+  // 注意：doneTs 為 null 代表舊版資料（加入 doneTs 欄位前完成的），保守視為需要重置
   const hasStaleRoutines = Array.isArray(state.routines) &&
-    state.routines.some(it => it.done && it.doneTs && it.doneTs < thisCycleResetTs);
+    state.routines.some(it => it.done && (!it.doneTs || it.doneTs < thisCycleResetTs));
   if (_routineResetDate === thisCycleResetStr && !hasStaleRoutines) return;
   if (storedTs >= thisCycleResetTs && !hasStaleRoutines) {
     _routineResetDate = thisCycleResetStr;
@@ -11236,7 +11237,7 @@ function maybeResetRoutines() {
   if (!Array.isArray(state.routines)) state.routines = [];
   let resetCount = 0;
   state.routines.forEach(it => {
-    // 若完成時間在上次重置點之前，代表是上個週期完成的，需要重置
+    // 若完成時間在上次重置點之前，或完全沒有完成時間戳（舊版資料），代表是上個週期完成的，需要重置
     const doneTsOk = it.doneTs && it.doneTs >= thisCycleResetTs;
     if (it.done && !doneTsOk) {
       it.done = false;
