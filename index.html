@@ -4018,7 +4018,7 @@ window.ownerSignOut = ownerSignOut;
 
 // ── 強制登出所有訪客（Owner 專屬）──
 async function revokeAllGuests() {
-  if (!window._fbIsOwner) { showToast('❌ 只有 Owner 才能執行此操作'); return; }
+  if (window._fbGuestSessionActive) { showToast('❌ 只有 Owner 才能執行此操作'); return; }
   const ok = await window._fbRevokeAllGuests();
   if (ok) {
     showToast('🔒 已強制登出所有訪客');
@@ -4058,16 +4058,16 @@ function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt) {
   // ② setTimeout 備援：確保到期時一定鎖頁（onSnapshot 萬一斷線也有保障）
   const remaining = expiresAt - Date.now();
   if (remaining > 0) {
-    setTimeout(() => { if (!window._fbIsOwner) _forceGuestLockout(); }, remaining);
+    setTimeout(() => { if (window._fbGuestSessionActive) _forceGuestLockout(); }, remaining);
     if (remaining > 5 * 60 * 1000) {
-      setTimeout(() => { if (!window._fbIsOwner) showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'); }, remaining - 5 * 60 * 1000);
+      setTimeout(() => { if (window._fbGuestSessionActive) showToast('⚠️ 訪客通行碼將在 5 分鐘後過期'); }, remaining - 5 * 60 * 1000);
     }
   }
 }
 
 // ── 強制訪客鎖定：清除敏感資料並跳回鎖屏 ──
 function _forceGuestLockout() {
-  if (window._fbIsOwner) return; // Owner 不受此限制
+  if (!window._fbGuestSessionActive) return; // 非訪客 session 不受此限制
 
   // 停止所有監聽
   if (_guestAccessUnsubscribe) { _guestAccessUnsubscribe(); _guestAccessUnsubscribe = null; }
@@ -4157,7 +4157,7 @@ function selectTokenDuration(btn, minutes) {
 window.selectTokenDuration = selectTokenDuration;
 
 async function generateToken() {
-  if (!window._fbIsOwner) {
+  if (window._fbGuestSessionActive) {
     const ts = document.getElementById('tokenStatus');
     if (ts) ts.textContent = '❌ 只有 Owner 才能產生通行碼';
     return;
@@ -4249,7 +4249,7 @@ async function submitGuestToken() {
     // ── 以匿名身份登入（保持匿名，不用 email/password）──
     errEl.textContent = '登入中…'; errEl.style.color = '';
     window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
-    window._fbIsOwner = false;
+    window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
 
     const guestUser = await window._fbGuestSignInAnon();
     const guestUid = guestUser.uid;
