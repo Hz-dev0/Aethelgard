@@ -2966,6 +2966,20 @@
       <span style="font-size:11px;color:var(--text-faint)">天未完成的任務自動置頂，顯示銀色邊框</span>
     </div>
 
+    <!-- 資料匯入 -->
+    <div style="font-size:10px;letter-spacing:0.08em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;margin-top:14px">📥 匯入備份</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;line-height:1.6">選取備份 JSON 檔，將還原 tasks、rewards、doneHistory 等資料（notes 不在此還原）</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label id="importBackupLabel" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);font-size:12px;font-family:inherit;cursor:pointer;transition:all 0.2s"
+        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+        <span>選擇檔案</span>
+        <input type="file" accept=".json" style="display:none" onchange="handleImportBackup(this)">
+      </label>
+      <span id="importBackupStatus" style="font-size:11px;color:var(--text-faint)"></span>
+    </div>
+    <div style="height:10px"></div>
+
     <div class="api-modal-actions" style="margin-top:12px">
       <button class="api-btn-clear" id="apiClearBtn" onclick="clearApiUrl()" style="display:none">✕ 清除連線</button>
       <!-- 🔴 Owner 專屬：強制登出所有訪客 -->
@@ -4141,6 +4155,109 @@ function openApiModal() {
 function closeApiModal() {
   document.getElementById('apiModal').classList.remove('open');
 }
+
+// ── 備份匯入（設定頁）──────────────────────────────────────────────────
+async function handleImportBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('importBackupStatus');
+  statusEl.textContent = '讀取中…';
+  statusEl.style.color = 'var(--text-faint)';
+
+  let raw;
+  try { raw = await file.text(); } catch(e) { statusEl.textContent = '❌ 無法讀取檔案'; statusEl.style.color = 'var(--rose)'; return; }
+
+  let backup;
+  try { backup = JSON.parse(raw); } catch(e) { statusEl.textContent = '❌ JSON 格式錯誤'; statusEl.style.color = 'var(--rose)'; return; }
+
+  // ── 工具：Firestore Native 格式 → JS 值 ──
+  function _toJS(v) {
+    if (!v || typeof v !== 'object') return v;
+    if (v.stringValue  !== undefined) return v.stringValue;
+    if (v.integerValue !== undefined) return Number(v.integerValue);
+    if (v.doubleValue  !== undefined) return v.doubleValue;
+    if (v.booleanValue !== undefined) return v.booleanValue;
+    if (v.nullValue    !== undefined) return null;
+    if (v.timestampValue !== undefined) return new Date(v.timestampValue);
+    if (v.arrayValue)  return (v.arrayValue.values || []).map(_toJS);
+    if (v.mapValue) {
+      const obj = {};
+      for (const [k, val] of Object.entries(v.mapValue.fields || {})) obj[k] = _toJS(val);
+      return obj;
+    }
+    return v;
+  }
+
+  // 支援兩種格式：Firestore Native（有 fields 包裝）或已解析的純 JS 物件
+  function _extractDoc(docsArr) {
+    if (!Array.isArray(docsArr) || docsArr.length === 0) return null;
+    const doc = docsArr[0];
+    if (doc && doc.fields) {
+      // Firestore Native 格式
+      const result = {};
+      for (const [k, v] of Object.entries(doc.fields)) result[k] = _toJS(v);
+      return result;
+    }
+    return doc; // 已是純 JS
+  }
+
+  try {
+    // ── 只處理 Aethelgard/data（核心資料），略過 notes、tokens、users ──
+    const aethDocs = backup['Aethelgard'];
+    if (!aethDocs || !Array.isArray(aethDocs) || aethDocs.length === 0) {
+      statusEl.textContent = '❌ 找不到 Aethelgard 資料'; statusEl.style.color = 'var(--rose)'; return;
+    }
+    const data = _extractDoc(aethDocs);
+    if (!data) { statusEl.textContent = '❌ 無法解析資料'; statusEl.style.color = 'var(--rose)'; return; }
+
+    // ── 套用到 state（略過 notes）──
+    if (Array.isArray(data.tasks))       state.tasks       = data.tasks;
+    if (Array.isArray(data.rewards))     state.rewards     = data.rewards;
+    if (Array.isArray(data.doneHistory)) state.doneHistory = data.doneHistory;
+    if (Array.isArray(data.routines))    state.routines    = data.routines;
+    if (Array.isArray(data.customQuotes)) state.customQuotes = data.customQuotes;
+    if (Array.isArray(data.sandbox))     state.sandbox     = data.sandbox;
+    if (Array.isArray(data.todayOrder))  state.todayOrder  = data.todayOrder;
+    if (typeof data.done === 'number')        state.done       = data.done;
+    if (typeof data.energy === 'number')      state.energy     = data.energy;
+    if (typeof data.wishPoints === 'number')  state.wishPoints = data.wishPoints;
+    if (data.lotteryState && typeof data.lotteryState === 'object') {
+      lotteryState = { ...lotteryState, ...data.lotteryState };
+      saveLottery();
+    }
+    if (data.morningDialogShownDate) state.morningDialogShownDate = data.morningDialogShownDate;
+    if (data.routineResetDate)       state.routineResetDate       = data.routineResetDate;
+    if (data.settings) {
+      if (data.settings.resetTime)    localStorage.setItem('aethelgard_reset_time', data.settings.resetTime);
+      if (data.settings.neglectDays)  localStorage.setItem('aethelgard_neglect_days', String(data.settings.neglectDays));
+    }
+
+    // ── 也還原 IsolaPath（若有）──
+    const isolaDocs = backup['IsolaPath'];
+    if (isolaDocs && Array.isArray(isolaDocs) && isolaDocs.length > 0 && window._fbDb && window._fbSetDoc && window._fbDoc) {
+      const isolaData = _extractDoc(isolaDocs);
+      if (isolaData) {
+        await window._fbSetDoc(window._fbDoc(window._fbDb, 'IsolaPath', 'data'), isolaData, { merge: true });
+      }
+    }
+
+    saveStateLocal();
+    await syncToCloud();
+    renderAll();
+    initRoutines();
+    checkTaskDates();
+
+    statusEl.textContent = '✅ 匯入成功！';
+    statusEl.style.color = 'var(--green)';
+    showToast('✅ 備份已還原！');
+    input.value = ''; // 清除 input，讓同一檔案可重複選取
+  } catch(e) {
+    console.error('[匯入備份]', e);
+    statusEl.textContent = '❌ 匯入失敗：' + e.message;
+    statusEl.style.color = 'var(--rose)';
+  }
+}
+window.handleImportBackup = handleImportBackup;
 
 let _tokenExpireTimer = null;
 let _selectedTokenMinutes = 30; // 預設 30 分鐘
@@ -6124,6 +6241,31 @@ function runDailyReset() {
       return !state.doneHistory.some(h => h.id === archiveKey); // 未寫入則保留
     });
   }
+
+  // ── 壓縮前一個週期的詳細 doneHistory → 精簡格式 ──
+  // 只保留任務名稱，省 Firestore 空間；今天（當前週期）的不壓縮，保留復原能力
+  (function compressPreviousDayHistory() {
+    const yesterday = new Date(thisCycleResetTs - 1); // 重置點前一毫秒 = 前一週期日期
+    const prevDateStr = localDateStr(yesterday);
+    // 找出前一天的詳細記錄（非壓縮）
+    const detailed = state.doneHistory.filter(h => !h.compressed && h.completedAt === prevDateStr);
+    if (detailed.length === 0) return;
+    // 組成壓縮記錄
+    const compressed = {
+      compressed: true,
+      id: 'compressed_' + prevDateStr,
+      completedAt: prevDateStr,
+      tasks: detailed.map(h => h.name).filter(Boolean),
+      count: detailed.length
+    };
+    // 移除詳細記錄，加入壓縮記錄（若尚未存在）
+    const ids = new Set(detailed.map(h => h.id));
+    state.doneHistory = state.doneHistory.filter(h => !ids.has(h.id));
+    if (!state.doneHistory.some(h => h.id === compressed.id)) {
+      state.doneHistory.push(compressed);
+    }
+    console.log(`[壓縮] ${prevDateStr} 的 ${detailed.length} 筆記錄已壓縮`);
+  })();
 
   // Reset routine tasks for the new day and refund their wishPoints
   // (routines earn fresh points each day — yesterday's completions are refunded here)
@@ -8415,12 +8557,13 @@ function renderStats() {
   const todayStr = localDateStr(new Date(getLastResetTimestamp()));
   const allDoneTasks = state.tasks.filter(t => t.done);
   const historyTasks = (state.doneHistory || []).filter(h => !h._neglectReset); // 排除重新計算天數的 sentinel
+  const historyCount = historyTasks.reduce((sum, h) => sum + (h.compressed ? (h.count || 0) : 1), 0);
   // Recalculate state.done to stay in sync with actual task data
   state.done = allDoneTasks.length;
   const statsGrid = document.getElementById('statsGrid');
   statsGrid.innerHTML = `
     <div class="stat-card">
-      <div class="stat-value">${allDoneTasks.length + historyTasks.length}</div>
+      <div class="stat-value">${allDoneTasks.length + historyCount}</div>
       <div class="stat-label">已完成任務</div>
     </div>
     <div class="stat-card stat-card-link" onclick="showPage('sandbox')" title="前往沙盒探索">
@@ -8446,7 +8589,7 @@ function renderStats() {
   // Clicking the stat card (scrollToDoneList) expands to show all history
   const doneList = document.getElementById('doneList');
   const badge = document.getElementById('doneCountBadge');
-  const totalDoneCount = allDoneTasks.length + historyTasks.length;
+  const totalDoneCount = allDoneTasks.length + historyCount;
   if (badge) badge.textContent = totalDoneCount > 0 ? `${totalDoneCount} 件` : '';
   const todayDone = allDoneTasks.filter(t => t.completedAt === todayStr);
 
@@ -8500,7 +8643,16 @@ function renderStats() {
 
     // Past done tasks section in show-all mode — grouped by date, each date collapsible
     const pastDone = allDoneTasks.filter(t => !t.completedAt || t.completedAt !== todayStr);
-    const allHistory = [...pastDone, ...historyTasks].filter(t => !t._neglectReset); // 排除重新計算天數的 sentinel
+    // 展開壓縮記錄為逐筆假物件，以便統一顯示
+    const expandedHistory = [];
+    historyTasks.forEach(h => {
+      if (h.compressed) {
+        (h.tasks || []).forEach((name, i) => expandedHistory.push({ id: null, name, completedAt: h.completedAt, goal: '', _fromCompressed: true, _ci: i }));
+      } else {
+        expandedHistory.push(h);
+      }
+    });
+    const allHistory = [...pastDone, ...expandedHistory].filter(t => !t._neglectReset); // 排除重新計算天數的 sentinel
     const pastDoneSection = document.getElementById('pastDoneSection');
     if (pastDoneSection) {
       if (allHistory.length === 0) {
@@ -9417,7 +9569,16 @@ function showCalPopup(e, dateStr) {
   // recurring task completed on different days never collides, and a task that appears
   // in both sources (archived then still active) is shown only once.
   const currentDone = state.tasks.filter(t => t.done && t.completedAt === dateStr);
-  const historyDone = (state.doneHistory || []).filter(t => t.completedAt === dateStr && !t._neglectReset); // 排除重新計算天數的 sentinel
+  const historyRaw = (state.doneHistory || []).filter(t => t.completedAt === dateStr && !t._neglectReset); // 排除重新計算天數的 sentinel
+  // 展開壓縮記錄：compressed entry → 每個任務名稱展成一筆假物件
+  const historyDone = [];
+  historyRaw.forEach(h => {
+    if (h.compressed) {
+      (h.tasks || []).forEach((name, i) => historyDone.push({ id: h.id + '_' + i, name, completedAt: h.completedAt, _fromCompressed: true }));
+    } else {
+      historyDone.push(h);
+    }
+  });
 
   const seen = new Set();
   const doneTasks = [];
