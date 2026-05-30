@@ -4045,16 +4045,31 @@ window.revokeAllGuests = revokeAllGuests;
 // ── 訪客安全鎖（純計時器，訪客現在以 Owner email session 登入）──
 // ── 訪客安全鎖：onSnapshot 監聽 guest_access/{uid}，Owner 刪除時即時鎖頁 ──
 let _guestAccessUnsubscribe = null;
-function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt) {
+function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt, guestAccessWritten) {
   // 先清除舊監聽，避免重複
   if (_guestAccessUnsubscribe) { _guestAccessUnsubscribe(); _guestAccessUnsubscribe = null; }
 
   // ① onSnapshot：Owner 主動刪除 guest_access → 即時鎖頁
-  if (window._fbOnSnapshot && window._fbDb && window._fbDoc) {
+  // ★ 重要：只有在 guest_access 文件確認寫入成功（guestAccessWritten=true）時才啟動 snapshot 監聽。
+  //   若文件寫入失敗（Firestore 規則拒絕匿名用戶寫入），snapshot 一來就看到 !snap.exists()，
+  //   會誤觸 _forceGuestLockout() 把資料清空。此時改用純 setTimeout 到期機制即可。
+  if (guestAccessWritten && window._fbOnSnapshot && window._fbDb && window._fbDoc) {
     const ref = window._fbDoc(window._fbDb, 'guest_access', guestUid);
+    let _firstSnap = true; // 第一次 snapshot 可能是「確認文件存在」的立即回呼，不視為被刪
     _guestAccessUnsubscribe = window._fbOnSnapshot(ref, (snap) => {
+      if (_firstSnap) {
+        _firstSnap = false;
+        // 第一次回呼：若文件存在就繼續，若不存在（寫入剛失敗）才鎖定
+        if (!snap.exists()) { _forceGuestLockout(); }
+        else {
+          const d = snap.data();
+          const ms = typeof d.expiresAt === 'number' ? d.expiresAt : (d.expiresAt?.toMillis?.() ?? 0);
+          if (Date.now() > ms) _forceGuestLockout();
+        }
+        return;
+      }
+      // 後續回呼：文件消失 = Owner 主動刪除
       if (!snap.exists()) {
-        // 文件被 Owner 刪除
         _forceGuestLockout();
         return;
       }
@@ -4063,13 +4078,18 @@ function _startGuestAccessWatcher(guestUid, ownerUid, expiresAt) {
       if (Date.now() > ms) {
         _forceGuestLockout();
       }
-    }, () => {
-      // 監聽失敗（permission denied）代表文件已被刪
-      _forceGuestLockout();
+    }, (err) => {
+      // 監聽失敗（permission denied）：文件無法讀取，保守視為已被刪
+      console.warn('[guestAccessWatcher] 監聽失敗:', err.code);
+      // ★ 若是 permission-denied，可能是規則不允許匿名讀，不鎖定（改用 setTimeout 到期）
+      if (err.code !== 'permission-denied') {
+        _forceGuestLockout();
+      }
     });
   }
 
   // ② setTimeout 備援：確保到期時一定鎖頁（onSnapshot 萬一斷線也有保障）
+  // 無論 guestAccessWritten 如何，到期後一定鎖定
   const remaining = expiresAt - Date.now();
   if (remaining > 0) {
     setTimeout(() => { if (window._fbGuestSessionActive) _forceGuestLockout(); }, remaining);
@@ -4382,22 +4402,26 @@ async function submitGuestToken() {
     window._fbOwnerUid = ownerUid;
     try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    // ★ 切換 UID 後立刻抑制 snapshot，避免舊版 snapshot 在 init/loadFromCloud 完成前進來蓋掉資料
+    if (typeof _markSyncWrite === 'function') _markSyncWrite();
 
     // ── 建立有時效的訪客通行證 ──
     const TOKEN_DURATION = data.expiresAt - Date.now();
     const passExpiresAt = Date.now() + TOKEN_DURATION;
+    let _guestAccessWritten = false;
     try {
       await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
         ownerUid: ownerUid,
         grantedAt: Date.now(),
         expiresAt: passExpiresAt
       });
+      _guestAccessWritten = true;
     } catch(gaErr) {
       console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
     }
 
     // ── 啟動 onSnapshot 監聽 + 到期計時器（統一由 _startGuestAccessWatcher 管理）──
-    _startGuestAccessWatcher(guestUid, ownerUid, passExpiresAt);
+    _startGuestAccessWatcher(guestUid, ownerUid, passExpiresAt, _guestAccessWritten);
 
     const remaining = passExpiresAt - Date.now();
     const labelMin = Math.round(remaining / 60000);
@@ -6469,6 +6493,9 @@ async function init() {
     state._initDone = true;
     // ★ 載入完成後清除「使用者已編輯」旗標，避免下次 snapshot 到來時誤判本機版本比雲端新
     window._notesUserEdited = false;
+    // ★ 重要：init 載入完成後立刻抑制 snapshot，避免舊版 snapshot 在 debounce 期間蓋掉剛載好的資料
+    // （syncToCloud 有 30 秒 debounce，這段期間若 snapshot 進來，_markSyncWrite 尚未被呼叫，會覆寫資料）
+    _markSyncWrite();
     // ★ 啟動即時監聽：init 完成後才開始，避免和初次讀取競態
     if (window._fbUid) _startRealtimeListener(window._fbUid);
     if (ok) {
