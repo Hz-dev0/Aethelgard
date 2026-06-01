@@ -375,9 +375,9 @@ async function loadFromCloud() {
         console.log('[notes] _chosen:', _chosen ? 'ok, tabs:' + _chosen.tabs.length : 'null');
         if (_chosen) {
           _lsSafeSet('aethelgard_notes_v1', JSON.stringify(_chosen));
-          if (typeof notesLoadFromData === 'function') {
+          if (typeof window.notesLoadFromData === 'function') {
             console.log('[notes] calling notesLoadFromData');
-            notesLoadFromData(_chosen);
+            window.notesLoadFromData(_chosen);
             console.log('[notes] notesLoadFromData done');
           }
         }
