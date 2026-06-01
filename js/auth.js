@@ -21,7 +21,13 @@ window._onFirebaseReady = async function() {
         + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">正在載入資料…</div>';
     }
     _firebaseReadyFired = true;
-    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+    if (typeof window._onFirebaseReadyCallback === 'function') {
+      window._onFirebaseReadyCallback();
+    } else {
+      // ★ Race condition fix：init() 還沒跑到設定 callback 的地方（module 非同步載入比 init 早觸發）
+      // 記下 pending 狀態，等 init() 設好 callback 後會立刻補呼叫
+      window._firebaseReadyPending = true;
+    }
     return;
   }
 
@@ -29,7 +35,11 @@ window._onFirebaseReady = async function() {
   if (window._fbGuestSessionActive && window._fbUid) {
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     _firebaseReadyFired = true;
-    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+    if (typeof window._onFirebaseReadyCallback === 'function') {
+      window._onFirebaseReadyCallback();
+    } else {
+      window._firebaseReadyPending = true;
+    }
     return;
   }
 
@@ -653,3 +663,25 @@ async function submitGuestToken() {
     if (typeof window._otpFlashError === 'function') window._otpFlashError();
   }
 }
+
+// ── Race condition fix：init() 用這個函式來設定 callback，而不是直接賦值 ──
+// 如果 onAuthStateChanged 比 init() 更早觸發（module 非同步載入造成），
+// _firebaseReadyPending 會是 true，這裡會立刻補呼叫，不會卡住。
+window._registerFirebaseReadyCallback = function(cb) {
+  window._onFirebaseReadyCallback = cb;
+  if (window._firebaseReadyPending) {
+    window._firebaseReadyPending = false;
+    cb();
+  }
+};
+
+// ── Race condition fix：init() 用這個函式來設定 callback，而不是直接賦值 ──
+// 如果 onAuthStateChanged 比 init() 更早觸發（module 非同步載入造成），
+// _firebaseReadyPending 會是 true，這裡會立刻補呼叫，不會卡住。
+window._registerFirebaseReadyCallback = function(cb) {
+  window._onFirebaseReadyCallback = cb;
+  if (window._firebaseReadyPending) {
+    window._firebaseReadyPending = false;
+    cb();
+  }
+};
