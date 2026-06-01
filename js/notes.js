@@ -1323,8 +1323,3 @@ document.addEventListener('visibilitychange', async () => {
     }
   }
 });
-
-})(); // end IIFE
-
-
-// ══════════════════════════════════════════════════════════
