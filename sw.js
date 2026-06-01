@@ -1,5 +1,5 @@
-const _swVersion = new URL(location.href).searchParams.get('v') || 'v5';
-const CACHE_NAME = 'aethelgard-' + _swVersion;
+const _swBuild = '202606011533'; // ← 每次部署手動改這個數字
+const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
   '/Aethelgard/',
