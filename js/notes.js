@@ -1,3 +1,5 @@
+const NOTES_STORAGE_KEY = 'aethelgard_notes_v1';
+
 // ── State ──────────────────────────────────────────────
 let notesFolderData   = [];
 let notesTabIndex     = 0;
@@ -1323,3 +1325,8 @@ document.addEventListener('visibilitychange', async () => {
     }
   }
 });
+
+})(); // end IIFE
+
+
+// ══════════════════════════════════════════════════════════
