@@ -841,8 +841,14 @@ async function init() {
   const _earlyResolve = () => {
     if (!_initResolved) { _initResolved = true; if (_initResolveRef) _initResolveRef(); }
   };
-  window._onFirebaseReadyCallback = _earlyResolve;
-  window._fbGuestReadyResolve     = _earlyResolve;
+  // ★ Race condition fix：透過 _registerFirebaseReadyCallback 設定，
+  //   若 onAuthStateChanged 已比 init() 更早觸發（module 非同步載入），會立刻補呼叫。
+  if (typeof window._registerFirebaseReadyCallback === 'function') {
+    window._registerFirebaseReadyCallback(_earlyResolve);
+  } else {
+    window._onFirebaseReadyCallback = _earlyResolve;
+  }
+  window._fbGuestReadyResolve = _earlyResolve;
 
   await new Promise((resolve) => {
     if (window._fbUid || _initResolved) { resolve(); return; }
