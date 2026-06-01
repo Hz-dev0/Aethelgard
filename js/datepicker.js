@@ -210,12 +210,3 @@ window.skipRecurMorningDialog = skipRecurMorningDialog;
 // ── End Recurring Morning Dialog ────────────────────────
 
 init();
-
-
-// ════════════════════════════════════════════════════════
-// NOTES PAGE — full self-contained notes system
-// ════════════════════════════════════════════════════════
-(function() {
-'use strict';
-
-const NOTES_STORAGE_KEY = 'aethelgard_notes_v1';
