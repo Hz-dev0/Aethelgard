@@ -2,7 +2,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     const base = location.pathname.endsWith('/') ? location.pathname : location.pathname.replace(/[^/]*$/, '');
-    const swPath = base + 'sw.js?v=20250509001';
+    const swPath = base + 'sw.js';
     navigator.serviceWorker.register(swPath)
       .then(reg => {
         console.log('SW registered:', reg.scope);
