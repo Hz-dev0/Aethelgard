@@ -368,15 +368,15 @@ function _notesTabPointerDown(e, div, row) {
 
     if (dragState === 'pending') {
       if (dist < 6) return; // 還沒動夠，等等
-      // 判斷手勢方向：水平移動為主 → 捲軸；垂直移動為主 → 可能長按拖曳
-      // 若水平分量明顯大於垂直分量，視為捲軸操作，放棄拖曳
-      if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+      // TAB 為水平排列，水平移動即為拖曳方向，直接啟動拖曳
+      // 只有當垂直分量明顯大於水平分量時，才視為頁面捲動操作
+      if (Math.abs(dy) > Math.abs(dx) * 1.5) {
         dragState = 'scrolling';
         clearTimeout(longPressTimer);
         cleanup();
         return;
       }
-      // 垂直或斜向移動：直接啟動拖曳（不等長按）
+      // 水平或斜向移動：直接啟動拖曳（不等長按）
       dragState = 'dragging-tab';
       clearTimeout(longPressTimer);
       if (navigator.vibrate) navigator.vibrate(25);
