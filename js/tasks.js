@@ -15,6 +15,28 @@ function renderTree() {
   const savedGoals = JSON.parse(localStorage.getItem('aethelgard_dailyGoals') || '{}');
   treeNodes.forEach(n => { if (savedGoals[n.key] !== undefined) n.dailyGoal = savedGoals[n.key]; });
 
+  // ── 計算各分類的連續達標天數 streak ──
+  function getGoalStreak(nodeKey, dailyGoal) {
+    const goal = Math.max(1, dailyGoal || 1);
+    let streak = 0;
+    let cursor = new Date(getLastResetTimestamp());
+    // 從昨天開始往回數（今天還沒結束）
+    cursor.setDate(cursor.getDate() - 1);
+    for (let i = 0; i < 180; i++) {
+      const dateStr = localDateStr(cursor);
+      // 當天完成數：active tasks + doneHistory
+      const activeDone = state.tasks.filter(t => t.done && t.goal === nodeKey && t.completedAt === dateStr).length;
+      const histDone = (state.doneHistory || []).filter(h => h.goal === nodeKey && h.completedAt === dateStr).length;
+      if (activeDone + histDone >= goal) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
   grid.innerHTML = treeNodes.map(n => {
     const doneCnt = state.tasks.filter(t => t.done && t.goal === n.key && t.completedAt === todayStr).length;
     const goal = Math.max(1, n.dailyGoal || 1);
@@ -24,6 +46,10 @@ function renderTree() {
     const activeStyle = isActive ? `box-shadow:0 0 0 2px ${n.ringColor};` : '';
     const overDone = doneCnt > goal;
     const labelColor = overDone ? n.ringColor : 'var(--text-dim)';
+    const streak = getGoalStreak(n.key, n.dailyGoal);
+    const streakHtml = streak >= 2
+      ? `<div style="font-size:10px;color:${n.ringColor};font-weight:700;letter-spacing:0.02em;opacity:0.9">🔥${streak}天</div>`
+      : '';
     return `<div class="goal-ring-card${isActive ? ' active-filter' : ''}"
       data-goal-key="${n.key}"
       onclick="filterByGoal('${n.key}')"
@@ -40,6 +66,7 @@ function renderTree() {
       </div>
       <div style="font-size:13px;font-weight:500;color:var(--text);text-align:center;line-height:1.3">${n.label}</div>
       <div style="font-size:11px;color:${labelColor}">${doneCnt}/${goal} 今日</div>
+      ${streakHtml}
     </div>`;
   }).join('');
 
@@ -2238,14 +2265,26 @@ function showCelebration(task) {
       const node = treeNodes.find(n => n.key === task.goal);
       const card = grid.querySelector(`[data-goal-key="${task.goal}"]`);
       if (card && node) {
+        // 判斷這次完成後分類是否恰好達到今日目標（滿格）
+        const todayStr = localDateStr(new Date(getLastResetTimestamp()));
+        const doneCnt = state.tasks.filter(t => t.done && t.goal === node.key && t.completedAt === todayStr).length;
+        const goal = Math.max(1, node.dailyGoal || 1);
+        const isJustFull = doneCnt >= goal;
+
         card.style.setProperty('--pulse-color', node.ringColor);
-        card.classList.add('goal-ring-pulse');
-        setTimeout(() => card.classList.remove('goal-ring-pulse'), 900);
+        if (isJustFull) {
+          card.classList.add('goal-ring-full');
+          setTimeout(() => card.classList.remove('goal-ring-full'), 1400);
+          _showGoalFullBurst(card, node);
+        } else {
+          card.classList.add('goal-ring-pulse');
+          setTimeout(() => card.classList.remove('goal-ring-pulse'), 900);
+        }
       }
     }
   }
 
-  // ── 格言：只在 20% 機率顯示，避免疲乏；任務有「意義」時也只偶爾顯示 ──
+  // ── 格言：只在 20% 機率顯示，避免疲乏 ──
   const shouldShow = Math.random() < 0.2;
   if (!shouldShow) return;
 
@@ -2255,11 +2294,63 @@ function showCelebration(task) {
     sub.textContent = task.meaning.trim();
   } else {
     const quotes = state.customQuotes && state.customQuotes.length > 0 ? state.customQuotes : [];
-    if (!quotes.length) return; // 沒有格言就不顯示
+    if (!quotes.length) return;
     sub.textContent = quotes[Math.floor(Math.random() * quotes.length)];
   }
   cel.classList.add('show');
   setTimeout(() => cel.classList.remove('show'), 2800);
+}
+
+// ── 分類滿格爆發特效 ──
+function _showGoalFullBurst(card, node) {
+  const rect = card.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  // 文字標籤
+  const label = document.createElement('div');
+  label.textContent = `${node.icon} ${node.label} 完成！`;
+  label.style.cssText = `
+    position:fixed;
+    left:${cx}px; top:${cy - 20}px;
+    transform:translate(-50%, -50%);
+    color:${node.ringColor};
+    font-size:16px; font-weight:800;
+    white-space:nowrap; pointer-events:none;
+    z-index:99999;
+    text-shadow: 0 0 20px ${node.ringColor}88, 0 2px 8px rgba(0,0,0,0.12);
+    animation: goalFullLabel 1.6s cubic-bezier(0.22,1,0.36,1) forwards;
+  `;
+  document.body.appendChild(label);
+  setTimeout(() => label.remove(), 1700);
+
+  // 粒子爆發
+  for (let i = 0; i < 22; i++) {
+    const p = document.createElement('div');
+    const angle = (i / 22) * 360;
+    const dist = 55 + Math.random() * 50;
+    const size = 5 + Math.random() * 6;
+    const dx = Math.cos(angle * Math.PI / 180) * dist;
+    const dy = Math.sin(angle * Math.PI / 180) * dist;
+    const delay = Math.random() * 0.12;
+    p.style.cssText = `
+      position:fixed;
+      left:${cx}px; top:${cy}px;
+      width:${size}px; height:${size}px;
+      border-radius:50%;
+      background:${node.ringColor};
+      pointer-events:none; z-index:99998;
+      opacity:1;
+      animation: goalParticle${i} 0.9s ease ${delay}s forwards;
+    `;
+    // 用 inline keyframe via Web Animations API
+    p.animate([
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.3)`, opacity: 0 }
+    ], { duration: 900, delay: delay * 1000, easing: 'cubic-bezier(0.22,1,0.36,1)', fill: 'forwards' });
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 1100);
+  }
 }
 
 // ── Postpone ──

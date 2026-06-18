@@ -673,10 +673,22 @@
   }
 
   /* ── Goal ring card pulse on task complete ── */
-  .goal-ring-card {
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  .goal-ring-card.goal-ring-full {
+    animation: goalCardFull 1.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
   }
-  .goal-ring-card.goal-ring-pulse {
+  @keyframes goalCardFull {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 0px var(--pulse-color, #C9A227); }
+    25%  { transform: scale(1.12); box-shadow: 0 0 0 4px var(--pulse-color, #C9A227), 0 0 32px 8px color-mix(in srgb, var(--pulse-color, #C9A227) 50%, transparent); }
+    55%  { transform: scale(0.97); box-shadow: 0 0 0 2px var(--pulse-color, #C9A227), 0 0 18px 4px color-mix(in srgb, var(--pulse-color, #C9A227) 30%, transparent); }
+    80%  { transform: scale(1.03); box-shadow: 0 0 0 3px var(--pulse-color, #C9A227), 0 0 22px 5px color-mix(in srgb, var(--pulse-color, #C9A227) 35%, transparent); }
+    100% { transform: scale(1);    box-shadow: none; }
+  }
+  @keyframes goalFullLabel {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7) translateY(8px); }
+    20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08) translateY(0); }
+    70%  { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(-6px); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95) translateY(-18px); }
+  }
     animation: goalCardPulse 0.9s cubic-bezier(0.34,1.56,0.64,1) forwards;
     box-shadow: 0 0 0 3px var(--pulse-color, #C9A227),
                 0 0 20px 4px color-mix(in srgb, var(--pulse-color, #C9A227) 40%, transparent);
