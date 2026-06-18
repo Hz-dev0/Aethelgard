@@ -1905,7 +1905,9 @@ function setTaskStatus(id, status) {
   }
   renderTasks();
   renderTodayPanel();
-  syncToCloud();
+  // 標記今日是高優先操作，直接寫入不等 debounce，避免重整後消失
+  _markSyncWrite();
+  _doSyncToCloud();
 }
 
 
