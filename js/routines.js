@@ -238,6 +238,12 @@ function toggleRoutineItem(id) {
     _markSyncWrite();
     syncToCloud();
     showToast('💎 -1 願望碎片');
+    // 紅色閃爍回饋
+    const itemEl = document.getElementById(`routine-${id}`);
+    if (itemEl) {
+      itemEl.classList.add('routine-undo-flash');
+      setTimeout(() => itemEl.classList.remove('routine-undo-flash'), 500);
+    }
   }
 
   renderRoutineList();

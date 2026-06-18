@@ -891,7 +891,26 @@
   .lottery-card.revealed .lottery-card-back { display: none; }
   .lottery-card.revealed .lottery-card-front { display: flex; }
   .lottery-card.revealed { border-color: rgba(74,130,196,0.3); background: linear-gradient(135deg, rgba(74,130,196,0.05), rgba(184,146,42,0.05)); }
-  .lottery-card.is-wish.revealed { border-color: rgba(184,146,42,0.45); background: linear-gradient(135deg, rgba(184,146,42,0.08), rgba(200,169,110,0.04)); }
+  .lottery-card.is-wish.revealed {
+    border-color: rgba(184,146,42,0.6);
+    background: linear-gradient(135deg, rgba(184,146,42,0.13), rgba(200,169,110,0.06));
+    box-shadow: 0 0 18px 4px rgba(201,162,39,0.25), 0 2px 8px rgba(0,0,0,0.08);
+    animation: wishCardGlow 2s ease-in-out infinite alternate;
+  }
+  @keyframes wishCardGlow {
+    0%   { box-shadow: 0 0 12px 2px rgba(201,162,39,0.2); }
+    100% { box-shadow: 0 0 28px 8px rgba(201,162,39,0.4); }
+  }
+
+  /* ── Routine undo flash ── */
+  .routine-undo-flash {
+    animation: routineUndoFlash 0.5s ease forwards;
+  }
+  @keyframes routineUndoFlash {
+    0%   { background: transparent; }
+    30%  { background: rgba(192,86,90,0.15); transform: scale(0.98); }
+    100% { background: transparent; transform: scale(1); }
+  }
   .lottery-card.flipping { animation: cardFlip 0.45s ease; }
   @keyframes cardFlip {
     0%   { transform: rotateY(0) scale(1); }

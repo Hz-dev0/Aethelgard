@@ -42,6 +42,10 @@ function ctxAction(action) {
       state.wishPoints = Math.max(0, state.wishPoints - 1);
     }
     if (t.done && state.done > 0) state.done--;
+    // ── 同步清除 doneHistory，避免成長軌跡留下已刪除任務的紀錄 ──
+    if (state.doneHistory) {
+      state.doneHistory = state.doneHistory.filter(h => h.taskId !== t.id && h.id !== (t.id + '_' + t.completedAt));
+    }
     state.tasks = state.tasks.filter(x => String(x.id) !== String(_targetId));
     renderAll();
     showToast('🗑 任務已移除');

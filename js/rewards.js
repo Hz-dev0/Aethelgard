@@ -423,6 +423,48 @@ function _doFlipCard(i) {
       cardEl.querySelector('.lottery-card-back').style.display = 'none';
       const front = cardEl.querySelector('.lottery-card-front');
       if (front) front.style.display = 'flex';
+
+      // ── 中獎特效：許願牌翻開時爆發粒子 ──
+      if (card.isWish) {
+        const rect = cardEl.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        for (let p = 0; p < 28; p++) {
+          const el = document.createElement('div');
+          const angle = (p / 28) * 360;
+          const dist = 60 + Math.random() * 70;
+          const size = 5 + Math.random() * 8;
+          const dx = Math.cos(angle * Math.PI / 180) * dist;
+          const dy = Math.sin(angle * Math.PI / 180) * dist;
+          const colors = ['#C9A227','#F0D080','#E8C55A','#fff'];
+          el.style.cssText = `
+            position:fixed;left:${cx}px;top:${cy}px;
+            width:${size}px;height:${size}px;border-radius:50%;
+            background:${colors[p % colors.length]};
+            pointer-events:none;z-index:99999;
+          `;
+          el.animate([
+            { transform:'translate(-50%,-50%) scale(1)', opacity:1 },
+            { transform:`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.2)`, opacity:0 }
+          ], { duration: 900 + Math.random()*300, delay: Math.random()*100, easing:'cubic-bezier(0.22,1,0.36,1)', fill:'forwards' });
+          document.body.appendChild(el);
+          setTimeout(() => el.remove(), 1300);
+        }
+        // 文字提示
+        const label = document.createElement('div');
+        label.textContent = '🌊 願望成真！';
+        label.style.cssText = `
+          position:fixed;left:${cx}px;top:${cy - 30}px;
+          transform:translate(-50%,-50%);
+          color:#C9A227;font-size:18px;font-weight:800;
+          white-space:nowrap;pointer-events:none;z-index:99999;
+          text-shadow:0 0 20px rgba(201,162,39,0.6),0 2px 8px rgba(0,0,0,0.15);
+          animation:goalFullLabel 1.8s cubic-bezier(0.22,1,0.36,1) forwards;
+        `;
+        document.body.appendChild(label);
+        setTimeout(() => label.remove(), 1900);
+      }
+
       renderLottery();
     }, 220);
   }
