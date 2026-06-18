@@ -33,7 +33,7 @@ function renderTree() {
           <circle cx="36" cy="36" r="${r}" fill="none" stroke="${n.ringBg}" stroke-width="5"/>
           <circle cx="36" cy="36" r="${r}" fill="none" stroke="${n.ringColor}" stroke-width="5"
             stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
-            stroke-linecap="round" transform="rotate(-90 36 36)" style="transition:stroke-dashoffset 0.4s ease"/>
+            stroke-linecap="round" transform="rotate(-90 36 36)" style="transition:stroke-dashoffset 0.5s cubic-bezier(0.34,1.56,0.64,1)"/>
         </svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px">${n.icon}</div>
       </div>
@@ -2215,14 +2215,36 @@ function toggleTask(id) {
 }
 
 function showCelebration(task) {
+  // ── 卡片發光：找到對應分類的 goal-ring-card 觸發 pulse ──
+  if (task && task.goal) {
+    const grid = document.getElementById('treeGrid');
+    if (grid) {
+      const cards = grid.querySelectorAll('.goal-ring-card');
+      const node = treeNodes.find(n => n.key === task.goal);
+      cards.forEach(card => {
+        const label = card.querySelector('[style*="font-size:13px"]');
+        if (node && label && label.textContent.trim() === node.label) {
+          card.classList.add('goal-ring-pulse');
+          // 傳入 accent 顏色讓 CSS 用
+          card.style.setProperty('--pulse-color', node.ringColor);
+          setTimeout(() => card.classList.remove('goal-ring-pulse'), 900);
+        }
+      });
+    }
+  }
+
+  // ── 格言：只在 20% 機率顯示，避免疲乏；任務有「意義」時也只偶爾顯示 ──
+  const shouldShow = Math.random() < 0.2;
+  if (!shouldShow) return;
+
   const cel = document.getElementById('celebration');
   const sub = document.getElementById('celebSub');
-  // 優先顯示任務本身填寫的「對你的意義」，若為空才隨機抽格言
   if (task && task.meaning && task.meaning.trim()) {
     sub.textContent = task.meaning.trim();
   } else {
     const quotes = state.customQuotes && state.customQuotes.length > 0 ? state.customQuotes : [];
-    sub.textContent = quotes.length > 0 ? quotes[Math.floor(Math.random() * quotes.length)] : '';
+    if (!quotes.length) return; // 沒有格言就不顯示
+    sub.textContent = quotes[Math.floor(Math.random() * quotes.length)];
   }
   cel.classList.add('show');
   setTimeout(() => cel.classList.remove('show'), 2800);

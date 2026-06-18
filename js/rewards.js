@@ -85,6 +85,42 @@ function checkRandomMissionProgress() {
   saveLottery();
 }
 
+// ── 從卡片旁浮出獎勵標籤，取代右下角 toast ──
+function _showRewardBadge(goalKey, text, color) {
+  const grid = document.getElementById('treeGrid');
+  if (!grid) { showToast(text); return; }
+  const node = typeof treeNodes !== 'undefined' && treeNodes.find(n => n.key === goalKey);
+  let anchor = null;
+  if (node) {
+    const cards = grid.querySelectorAll('.goal-ring-card');
+    cards.forEach(card => {
+      const label = card.querySelector('[style*="font-size:13px"]');
+      if (label && label.textContent.trim() === node.label) anchor = card;
+    });
+  }
+  if (!anchor) { showToast(text); return; }
+
+  const rect = anchor.getBoundingClientRect();
+  const badge = document.createElement('div');
+  badge.textContent = text;
+  badge.style.cssText = `
+    position:fixed;
+    left:${rect.left + rect.width / 2}px;
+    top:${rect.top}px;
+    transform:translate(-50%, -8px);
+    background:${color || '#C9A227'};
+    color:#fff;
+    font-size:13px;font-weight:700;
+    padding:5px 12px;border-radius:20px;
+    white-space:nowrap;pointer-events:none;
+    z-index:99998;
+    box-shadow:0 2px 12px rgba(0,0,0,0.18);
+    animation:rewardBadgeFly 1.4s cubic-bezier(0.22,1,0.36,1) forwards;
+  `;
+  document.body.appendChild(badge);
+  setTimeout(() => badge.remove(), 1500);
+}
+
 function onTaskCompleted(task) {
   const today = getTodayKey();
   if (lotteryState.todayDate !== today) {
@@ -94,34 +130,32 @@ function onTaskCompleted(task) {
   }
   const energy = task ? task.energy : null;
   const goal   = task ? task.goal   : null;
-  const isCharge  = energy === 'charge'; // ⚡充電任務 — 不給任何獎勵
-  const isDaily   = goal === '日常';     // 日常維運 — 只給碎片
-  const isFocus   = energy === 'focus';  // 𖦏專注 — 20% 機率多一張券
+  const isCharge  = energy === 'charge';
+  const isDaily   = goal === '日常';
+  const isFocus   = energy === 'focus';
 
   if (!isCharge) {
     if (!isDaily) {
-      // 核心任務：給抽卡機會（不給碎片，沒中時翻牌安慰獎才給碎片）
       lotteryState.todayDone++;
       const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
       const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
-      if (available > 0 && hasWishes) {
-        showToast('🎫 獲得翻牌機會！去抽獎區翻吧');
-      } else {
-        showToast('🎫 獲得翻牌機會！');
-      }
-      // 𖦏專注任務 20% 機率額外多一張
+      const badgeText = (available > 0 && hasWishes) ? '🎫 翻牌機會！去抽獎區' : '🎫 翻牌機會！';
+      const node = typeof treeNodes !== 'undefined' && treeNodes.find(n => n.key === goal);
+      _showRewardBadge(goal, badgeText, node ? node.ringColor : '#5B8DB8');
       if (isFocus && Math.random() < 0.2) {
         lotteryState.todayDone++;
         _showFocusBonus();
       }
     } else {
-      // 日常任務：只給碎片
       if (state.wishPoints === undefined) state.wishPoints = 0;
       state.wishPoints++;
       saveStateLocal();
       renderRewards();
-      showToast('💎 +1 願望碎片');
+      _showRewardBadge(goal, '💎 +1 願望碎片', '#3A6EA5');
     }
+  } else {
+    // 充電任務：給一個輕量充電提示
+    _showRewardBadge(goal, '⚡ 充電完成', '#7B9E87');
   }
 
   checkRandomMissionProgress();
