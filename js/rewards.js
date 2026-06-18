@@ -85,19 +85,9 @@ function checkRandomMissionProgress() {
   saveLottery();
 }
 
-// ── 從卡片旁浮出獎勵標籤，取代右下角 toast ──
 function _showRewardBadge(goalKey, text, color) {
   const grid = document.getElementById('treeGrid');
-  if (!grid) { showToast(text); return; }
-  const node = typeof treeNodes !== 'undefined' && treeNodes.find(n => n.key === goalKey);
-  let anchor = null;
-  if (node) {
-    const cards = grid.querySelectorAll('.goal-ring-card');
-    cards.forEach(card => {
-      const label = card.querySelector('[style*="font-size:13px"]');
-      if (label && label.textContent.trim() === node.label) anchor = card;
-    });
-  }
+  const anchor = grid ? grid.querySelector(`[data-goal-key="${goalKey}"]`) : null;
   if (!anchor) { showToast(text); return; }
 
   const rect = anchor.getBoundingClientRect();

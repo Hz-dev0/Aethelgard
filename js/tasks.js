@@ -25,6 +25,7 @@ function renderTree() {
     const overDone = doneCnt > goal;
     const labelColor = overDone ? n.ringColor : 'var(--text-dim)';
     return `<div class="goal-ring-card${isActive ? ' active-filter' : ''}"
+      data-goal-key="${n.key}"
       onclick="filterByGoal('${n.key}')"
       oncontextmenu="openDailyGoalCtx(event,'${n.key}')"
       style="cursor:pointer;${activeStyle}">
@@ -1984,12 +1985,12 @@ function renderTodayPanel() {
       style="${overdueStyle}cursor:${t.done ? 'default' : 'grab'};position:relative;padding-left:18px;overflow:hidden"
       data-idx="${idx}" data-id="${t.id}"
       draggable="${!t.done}"
-      onclick="navigateToTask(${t.id})"
+      ondblclick="navigateToTask(${t.id})"
       ondragstart="${!t.done ? `todayChipDragStart(event,${idx})` : ''}"
       ondragover="${!t.done ? `todayChipDragOver(event,${idx})` : ''}"
       ondrop="${!t.done ? `todayChipDrop(event,${idx})` : ''}"
       ondragend="${!t.done ? 'todayChipDragEnd(event)' : ''}"
-      title="${t.done ? '已完成 — 點擊跳轉任務' : '點擊跳轉到此任務（可拖曳排序）'}">
+      title="${t.done ? '已完成 — 雙擊跳轉任務' : '雙擊跳轉到此任務（可拖曳排序）'}">
       ${!t.done ? `<div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${stripeColor};border-radius:3px 0 0 3px;opacity:0.85;cursor:pointer;transition:width 0.15s,opacity 0.15s;flex-shrink:0" title="${stripeTitle}" onclick="event.stopPropagation();setTaskStatus(${t.id},'none')" ></div>` : ''}
       <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序" style="${t.done ? 'visibility:hidden' : ''}">⠿</span>
       <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id})">${t.done ? '✓' : ''}</div>
@@ -2010,6 +2011,21 @@ function renderTodayPanel() {
 
   // 手機：今日任務觸控拖曳排序
   if (window.matchMedia('(pointer: coarse)').matches) _wireTodayChipTouchDrag(list);
+
+  // 手機雙擊模擬（touchend 間隔 < 350ms 視為雙擊）
+  list.querySelectorAll('.today-task-chip[data-id]').forEach(chip => {
+    let lastTap = 0;
+    chip.addEventListener('touchend', e => {
+      // 忽略從 checkbox / delete / stripe 等子元素冒泡上來的 touch
+      if (e.target.closest('.today-chip-check, .btn-del-icon, [onclick*="setTaskStatus"]')) return;
+      const now = Date.now();
+      if (now - lastTap < 350) {
+        e.preventDefault();
+        navigateToTask(Number(chip.dataset.id));
+      }
+      lastTap = now;
+    }, { passive: false });
+  });
 }
 
 // ── Delete task from today panel ──
@@ -2219,17 +2235,13 @@ function showCelebration(task) {
   if (task && task.goal) {
     const grid = document.getElementById('treeGrid');
     if (grid) {
-      const cards = grid.querySelectorAll('.goal-ring-card');
       const node = treeNodes.find(n => n.key === task.goal);
-      cards.forEach(card => {
-        const label = card.querySelector('[style*="font-size:13px"]');
-        if (node && label && label.textContent.trim() === node.label) {
-          card.classList.add('goal-ring-pulse');
-          // 傳入 accent 顏色讓 CSS 用
-          card.style.setProperty('--pulse-color', node.ringColor);
-          setTimeout(() => card.classList.remove('goal-ring-pulse'), 900);
-        }
-      });
+      const card = grid.querySelector(`[data-goal-key="${task.goal}"]`);
+      if (card && node) {
+        card.style.setProperty('--pulse-color', node.ringColor);
+        card.classList.add('goal-ring-pulse');
+        setTimeout(() => card.classList.remove('goal-ring-pulse'), 900);
+      }
     }
   }
 

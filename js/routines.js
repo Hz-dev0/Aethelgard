@@ -189,25 +189,53 @@ function toggleRoutineItem(id) {
   const todayKey = localDateStr();
   it.done = !it.done;
   it.doneDate = it.done ? todayKey : null;
-  it.doneTs = it.done ? Date.now() : null; // 記錄完成時間戳，供重置週期判斷使用
+  it.doneTs = it.done ? Date.now() : null;
 
   if (state.wishPoints === undefined) state.wishPoints = 0;
 
   if (!wasDone) {
     // 完成：+1 願望碎片
     state.wishPoints++;
-    saveStateLocal();   // 立即寫 localStorage，不等 async syncToCloud
+    saveStateLocal();
     renderRewards();
     checkRandomMissionProgress();
-    _markSyncWrite(); // 抑制 snapshot，避免碎片被舊資料覆蓋
+    _markSyncWrite();
     syncToCloud();
-    showToast('💎 +1 願望碎片');
+
+    // ── 動畫：checkmark 彈跳 + badge 從 item 飛出 ──
+    const itemEl = document.getElementById(`routine-${id}`);
+    if (itemEl) {
+      itemEl.classList.add('routine-complete-flash');
+      setTimeout(() => itemEl.classList.remove('routine-complete-flash'), 600);
+
+      // badge 從 item 位置飛出
+      const rect = itemEl.getBoundingClientRect();
+      const badge = document.createElement('div');
+      badge.textContent = '💎 +1 願望碎片';
+      badge.style.cssText = `
+        position:fixed;
+        left:${rect.left + rect.width / 2}px;
+        top:${rect.top}px;
+        transform:translate(-50%, -8px);
+        background:#3A6EA5;color:#fff;
+        font-size:13px;font-weight:700;
+        padding:5px 12px;border-radius:20px;
+        white-space:nowrap;pointer-events:none;
+        z-index:99998;
+        box-shadow:0 2px 12px rgba(0,0,0,0.18);
+        animation:rewardBadgeFly 1.4s cubic-bezier(0.22,1,0.36,1) forwards;
+      `;
+      document.body.appendChild(badge);
+      setTimeout(() => badge.remove(), 1500);
+    } else {
+      showToast('💎 +1 願望碎片');
+    }
   } else {
     // 取消：-1 願望碎片
     state.wishPoints = Math.max(0, state.wishPoints - 1);
-    saveStateLocal();   // 立即寫 localStorage，不等 async syncToCloud
+    saveStateLocal();
     renderRewards();
-    _markSyncWrite(); // 抑制 snapshot，避免碎片被舊資料覆蓋
+    _markSyncWrite();
     syncToCloud();
     showToast('💎 -1 願望碎片');
   }
