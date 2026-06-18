@@ -88,9 +88,15 @@ function checkRandomMissionProgress() {
 function _showRewardBadge(goalKey, text, color) {
   const grid = document.getElementById('treeGrid');
   const anchor = grid ? grid.querySelector(`[data-goal-key="${goalKey}"]`) : null;
-  if (!anchor) { showToast(text); return; }
 
+  // 卡片不存在或不在可視範圍內（例如在任務頁），改用 toast
+  if (!anchor) { showToast(text); return; }
   const rect = anchor.getBoundingClientRect();
+  const inView = rect.width > 0 && rect.height > 0 &&
+    rect.top < window.innerHeight && rect.bottom > 0 &&
+    rect.left < window.innerWidth && rect.right > 0;
+  if (!inView) { showToast(text); return; }
+
   const badge = document.createElement('div');
   badge.textContent = text;
   badge.style.cssText = `

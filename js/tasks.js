@@ -2237,7 +2237,14 @@ function toggleTask(id) {
       state.doneHistory.push({ id: _histKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: t.recurring || false });
     }
   } else {
-    t.completedAt = null; // clear completion date when unchecking
+    // 取消完成：清除 completedAt 並從 doneHistory 移除對應紀錄
+    const wasCompletedAt = t.completedAt;
+    t.completedAt = null;
+    // ── 撤銷 doneHistory：移除剛才寫入的那筆，避免成長軌跡留下錯誤紀錄 ──
+    if (wasCompletedAt && state.doneHistory) {
+      const histKey = t.id + '_' + wasCompletedAt;
+      state.doneHistory = state.doneHistory.filter(h => h.id !== histKey);
+    }
     // ── 間隔重複任務撤銷：刪除已排好的下次 clone，還原本任務為未完成 ──
     if (t._intervalCompleted && t._intervalCloneId) {
       state.tasks = state.tasks.filter(x => x.id !== t._intervalCloneId);
