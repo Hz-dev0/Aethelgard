@@ -2731,9 +2731,14 @@ function updateResetCountdown() {
     time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
   }
 
-  // 直接設 width，不做 CSS transition（避免每次打開都從 100% 跑動畫）
+  // 直接設 width，強制跳過 transition
   fill.style.transition = 'none';
-  fill.style.width = pct + '%';
+  // 用兩個 rAF 確保瀏覽器已 flush layout 再設值，避免從 100% 動畫到目標值
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      fill.style.width = pct + '%';
+    });
+  });
 }
 
 function startResetCountdown() {
