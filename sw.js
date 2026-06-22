@@ -1,4 +1,4 @@
-const _swBuild = '20260623'; // ← 每次部署手動改這個數字
+const _swBuild = '202606011533'; // ← 每次部署手動改這個數字
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
