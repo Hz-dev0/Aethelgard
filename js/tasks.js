@@ -39,6 +39,8 @@ function renderTree() {
 
   grid.innerHTML = treeNodes.map(n => {
     const doneCnt = state.tasks.filter(t => t.done && t.goal === n.key && t.completedAt === todayStr).length;
+    // 今日已標記但未完成的任務數（顯示紅點用）
+    const undoneTodayCnt = state.tasks.filter(t => !t.done && t.goal === n.key && t.scheduledFor === localDateStr()).length;
     const goal = Math.max(1, n.dailyGoal || 1);
     const pct = Math.min(1, doneCnt / goal);
     const offset = circ - pct * circ;
@@ -63,6 +65,7 @@ function renderTree() {
             stroke-linecap="round" transform="rotate(-90 36 36)" style="transition:stroke-dashoffset 0.5s cubic-bezier(0.34,1.56,0.64,1)"/>
         </svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px">${n.icon}</div>
+        ${undoneTodayCnt > 0 ? `<div class="goal-ring-badge">${undoneTodayCnt}</div>` : ''}
       </div>
       <div style="font-size:13px;font-weight:500;color:var(--text);text-align:center;line-height:1.3">${n.label}</div>
       <div style="font-size:11px;color:${labelColor}">${doneCnt}/${goal} 今日</div>
@@ -1039,6 +1042,8 @@ async function init() {
   renderEnergyDots();
   initMoodTrack();
   renderTree();
+  // ── 啟動重置倒數計時條 ──
+  startResetCountdown();
   // 有雲端時跳過這批 render，等雲端資料回來後統一繪製，避免閃爍
   if (!getApiUrl()) {
   renderTasks();
@@ -1996,7 +2001,17 @@ function renderTodayPanel() {
 
   // badge 只顯示未完成數量
   const undoneCount = allToday.filter(t => !t.done).length;
-  if (countBadge) countBadge.textContent = undoneCount;
+  if (countBadge) {
+    countBadge.textContent = undoneCount > 0 ? undoneCount : '✓';
+    // 紅點：有未完成任務時醒目閃爍；全部完成時顯示綠色
+    countBadge.classList.remove('badge-urgent', 'badge-done');
+    void countBadge.offsetWidth; // force reflow to restart animation
+    if (undoneCount > 0) {
+      countBadge.classList.add('badge-urgent');
+    } else if (allToday.length > 0) {
+      countBadge.classList.add('badge-done');
+    }
+  }
 
   if (allToday.length === 0) {
     list.innerHTML = '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
@@ -2218,6 +2233,13 @@ function toggleTask(id) {
     state.done = state.tasks.filter(x => x.done).length;
     showCelebration(t);
     checkRewardUnlocks();
+    // ── 全清偵測：若今日任務全部完成，觸發特殊慶祝 ──
+    const _todayStr = localDateStr();
+    const _todayAll = state.tasks.filter(x => x.scheduledFor === _todayStr && x.status !== 'cancelled');
+    const _todayUndone = _todayAll.filter(x => !x.done);
+    if (_todayAll.length > 0 && _todayUndone.length === 0) {
+      setTimeout(() => showAllClearCelebration(_todayAll.length), 800);
+    }
     // If interval-recurring, schedule next occurrence BEFORE onTaskCompleted
     // so the 💎 碎片 toast from onTaskCompleted is the last one shown (not overwritten by 🔁 toast)
     if (t.recurring && t.recurMode === 'interval') {
@@ -2626,3 +2648,104 @@ function removeSandbox(i) {
   saveStateLocal();
   syncToCloud();
 }
+
+// ══════════════════════════════════════════════════════
+// ── 全清慶祝 Banner ──────────────────────────────────
+// ══════════════════════════════════════════════════════
+function showAllClearCelebration(count) {
+  const banner = document.getElementById('allClearBanner');
+  const sub = document.getElementById('allClearSub');
+  if (!banner) return;
+  if (sub) sub.textContent = `完成了 ${count} 件任務，今天你很棒 ✦`;
+  // 移除舊動畫 class
+  banner.classList.remove('show', 'hide');
+  void banner.offsetWidth;
+  banner.classList.add('show');
+  // 粒子爆發（複用已有的 _showGoalFullBurst 概念，但從中央發射）
+  _showAllClearParticles();
+  // 4.5秒後淡出
+  setTimeout(() => {
+    banner.classList.remove('show');
+    banner.classList.add('hide');
+    setTimeout(() => banner.classList.remove('hide'), 450);
+  }, 4500);
+}
+window.showAllClearCelebration = showAllClearCelebration;
+
+function _showAllClearParticles() {
+  const cx = window.innerWidth / 2;
+  const cy = 80;
+  const colors = ['#4CAF50', '#81C784', '#A5D6A7', '#C9A227', '#FFD54F', '#fff'];
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    const angle = (i / 28) * 360 + Math.random() * 10;
+    const dist = 60 + Math.random() * 80;
+    const size = 4 + Math.random() * 6;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const dx = Math.cos(angle * Math.PI / 180) * dist;
+    const dy = Math.sin(angle * Math.PI / 180) * dist + 30;
+    p.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};pointer-events:none;z-index:99997;`;
+    p.animate([
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.2)`, opacity: 0 }
+    ], { duration: 900 + Math.random() * 400, delay: Math.random() * 150, easing: 'cubic-bezier(0.22,1,0.36,1)', fill: 'forwards' });
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 1200);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// ── 重置倒數計時條 ───────────────────────────────────
+// ══════════════════════════════════════════════════════
+let _countdownTimer = null;
+
+function updateResetCountdown() {
+  const bar   = document.getElementById('resetCountdownBar');
+  const label = document.getElementById('resetCountdownLabel');
+  const fill  = document.getElementById('resetCountdownFill');
+  const time  = document.getElementById('resetCountdownTime');
+  if (!bar || !label || !fill || !time) return;
+
+  const msLeft = getNextResetMs();
+  const totalMs = 24 * 60 * 60 * 1000; // 24h cycle
+  const pct = Math.max(0, Math.min(100, (msLeft / totalMs) * 100));
+
+  // 格式化剩餘時間
+  const totalSec = Math.floor(msLeft / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+
+  const isUrgent = h < 2; // 剩不到 2 小時
+  const isCritical = h < 1 && m < 30; // 剩不到 30 分鐘
+
+  bar.classList.toggle('urgent', isUrgent);
+
+  if (isCritical) {
+    label.textContent = '⚠ 重置倒數';
+    time.textContent = `${m}m ${s.toString().padStart(2,'0')}s`;
+  } else if (isUrgent) {
+    label.textContent = '⏰ 距重置';
+    time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
+  } else {
+    label.textContent = '⏐ 距重置';
+    time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
+  }
+
+  fill.style.width = pct + '%';
+}
+
+function startResetCountdown() {
+  updateResetCountdown();
+  if (_countdownTimer) clearInterval(_countdownTimer);
+  // 剩餘時間多就每分鐘更新，少於 30 分鐘就每秒更新
+  function _tick() {
+    updateResetCountdown();
+    const ms = getNextResetMs();
+    const nextInterval = ms < 30 * 60 * 1000 ? 1000 : 60000;
+    _countdownTimer = setTimeout(_tick, nextInterval);
+  }
+  const ms = getNextResetMs();
+  _countdownTimer = setTimeout(_tick, ms < 30 * 60 * 1000 ? 1000 : 60000);
+}
+window.startResetCountdown = startResetCountdown;
