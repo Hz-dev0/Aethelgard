@@ -2002,14 +2002,25 @@ function renderTodayPanel() {
   // badge 只顯示未完成數量
   const undoneCount = allToday.filter(t => !t.done).length;
   if (countBadge) {
-    countBadge.textContent = undoneCount > 0 ? undoneCount : '✓';
-    // 紅點：有未完成任務時醒目閃爍；全部完成時顯示綠色
+    const prevText = countBadge.textContent;
+    const newText = undoneCount > 0 ? String(undoneCount) : '✓';
     countBadge.classList.remove('badge-urgent', 'badge-done');
-    void countBadge.offsetWidth; // force reflow to restart animation
+    void countBadge.offsetWidth;
     if (undoneCount > 0) {
       countBadge.classList.add('badge-urgent');
     } else if (allToday.length > 0) {
       countBadge.classList.add('badge-done');
+    }
+    // 數字改變時加彈跳 micro-animation
+    if (prevText !== newText) {
+      countBadge.textContent = newText;
+      countBadge.animate([
+        { transform: 'scale(0.6)', opacity: 0.4 },
+        { transform: 'scale(1.3)', opacity: 1 },
+        { transform: 'scale(1)',   opacity: 1 }
+      ], { duration: 300, easing: 'cubic-bezier(0.34,1.56,0.64,1)' });
+    } else {
+      countBadge.textContent = newText;
     }
   }
 
@@ -2715,15 +2726,20 @@ function updateResetCountdown() {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
 
-  const isUrgent = h < 2;
-  const isCritical = h < 1 && m < 30;
+  const isWarning  = h < 2 && !(h < 1 && m < 30); // 2h ~ 30min → 金色
+  const isUrgent   = h < 1 && m < 30;              // 30min 內 → 紅色閃爍
+  const isCritical = h === 0 && m < 10;             // 10min 內 → 顯示秒數
 
-  bar.classList.toggle('urgent', isUrgent);
+  bar.classList.toggle('warning', isWarning);
+  bar.classList.toggle('urgent',  isUrgent);
 
   if (isCritical) {
     label.textContent = '⚠';
     time.textContent = `${m}m ${s.toString().padStart(2,'0')}s`;
   } else if (isUrgent) {
+    label.textContent = '⚠';
+    time.textContent = `${m}m`;
+  } else if (isWarning) {
     label.textContent = '⏰';
     time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
   } else {
@@ -2748,10 +2764,10 @@ function startResetCountdown() {
   function _tick() {
     updateResetCountdown();
     const ms = getNextResetMs();
-    const nextInterval = ms < 30 * 60 * 1000 ? 1000 : 60000;
+    const nextInterval = ms < 10 * 60 * 1000 ? 1000 : 60000;
     _countdownTimer = setTimeout(_tick, nextInterval);
   }
   const ms = getNextResetMs();
-  _countdownTimer = setTimeout(_tick, ms < 30 * 60 * 1000 ? 1000 : 60000);
+  _countdownTimer = setTimeout(_tick, ms < 10 * 60 * 1000 ? 1000 : 60000);
 }
 window.startResetCountdown = startResetCountdown;
