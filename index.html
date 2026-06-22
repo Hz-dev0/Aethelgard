@@ -102,11 +102,25 @@
       </div>
       <!-- Today Tasks Panel -->
       <div class="today-panel" id="todayPanel">
-        <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between">
-          <span>☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
-          <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務">＋ 新增</button>
+        <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="white-space:nowrap">☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
+          <!-- 重置倒數計時條：嵌在標題列中間 -->
+          <div id="resetCountdownBar" style="flex:1">
+            <span id="resetCountdownLabel"></span>
+            <div class="countdown-progress-track">
+              <div class="countdown-progress-fill" id="resetCountdownFill"></div>
+            </div>
+            <span id="resetCountdownTime"></span>
+          </div>
+          <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務" style="white-space:nowrap;flex-shrink:0">＋ 新增</button>
         </div>
         <div id="todayPanelList"></div>
+      </div>
+      <!-- 全清慶祝 Banner -->
+      <div id="allClearBanner">
+        <div style="font-size:22px;margin-bottom:4px">🎉</div>
+        <div style="font-size:14px;font-weight:700;letter-spacing:0.04em">今日全部完成！</div>
+        <div id="allClearSub" style="font-size:11px;opacity:0.75;margin-top:3px"></div>
       </div>
     </div>
 
@@ -128,10 +142,10 @@
             <!-- ── 扁平 Pill 篩選列 ── -->
             <div id="flatFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
               <!-- 分類 pills -->
-              <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')">全部</div>
-              <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">🌟 技能</div>
-              <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🌿 自我</div>
-              <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🏠 日常</div>
+              <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')" style="position:relative">全部<span id="fpill-badge-all" style="display:none;position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#dc3c3c;color:white;font-size:9px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid var(--bg)"></span></div>
+              <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')" style="position:relative">🌟 技能<span id="fpill-badge-技能" style="display:none;position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#dc3c3c;color:white;font-size:9px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid var(--bg)"></span></div>
+              <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')" style="position:relative">🌿 自我<span id="fpill-badge-自我" style="display:none;position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#dc3c3c;color:white;font-size:9px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid var(--bg)"></span></div>
+              <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')" style="position:relative">🏠 日常<span id="fpill-badge-日常" style="display:none;position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#dc3c3c;color:white;font-size:9px;font-weight:700;line-height:16px;text-align:center;border:1.5px solid var(--bg)"></span></div>
               <!-- 分隔點 -->
               <span style="color:var(--border);font-size:14px;margin:0 2px;user-select:none">·</span>
               <!-- 快速篩 pills -->
