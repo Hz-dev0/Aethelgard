@@ -1331,6 +1331,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const res = document.getElementById('notes-search-results');
     if (res && !bar?.contains(e.target)) res.classList.remove('show');
   });
+  // 筆記預覽區連結一律另開視窗
+  document.getElementById('page-notes')?.addEventListener('click', e => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+    e.preventDefault();
+    window.open(href, '_blank', 'noopener,noreferrer');
+  });
 });
 
 window.addEventListener('load', () => {

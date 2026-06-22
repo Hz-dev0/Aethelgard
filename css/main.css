@@ -1705,18 +1705,9 @@
 
 
   /* ── Neglected task (久未完成) ── */
-  .task-item.neglected {
-    border-color: rgba(180,180,195,0.65) !important;
-    background: linear-gradient(90deg, rgba(200,200,215,0.04) 0%, transparent 100%);
-    box-shadow: 0 0 0 1.5px rgba(180,180,200,0.3), 0 2px 8px rgba(180,180,200,0.08);
-  }
-  .neglect-badge {
-    font-size: 9px; padding: 1px 6px; border-radius: 10px;
-    border: 1px solid rgba(180,180,200,0.45);
-    color: rgba(160,160,185,0.9);
-    background: rgba(180,180,200,0.1);
-    letter-spacing: 0.04em; white-space: nowrap;
-  }
+  /* .task-item.neglected 樣式已移至下方「紅點爽感系統」區塊統一管理 */
+  .neglect-badge-placeholder { display: none; } /* 佔位，勿刪 */
+
 
   /* ── Today panel drag & drop ── */
   .today-task-chip { cursor: grab; }
@@ -3222,16 +3213,15 @@
     animation: allClearFadeOut 0.4s ease forwards;
   }
 
-  /* ── 倒數計時條 ── */
+  /* ── 倒數計時條（嵌在今日任務標題列中） ── */
   #resetCountdownBar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 12px 2px;
+    gap: 6px;
     font-size: 11px;
     color: var(--text-faint);
     letter-spacing: 0.02em;
+    min-width: 0;
   }
   #resetCountdownBar.urgent {
     color: var(--rose);
@@ -3242,14 +3232,20 @@
     border-radius: 2px;
     background: var(--bg3);
     overflow: hidden;
+    min-width: 40px;
   }
   #resetCountdownBar .countdown-progress-fill {
     height: 100%;
     border-radius: 2px;
     background: var(--green);
-    transition: width 60s linear, background 1s;
+    transition: width 30s linear, background 1s;
   }
   #resetCountdownBar.urgent .countdown-progress-fill {
     background: var(--rose);
-    animation: redDotPulse 1.5s ease-in-out infinite;
+  }
+  #resetCountdownTime {
+    white-space: nowrap;
+    min-width: 46px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }

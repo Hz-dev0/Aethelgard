@@ -102,17 +102,17 @@
       </div>
       <!-- Today Tasks Panel -->
       <div class="today-panel" id="todayPanel">
-        <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between">
-          <span>☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
-          <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務">＋ 新增</button>
-        </div>
-        <!-- 重置倒數計時條 -->
-        <div id="resetCountdownBar">
-          <span id="resetCountdownLabel">⏐</span>
-          <div class="countdown-progress-track">
-            <div class="countdown-progress-fill" id="resetCountdownFill" style="width:100%"></div>
+        <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="white-space:nowrap">☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
+          <!-- 重置倒數計時條：嵌在標題列中間 -->
+          <div id="resetCountdownBar" style="flex:1">
+            <span id="resetCountdownLabel"></span>
+            <div class="countdown-progress-track">
+              <div class="countdown-progress-fill" id="resetCountdownFill" style="width:100%"></div>
+            </div>
+            <span id="resetCountdownTime"></span>
           </div>
-          <span id="resetCountdownTime" style="white-space:nowrap;min-width:42px;text-align:right"></span>
+          <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務" style="white-space:nowrap;flex-shrink:0">＋ 新增</button>
         </div>
         <div id="todayPanelList"></div>
       </div>

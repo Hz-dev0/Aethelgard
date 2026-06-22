@@ -2707,31 +2707,32 @@ function updateResetCountdown() {
   if (!bar || !label || !fill || !time) return;
 
   const msLeft = getNextResetMs();
-  const totalMs = 24 * 60 * 60 * 1000; // 24h cycle
+  const totalMs = 24 * 60 * 60 * 1000;
   const pct = Math.max(0, Math.min(100, (msLeft / totalMs) * 100));
 
-  // 格式化剩餘時間
   const totalSec = Math.floor(msLeft / 1000);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
 
-  const isUrgent = h < 2; // 剩不到 2 小時
-  const isCritical = h < 1 && m < 30; // 剩不到 30 分鐘
+  const isUrgent = h < 2;
+  const isCritical = h < 1 && m < 30;
 
   bar.classList.toggle('urgent', isUrgent);
 
   if (isCritical) {
-    label.textContent = '⚠ 重置倒數';
+    label.textContent = '⚠';
     time.textContent = `${m}m ${s.toString().padStart(2,'0')}s`;
   } else if (isUrgent) {
-    label.textContent = '⏰ 距重置';
+    label.textContent = '⏰';
     time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
   } else {
-    label.textContent = '⏐ 距重置';
+    label.textContent = '⏐';
     time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
   }
 
+  // 直接設 width，不做 CSS transition（避免每次打開都從 100% 跑動畫）
+  fill.style.transition = 'none';
   fill.style.width = pct + '%';
 }
 
