@@ -253,11 +253,9 @@ function _notesMdParse(text) {
   const processed = src.replace(/^[ \t]*(---+|===+|\*\*\*+)[ \t]*$/gm, '\n\n$1\n\n');
   let raw;
   if (typeof marked !== 'undefined') {
-    // 自訂 renderer：讓所有連結帶 target="_blank"（PWA 環境也適用）
     const renderer = new marked.Renderer();
     renderer.link = (href, title, text) => {
-      // href 可能是物件（marked v5+）也可能是字串（marked v4）
-      const hrefStr = (typeof href === 'object' && href !== null) ? (href.href || '') : (href || '');
+      const hrefStr  = (typeof href === 'object' && href !== null) ? (href.href  || '') : (href  || '');
       const titleStr = (typeof href === 'object' && href !== null) ? (href.title || '') : (title || '');
       const textStr  = (typeof href === 'object' && href !== null) ? (href.text  || text || '') : (text || '');
       const titleAttr = titleStr ? ` title="${titleStr}"` : '';
@@ -1341,12 +1339,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const res = document.getElementById('notes-search-results');
     if (res && !bar?.contains(e.target)) res.classList.remove('show');
   });
-  // 筆記 Markdown 預覽區連結一律另開視窗（document-level，PWA 動態內容也適用）
+  // 筆記預覽區連結另開視窗（document-level，PWA 動態內容也適用）
   document.addEventListener('click', e => {
     const a = e.target.closest('a[href]');
     if (!a) return;
-    // 只攔截在 md-preview 容器內的連結
-    if (!a.closest('.notes-md-preview, [id^="notes-md-preview"]')) return;
+    if (!a.closest('[id^="notes-md-preview"]')) return;
     const href = a.getAttribute('href');
     if (!href || href.startsWith('#')) return;
     e.preventDefault();

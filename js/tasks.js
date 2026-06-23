@@ -39,7 +39,6 @@ function renderTree() {
 
   grid.innerHTML = treeNodes.map(n => {
     const doneCnt = state.tasks.filter(t => t.done && t.goal === n.key && t.completedAt === todayStr).length;
-    // 今日已標記但未完成的任務數（顯示紅點用）
     const undoneTodayCnt = state.tasks.filter(t => !t.done && t.goal === n.key && t.scheduledFor === localDateStr()).length;
     const goal = Math.max(1, n.dailyGoal || 1);
     const pct = Math.min(1, doneCnt / goal);
@@ -1042,7 +1041,6 @@ async function init() {
   renderEnergyDots();
   initMoodTrack();
   renderTree();
-  // ── 啟動重置倒數計時條 ──
   startResetCountdown();
   // 有雲端時跳過這批 render，等雲端資料回來後統一繪製，避免閃爍
   if (!getApiUrl()) {
@@ -1691,31 +1689,10 @@ function _syncFlatPills() {
   const time = state.taskTypeFilter === 'recurring' ? 'recurring'
              : (state.timeFilter === 'overdue' ? 'overdue' : 'none');
 
-  // 計算各分類未完成任務數量
-  const activeTasks = state.tasks.filter(t => !t.done && t.status !== 'cancelled');
-  const countByGoal = {};
-  activeTasks.forEach(t => {
-    const g = t.goal || '其他';
-    countByGoal[g] = (countByGoal[g] || 0) + 1;
-  });
-  const totalUndone = activeTasks.length;
-
   ['all','技能','自我','日常'].forEach(k => {
     const el = document.getElementById('fpill-goal-' + k);
     if (!el) return;
     el.classList.toggle('fpill-active', k === goal);
-
-    // 更新紅色數量 badge
-    const badge = document.getElementById('fpill-badge-' + k);
-    if (badge) {
-      const cnt = k === 'all' ? totalUndone : (countByGoal[k] || 0);
-      if (cnt > 0) {
-        badge.textContent = cnt;
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
-      }
-    }
   });
   const rEl = document.getElementById('fpill-time-recurring');
   const oEl = document.getElementById('fpill-time-overdue');
@@ -2024,7 +2001,7 @@ function renderTodayPanel() {
   const undoneCount = allToday.filter(t => !t.done).length;
   if (countBadge) {
     const prevText = countBadge.textContent;
-    const newText = undoneCount > 0 ? String(undoneCount) : '✓';
+    const newText = undoneCount > 0 ? String(undoneCount) : (allToday.length > 0 ? '✓' : '');
     countBadge.classList.remove('badge-urgent', 'badge-done');
     void countBadge.offsetWidth;
     if (undoneCount > 0) {
@@ -2032,7 +2009,6 @@ function renderTodayPanel() {
     } else if (allToday.length > 0) {
       countBadge.classList.add('badge-done');
     }
-    // 數字改變時加彈跳 micro-animation
     if (prevText !== newText) {
       countBadge.textContent = newText;
       countBadge.animate([
@@ -2265,7 +2241,6 @@ function toggleTask(id) {
     state.done = state.tasks.filter(x => x.done).length;
     showCelebration(t);
     checkRewardUnlocks();
-    // ── 全清偵測：若今日任務全部完成，觸發特殊慶祝 ──
     const _todayStr = localDateStr();
     const _todayAll = state.tasks.filter(x => x.scheduledFor === _todayStr && x.status !== 'cancelled');
     const _todayUndone = _todayAll.filter(x => !x.done);
@@ -2682,20 +2657,17 @@ function removeSandbox(i) {
 }
 
 // ══════════════════════════════════════════════════════
-// ── 全清慶祝 Banner ──────────────────────────────────
+// ── 全清慶祝 Banner
 // ══════════════════════════════════════════════════════
 function showAllClearCelebration(count) {
   const banner = document.getElementById('allClearBanner');
-  const sub = document.getElementById('allClearSub');
+  const sub    = document.getElementById('allClearSub');
   if (!banner) return;
   if (sub) sub.textContent = `完成了 ${count} 件任務，今天你很棒 ✦`;
-  // 移除舊動畫 class
   banner.classList.remove('show', 'hide');
   void banner.offsetWidth;
   banner.classList.add('show');
-  // 粒子爆發（複用已有的 _showGoalFullBurst 概念，但從中央發射）
   _showAllClearParticles();
-  // 4.5秒後淡出
   setTimeout(() => {
     banner.classList.remove('show');
     banner.classList.add('hide');
@@ -2707,19 +2679,19 @@ window.showAllClearCelebration = showAllClearCelebration;
 function _showAllClearParticles() {
   const cx = window.innerWidth / 2;
   const cy = 80;
-  const colors = ['#4CAF50', '#81C784', '#A5D6A7', '#C9A227', '#FFD54F', '#fff'];
+  const colors = ['#4CAF50','#81C784','#A5D6A7','#C9A227','#FFD54F','#fff'];
   for (let i = 0; i < 28; i++) {
-    const p = document.createElement('div');
+    const p     = document.createElement('div');
     const angle = (i / 28) * 360 + Math.random() * 10;
-    const dist = 60 + Math.random() * 80;
-    const size = 4 + Math.random() * 6;
+    const dist  = 60 + Math.random() * 80;
+    const size  = 4 + Math.random() * 6;
     const color = colors[Math.floor(Math.random() * colors.length)];
-    const dx = Math.cos(angle * Math.PI / 180) * dist;
-    const dy = Math.sin(angle * Math.PI / 180) * dist + 30;
+    const dx    = Math.cos(angle * Math.PI / 180) * dist;
+    const dy    = Math.sin(angle * Math.PI / 180) * dist + 30;
     p.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};pointer-events:none;z-index:99997;`;
     p.animate([
       { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 },
-      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.2)`, opacity: 0 }
+      { transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.2)`, opacity: 0 }
     ], { duration: 900 + Math.random() * 400, delay: Math.random() * 150, easing: 'cubic-bezier(0.22,1,0.36,1)', fill: 'forwards' });
     document.body.appendChild(p);
     setTimeout(() => p.remove(), 1200);
@@ -2727,7 +2699,7 @@ function _showAllClearParticles() {
 }
 
 // ══════════════════════════════════════════════════════
-// ── 重置倒數計時條 ───────────────────────────────────
+// ── 重置倒數計時條
 // ══════════════════════════════════════════════════════
 let _countdownTimer = null;
 
@@ -2738,55 +2710,49 @@ function updateResetCountdown() {
   const time  = document.getElementById('resetCountdownTime');
   if (!bar || !label || !fill || !time) return;
 
-  const msLeft = getNextResetMs();
+  const msLeft  = getNextResetMs();
   const totalMs = 24 * 60 * 60 * 1000;
-  const pct = Math.max(0, Math.min(100, (msLeft / totalMs) * 100));
+  const pct     = Math.max(0, Math.min(100, (msLeft / totalMs) * 100));
 
   const totalSec = Math.floor(msLeft / 1000);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
 
-  const isWarning  = h < 2 && !(h < 1 && m < 30); // 2h ~ 30min → 金色
-  const isUrgent   = h < 1 && m < 30;              // 30min 內 → 紅色閃爍
-  const isCritical = h === 0 && m < 10;             // 10min 內 → 顯示秒數
+  const isWarning  = h < 2 && !(h < 1 && m < 30);
+  const isUrgent   = h < 1 && m < 30;
+  const isCritical = h === 0 && m < 10;
 
   bar.classList.toggle('warning', isWarning);
   bar.classList.toggle('urgent',  isUrgent);
 
   if (isCritical) {
     label.textContent = '⚠';
-    time.textContent = `${m}m ${s.toString().padStart(2,'0')}s`;
+    time.textContent  = `${m}m ${s.toString().padStart(2,'0')}s`;
   } else if (isUrgent) {
     label.textContent = '⚠';
-    time.textContent = `${m}m`;
+    time.textContent  = `${m}m`;
   } else if (isWarning) {
     label.textContent = '⏰';
-    time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
+    time.textContent  = `${h}h ${m.toString().padStart(2,'0')}m`;
   } else {
     label.textContent = '⏐';
-    time.textContent = `${h}h ${m.toString().padStart(2,'0')}m`;
+    time.textContent  = `${h}h ${m.toString().padStart(2,'0')}m`;
   }
 
-  // 直接設 width，強制跳過 transition
   fill.style.transition = 'none';
-  // 用兩個 rAF 確保瀏覽器已 flush layout 再設值，避免從 100% 動畫到目標值
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      fill.style.width = pct + '%';
-    });
-  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fill.style.width = pct + '%';
+  }));
 }
 
 function startResetCountdown() {
   updateResetCountdown();
-  if (_countdownTimer) clearInterval(_countdownTimer);
-  // 剩餘時間多就每分鐘更新，少於 30 分鐘就每秒更新
+  if (_countdownTimer) clearTimeout(_countdownTimer);
   function _tick() {
     updateResetCountdown();
     const ms = getNextResetMs();
-    const nextInterval = ms < 10 * 60 * 1000 ? 1000 : 60000;
-    _countdownTimer = setTimeout(_tick, nextInterval);
+    _countdownTimer = setTimeout(_tick, ms < 10 * 60 * 1000 ? 1000 : 60000);
   }
   const ms = getNextResetMs();
   _countdownTimer = setTimeout(_tick, ms < 10 * 60 * 1000 ? 1000 : 60000);
