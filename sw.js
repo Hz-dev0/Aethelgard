@@ -1,4 +1,4 @@
-const _swBuild = '202606241400'; // ← 每次部署手動改這個數字
+const _swBuild = '202606241530'; // ← 每次部署手動改這個數字
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
@@ -32,7 +32,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' }) // ★ 明確繞過瀏覽器 HTTP 快取，避免 network-first 被舊的 HTTP 快取回應擋下來
       .then(networkResponse => {
         return caches.open(CACHE_NAME).then(cache => {
           cache.put(e.request, networkResponse.clone());

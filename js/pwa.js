@@ -3,7 +3,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     const base = location.pathname.endsWith('/') ? location.pathname : location.pathname.replace(/[^/]*$/, '');
     const swPath = base + 'sw.js';
-    navigator.serviceWorker.register(swPath)
+    navigator.serviceWorker.register(swPath, { updateViaCache: 'none' })
       .then(reg => {
         console.log('SW registered:', reg.scope);
 
