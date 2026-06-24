@@ -281,6 +281,88 @@
   .tag-deep   { border-color: rgba(120,180,200,0.4); color: var(--sky);  background: rgba(120,180,200,0.08); }
   .task-meaning { font-size: 12px; color: var(--text); margin-top: 4px; font-style: italic; font-weight: 500; }
 
+  /* ══════════════════════════════════════════════════════════
+     任務總覽 — 桌面三欄佈局
+     手機（max-width: 680px）完全不受影響：
+     .task-page-layout 預設 display:block，.task-cat-col / #taskDesktopFilterRow
+     預設 display:none，等於手機看到的 DOM 與排版跟改版前一致。
+     ══════════════════════════════════════════════════════════ */
+  .task-page-layout { display: block; }
+  .task-cat-col { display: none; }
+  #taskDesktopFilterRow { display: none; }
+
+  @media (min-width: 681px) {
+    .task-page-layout {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .task-cat-col {
+      display: flex;
+      flex-direction: column;
+      width: 190px;
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+    .task-cat-col-title {
+      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-faint); padding: 0 6px 10px;
+    }
+    .task-cat-row {
+      padding: 9px 10px; font-size: 13px; cursor: pointer;
+      border-radius: 7px; display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 2px; color: var(--text);
+      transition: background 0.15s, color 0.15s;
+    }
+    .task-cat-row:hover { background: var(--bg3); }
+    .task-cat-row.active {
+      color: var(--green); font-weight: 600; background: rgba(74,130,196,0.09);
+    }
+    .task-cat-row .task-cat-count { font-size: 10px; color: var(--text-faint); }
+    .task-cat-row.active .task-cat-count { color: var(--green); opacity: 0.75; }
+
+    .task-global-progress { margin-top: 18px; padding: 0 6px; }
+    .task-global-progress-label {
+      font-size: 10px; color: var(--text-faint); margin-bottom: 6px;
+    }
+    .task-global-progress-row { display: flex; align-items: center; gap: 8px; }
+    .task-global-progress-track {
+      flex: 1; height: 6px; background: var(--bg3);
+      border-radius: 4px; overflow: hidden;
+    }
+    .task-global-progress-fill {
+      height: 100%; background: var(--gold); border-radius: 4px;
+      transition: width 0.25s ease;
+    }
+    .task-global-progress-count {
+      font-size: 11px; color: var(--text-faint); white-space: nowrap;
+    }
+
+    /* 手機版扁平 pill 列隱藏，改用桌面分類欄 + 右上角篩選鈕 */
+    #flatFilterRow { display: none !important; }
+    #taskDesktopFilterRow {
+      display: flex !important;
+      align-items: center; justify-content: space-between; gap: 10px;
+    }
+    #taskDesktopCatLabel { font-size: 15px; font-weight: 500; }
+
+    /* 任務卡片：能量/重複/逾期/日期標籤 改成跟標題同一行、靠右對齊 */
+    #page-tasks .task-body {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 12px;
+      align-items: start;
+    }
+    #page-tasks .task-name { grid-column: 1; grid-row: 1; }
+    #page-tasks .task-meta {
+      grid-column: 2; grid-row: 1;
+      margin-top: 2px; justify-content: flex-end;
+      max-width: 280px;
+    }
+    #page-tasks .task-meaning,
+    #page-tasks .task-note-preview { grid-column: 1 / -1; }
+  }
+
   /* ── Flat Pill Filter ── */
   .fpill {
     padding: 5px 14px; border-radius: 20px; font-size: 13px;

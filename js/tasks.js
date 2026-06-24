@@ -1585,6 +1585,16 @@ function _isFutureIntervalTask(t, todayStr) {
 
 // ── Tasks ──
 function renderTasks() {
+  // ── 桌面版：首次進入任務頁時，預設選第一個分類 + 只看今日 ──
+  // （手機版 _isDesktopTaskLayout() 為 false，這段邏輯完全不會執行，行為與改版前一致）
+  if (_isDesktopTaskLayout() && !state.goalFilter) {
+    const goals = (state.goals && state.goals.length) ? state.goals : [{ name: '技能' }, { name: '自我' }, { name: '日常' }];
+    state.goalFilter = goals[0].name;
+    if (state.taskTypeFilter !== 'recurring' && state.timeFilter !== 'overdue') {
+      state.timeFilter = 'today';
+    }
+  }
+
   // Show/hide the "clear filter" button
   const clearBtn = document.getElementById('clear-filter-btn');
   if (clearBtn) clearBtn.style.display = state.goalFilter ? 'inline-flex' : 'none';
@@ -1673,6 +1683,10 @@ function renderTasks() {
   if (typeof _syncStripToState === 'function') _syncStripToState();
   // sync flat pills
   if (typeof _syncFlatPills === 'function') _syncFlatPills();
+  // 桌面：分類欄 / 右上角篩選鈕 / 全分類今日進度條（手機上對應 DOM 為 display:none，呼叫無副作用）
+  _renderTaskCatNav();
+  _syncDesktopPills();
+  _renderTaskGlobalProgress();
   // 手機：為每個有 breakdown 的任務綁定觸控拖曳
   if (window.matchMedia('(pointer: coarse)').matches) {
     state.tasks.filter(t => t.steps && t.steps.length > 0).forEach(t => {
@@ -1681,6 +1695,94 @@ function renderTasks() {
     // 為每個任務綁定長按 context menu（取代桌機右鍵）
     _wireTaskLongPress();
   }
+}
+
+// ── 桌面版任務頁：分類欄 / 篩選鈕 / 全分類今日進度條 ──────────────
+function _isDesktopTaskLayout() {
+  return window.matchMedia('(min-width: 681px)').matches;
+}
+
+function _taskGoalsList() {
+  return (state.goals && state.goals.length) ? state.goals : [
+    { name: '技能', icon: '🌟' }, { name: '自我', icon: '🌿' }, { name: '日常', icon: '🏠' }
+  ];
+}
+
+function _renderTaskCatNav() {
+  const wrap = document.getElementById('taskCatNav');
+  const labelEl = document.getElementById('taskDesktopCatLabel');
+  if (!wrap) return; // 該頁尚未渲染（不應發生，僅防呆）
+  const goals = _taskGoalsList();
+  const todayStrFilter = localDateStr();
+  wrap.innerHTML = goals.map(g => {
+    const cnt = state.tasks.filter(t => !t.done && t.goal === g.name && !_isFutureIntervalTask(t, todayStrFilter)).length;
+    const isActive = state.goalFilter === g.name;
+    const icon = g.icon || '';
+    return `<div class="task-cat-row${isActive ? ' active' : ''}" onclick="taskCatNavSelect('${g.name}')">
+      <span>${icon} ${escHtml(g.name)}</span><span class="task-cat-count">${cnt}</span>
+    </div>`;
+  }).join('');
+  if (labelEl) {
+    const activeGoal = goals.find(g => g.name === state.goalFilter);
+    labelEl.textContent = activeGoal ? `${activeGoal.icon || ''} ${activeGoal.name}` : (state.goalFilter || '');
+  }
+}
+
+function taskCatNavSelect(goalName) {
+  // 重用既有 flatSetGoal（會重置 taskTypeFilter / timeFilter 為 all 並重新渲染）
+  flatSetGoal(goalName);
+  // 桌面版：切換分類後預設只看「今日」
+  if (_isDesktopTaskLayout()) {
+    state.timeFilter = 'today';
+    renderTasks();
+  }
+}
+window.taskCatNavSelect = taskCatNavSelect;
+
+function flatSetTimeDesktop(key) {
+  if (key === 'today') {
+    const isActive = state.timeFilter === 'today';
+    state.timeFilter = isActive ? 'all' : 'today';
+    state.taskTypeFilter = 'all';
+  } else if (key === 'recurring') {
+    const isActive = state.taskTypeFilter === 'recurring';
+    state.taskTypeFilter = isActive ? 'all' : 'recurring';
+    state.timeFilter = 'all';
+  } else if (key === 'overdue') {
+    const isActive = state.timeFilter === 'overdue';
+    state.timeFilter = isActive ? 'all' : 'overdue';
+    state.taskTypeFilter = 'all';
+  }
+  renderTasks();
+}
+window.flatSetTimeDesktop = flatSetTimeDesktop;
+
+function _syncDesktopPills() {
+  const time = state.taskTypeFilter === 'recurring' ? 'recurring'
+             : state.timeFilter === 'overdue' ? 'overdue'
+             : state.timeFilter === 'today' ? 'today' : 'none';
+  const tEl = document.getElementById('fpill-time-today2');
+  const rEl = document.getElementById('fpill-time-recurring2');
+  const oEl = document.getElementById('fpill-time-overdue2');
+  if (tEl) tEl.classList.toggle('fpill-active', time === 'today');
+  if (rEl) rEl.classList.toggle('fpill-active', time === 'recurring');
+  if (oEl) oEl.classList.toggle('fpill-active', time === 'overdue');
+}
+
+function _renderTaskGlobalProgress() {
+  const el = document.getElementById('taskGlobalProgress');
+  if (!el) return;
+  const today = localDateStr();
+  const todayAll = state.tasks.filter(t => t.scheduledFor === today || t.taskDate === today);
+  if (todayAll.length === 0) { el.innerHTML = ''; return; }
+  const doneCount = todayAll.filter(t => t.done).length;
+  const pct = Math.round(doneCount / todayAll.length * 100);
+  el.innerHTML = `
+    <div class="task-global-progress-label">今日總進度 · 全分類</div>
+    <div class="task-global-progress-row">
+      <div class="task-global-progress-track"><div class="task-global-progress-fill" style="width:${pct}%"></div></div>
+      <span class="task-global-progress-count">${doneCount}/${todayAll.length}</span>
+    </div>`;
 }
 
 // ── 扁平 Pill 篩選 ──────────────────────────────────────
@@ -1833,7 +1935,7 @@ function taskHTML(t) {
           ${hasSteps ? `<span class="task-collapse-arrow${isOpen ? ' open' : ''}">▶</span>` : ''}
         </div>
         ${t.meaning ? `<div class="task-meaning">${escHtml(t.meaning)}</div>` : ''}
-        ${t.note ? `<div style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
+        ${t.note ? `<div class="task-note-preview" style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
         <div class="task-meta">
           <span class="tag tag-energy">${eIcon} ${eLabel}</span>
           ${t.postponed >= 3 ? '<span class="tag" style="border-color:rgba(200,120,120,0.4);color:var(--rose);background:rgba(200,120,120,0.06)">⚠ 已多次延期</span>' : ''}
