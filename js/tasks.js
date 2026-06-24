@@ -864,6 +864,14 @@ async function init() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.style.display = 'none'; // 登入前隱藏同步燈
 
+  // ── 桌面版：預設直接停在「任務總覽」三欄頁，不用先看到生命樹再手動切換 ──
+  // 這裡只是切換 active page 的 CSS class（skipRender=true，不渲染），此時整個畫面
+  // 還被登入鎖屏蓋著，使用者看不到這個切換過程。手機版 _isDesktopTaskLayout() 為 false，
+  // 完全不會執行，預設仍停在生命樹頁，行為跟改版前一致。
+  if (_isDesktopTaskLayout()) {
+    showPage('tasks', true);
+  }
+
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
   // ★ Fix：提前設好 callback，消除 submitGuestToken 與 init 的競態條件
   let _initResolved = false;

@@ -72,6 +72,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       window._fbAuthUid = user.uid;
+      let _shouldNotifyReady = true;
 
       if (!user.isAnonymous) {
         // ── Email 登入 → Owner ──
@@ -93,11 +94,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
           return;
         }
         // 若 _fbGuestSessionActive，window._fbUid 已被 submitGuestToken 切換為 ownerUid，不覆寫
+        // ★ guest_access/{uid} 文件還沒寫入完成前，不能放行 ready callback，
+        //   否則 loadFromCloud() 會在安全規則還看不到 guest_access 的情況下被擋下來讀空。
+        //   submitGuestToken() 寫完 guest_access 後會自己呼叫 ready callback，這裡先跳過即可。
+        if (window._fbGuestAccessPending) {
+          _shouldNotifyReady = false;
+        }
       }
 
-      if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
-      if (typeof window._onFirebaseReadyCallback === 'function') {
-        window._onFirebaseReadyCallback();
+      if (_shouldNotifyReady) {
+        if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+        if (typeof window._onFirebaseReadyCallback === 'function') {
+          window._onFirebaseReadyCallback();
+        }
       }
     } else {
       // ── 未登入：顯示鎖屏 ──

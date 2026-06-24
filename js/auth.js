@@ -592,6 +592,13 @@ async function submitGuestToken() {
     errEl.textContent = '登入中…'; errEl.style.color = '';
     window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
+    // ★ 第二個競態條件的修正：guest_access/{guestUid} 文件還沒寫入完成前，
+    //   不能讓 onAuthStateChanged 提前呼叫 _onFirebaseReadyCallback()。
+    //   因為 Firestore 安全規則很可能靠 guest_access/{uid} 是否存在來判斷訪客
+    //   有沒有權限讀 Aethelgard/data；signInAnonymously() 一成功，onAuthStateChanged
+    //   就會觸發，但這時 guest_access 文件還沒寫到伺服器上，會被權限規則擋下來，
+    //   讀取直接失敗回傳 null —— 這就是無痕模式下「驗證碼登入後讀不到任務資料」的成因。
+    window._fbGuestAccessPending = true;
 
     // ★ 修正競態條件：_fbUid 必須在呼叫 signInAnonymously() 之前就設成 ownerUid。
     //   原因：signInAnonymously() 若需要真的跟 Firebase 伺服器來回建立全新匿名帳號
@@ -631,6 +638,9 @@ async function submitGuestToken() {
     } catch(gaErr) {
       console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
     }
+    // ★ guest_access 寫入嘗試（成功或失敗）已經結束，現在才能放行 ready callback。
+    //   不論成功失敗都要清除，否則寫入失敗時會永遠卡住、永遠不呼叫 ready callback。
+    window._fbGuestAccessPending = false;
 
     // ── 啟動 onSnapshot 監聽 + 到期計時器（統一由 _startGuestAccessWatcher 管理）──
     _startGuestAccessWatcher(guestUid, ownerUid, passExpiresAt, _guestAccessWritten);
