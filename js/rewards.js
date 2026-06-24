@@ -8,6 +8,7 @@ let lotteryState = {
   todayDone: 0,    // cumulative tasks completed today (resets at midnight)
   todayFlipped: 0, // how many cards flipped today (each flip costs 3 todayDone)
   randomMission: null, // assigned only when gold card is flipped; { taskIds, taskNames, requiredCount, completedTaskIds, awarded, assignedAt }
+  tenPullTickets: 0, // 十連抽券：完成「限時活動」任務獲得，跨日不重置、不受每日重置邏輯影響
 };
 
 function getTodayKey() {
@@ -133,11 +134,17 @@ function onTaskCompleted(task) {
   if (!isCharge) {
     if (!isDaily) {
       lotteryState.todayDone++;
-      const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
-      const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
-      const badgeText = (available > 0 && hasWishes) ? '🎫 翻牌機會！去抽獎區' : '🎫 翻牌機會！';
-      const node = typeof treeNodes !== 'undefined' && treeNodes.find(n => n.key === goal);
-      _showRewardBadge(goal, badgeText, node ? node.ringColor : '#5B8DB8');
+      // ★ 限時活動（自我）任務完成，額外贈送一張十連抽券
+      if (goal === '自我') {
+        lotteryState.tenPullTickets = (lotteryState.tenPullTickets || 0) + 1;
+        _showRewardBadge(goal, '🎉 +1 十連抽券！', '#D4608A');
+      } else {
+        const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
+        const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
+        const badgeText = (available > 0 && hasWishes) ? '🎫 翻牌機會！去抽獎區' : '🎫 翻牌機會！';
+        const node = typeof treeNodes !== 'undefined' && treeNodes.find(n => n.key === goal);
+        _showRewardBadge(goal, badgeText, node ? node.ringColor : '#5B8DB8');
+      }
       if (isFocus && Math.random() < 0.2) {
         lotteryState.todayDone++;
         _showFocusBonus();
@@ -147,7 +154,7 @@ function onTaskCompleted(task) {
       state.wishPoints++;
       saveStateLocal();
       renderRewards();
-      _showRewardBadge(goal, '💎 +1 願望碎片', '#3A6EA5');
+      _showRewardBadge(goal, '🌟 +1 願望碎片', '#3A6EA5');
     }
   } else {
     // 充電任務：給一個輕量充電提示
@@ -359,7 +366,7 @@ function _doFlipCard(i) {
     saveStateLocal(); // 立即寫本地，防止 sync 失敗時碎片遺失
     renderRewards();
     syncToCloud();
-    showToast('💎 +1 願望碎片（格言牌安慰獎）');
+    showToast('🌟 +1 願望碎片（格言牌安慰獎）');
   } else if (card.isWish && card.wishId) {
     // 已是解鎖願望，會在下面兌現，不另給碎片
   }
@@ -470,6 +477,146 @@ function _doFlipCard(i) {
   }
 }
 
+// ── 願望碎片兌換抽卡券 / 十連抽 ──────────────────────────────────────
+function exchangeFragmentsForTicket() {
+  const available = (typeof getAvailableWishPoints === 'function') ? getAvailableWishPoints() : 0;
+  if (available < 10) {
+    showToast(`🌟 碎片不足，需要 10 個（目前可用 ${available} 個）`);
+    return;
+  }
+  state.wishPoints = Math.max(0, (state.wishPoints || 0) - 10);
+  lotteryState.todayDone = (lotteryState.todayDone || 0) + 1;
+  lotteryState.tickets = (lotteryState.tickets || 0) + 1; // legacy 同步
+  saveStateLocal();
+  saveLottery();
+  renderRewards();
+  renderLottery();
+  if (typeof syncToCloud === 'function') syncToCloud();
+  showToast('🎫 兌換成功！+1 抽卡券');
+}
+window.exchangeFragmentsForTicket = exchangeFragmentsForTicket;
+
+// 解析「一抽」的結果（不綁定特定 DOM 卡片格，給十連抽批次呼叫用）。
+// 重用 buildCardPool() 的機率分佈，所以單抽跟十連抽的中獎機率完全一致。
+function _resolveOneDraw() {
+  const pool = buildCardPool();
+  const item = pool[Math.floor(Math.random() * pool.length)];
+  const result = {
+    icon: item.icon || '✦',
+    text: item.text || '',
+    isWish: !!item.isWish,
+    isRandomMission: !!item.isRandomMission,
+    fragmentGained: 0,
+    wishFulfilled: null,
+  };
+
+  if (result.isRandomMission) {
+    const existingRm = lotteryState.randomMission;
+    const allAlreadyDone = existingRm && !existingRm.awarded && existingRm.taskIds &&
+      existingRm.taskIds.every(id => {
+        const t = state.tasks.find(x => x.id === id);
+        return !t || t.done;
+      });
+    if (!existingRm || existingRm.awarded || allAlreadyDone) {
+      lotteryState.randomMission = generateRandomMission();
+    }
+    result.text = '隨機任務卡（去任務頁查看內容）';
+  } else if (result.isWish && item.wishId) {
+    const wishId = item.wishId;
+    const r = (state.rewards || []).find(x => x.id === wishId);
+    if (r) {
+      state.rewards = state.rewards.filter(x => x.id !== wishId);
+      const spent = r.allocatedPoints || 0;
+      state.wishPoints = Math.max(0, (state.wishPoints || 0) - spent);
+      if (lotteryState.cards) {
+        lotteryState.cards.forEach(c2 => {
+          if (c2.wishId === wishId) { c2.isWish = false; c2.wishId = null; c2.icon = '🌊'; }
+        });
+      }
+      const todayStr = localDateStr();
+      state.tasks.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        name: `願望成真✨ ${r.name}`,
+        meaning: `來自許願池的願望：${r.name}`,
+        goal: '日常', energy: 'easy', done: false, postponed: 0,
+        recurring: false, recurMode: null, recurInterval: 0,
+        taskDate: todayStr, scheduledFor: todayStr, status: 'active',
+      });
+      result.text = `願望成真：${r.name}`;
+      result.wishFulfilled = r.name;
+    } else {
+      // 十連抽過程中同一願望已被前面某抽兌現過，這抽退化成格言牌安慰獎
+      result.isWish = false;
+      if (state.wishPoints === undefined) state.wishPoints = 0;
+      state.wishPoints++;
+      result.fragmentGained = 1;
+      result.text = '（願望已兌現過）格言牌安慰獎';
+    }
+  } else {
+    // 格言牌 / placeholder：+1 願望碎片安慰獎
+    if (state.wishPoints === undefined) state.wishPoints = 0;
+    state.wishPoints++;
+    result.fragmentGained = 1;
+    result.text = result.text || '格言牌';
+  }
+  return result;
+}
+
+function drawTenPull() {
+  if ((lotteryState.tenPullTickets || 0) < 1) {
+    showToast('🎉 沒有十連抽券，完成限時活動任務來獲得！');
+    return;
+  }
+  lotteryState.tenPullTickets--;
+  const results = [];
+  for (let i = 0; i < 10; i++) results.push(_resolveOneDraw());
+
+  checkRandomMissionProgress();
+  saveStateLocal();
+  saveLottery();
+  renderRewards();
+  renderTasks();
+  renderTree();
+  renderLottery();
+  if (typeof syncToCloud === 'function') syncToCloud();
+  _showTenPullResultModal(results);
+}
+window.drawTenPull = drawTenPull;
+
+function _showTenPullResultModal(results) {
+  const old = document.getElementById('tenPullResultOverlay');
+  if (old) old.remove();
+
+  const wishResults = results.filter(r => r.wishFulfilled);
+  const fragTotal = results.reduce((s, r) => s + (r.fragmentGained || 0), 0);
+  const missionCount = results.filter(r => r.isRandomMission).length;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tenPullResultOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(20,30,45,0.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.25)">
+      <div style="text-align:center;font-size:20px;font-weight:700;margin-bottom:4px">🎉 十連抽結果</div>
+      <div style="text-align:center;font-size:12px;color:var(--text-faint);margin-bottom:16px">
+        ${wishResults.length > 0 ? `🌊 願望成真 x${wishResults.length} · ` : ''}🌟 碎片 +${fragTotal}${missionCount > 0 ? ` · 🏆 隨機任務 x${missionCount}` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px">
+        ${results.map(r => `
+          <div style="aspect-ratio:1;border-radius:10px;border:1px solid ${r.wishFulfilled ? 'rgba(201,162,39,0.5)' : 'var(--border)'};background:${r.wishFulfilled ? 'rgba(201,162,39,0.12)' : 'var(--bg3)'};display:flex;align-items:center;justify-content:center;font-size:22px">
+            ${r.wishFulfilled ? '🌊' : r.isRandomMission ? '🏆' : (r.icon || '✦')}
+          </div>`).join('')}
+      </div>
+      <div style="max-height:160px;overflow-y:auto;font-size:12px;color:var(--text-dim);line-height:1.8;margin-bottom:16px;border-top:1px solid var(--border);padding-top:10px">
+        ${results.map((r, idx) => `<div>${idx + 1}. ${escHtml(r.text)}</div>`).join('')}
+      </div>
+      <button id="tenPullCloseBtn" style="width:100%;padding:10px;border-radius:10px;border:none;background:var(--green);color:white;font-size:14px;font-weight:600;cursor:pointer">收下 ✓</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('tenPullCloseBtn').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
 function renderLottery() {
   const ticketEl = document.getElementById('lotteryTickets');
   const progressEl = document.getElementById('todayDone');
@@ -479,6 +626,22 @@ function renderLottery() {
   const availableFlips = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
   ticketEl.textContent = Math.max(0, availableFlips);
 
+  // 兌換按鈕：顯示目前可用碎片數
+  const exFragEl = document.getElementById('exchangeFragmentCount');
+  if (exFragEl) {
+    const available = (typeof getAvailableWishPoints === 'function') ? getAvailableWishPoints() : 0;
+    exFragEl.textContent = available;
+    const exBtn = document.getElementById('exchangeFragmentBtn');
+    if (exBtn) exBtn.style.opacity = available >= 10 ? '1' : '0.5';
+  }
+  // 十連抽按鈕：顯示持有券數
+  const tenPullCountEl = document.getElementById('tenPullTicketCount');
+  if (tenPullCountEl) {
+    const cnt = lotteryState.tenPullTickets || 0;
+    tenPullCountEl.textContent = cnt;
+    const tpBtn = document.getElementById('tenPullBtn');
+    if (tpBtn) tpBtn.style.opacity = cnt >= 1 ? '1' : '0.5';
+  }
 
   // lotteryProgress 已移除，不顯示碎片於抽獎區
 

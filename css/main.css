@@ -107,6 +107,31 @@
   }
   .logo:hover { background: rgba(74,130,196,0.07); }
   .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .header-fragments { display: none; } /* 手機版預設隱藏，維持原本介面不變 */
+
+  @media (min-width: 681px) {
+    /* 桌面版：原本右上角的匯出/精力切換器/同步燈號 移到置中位置，
+       碎片顯示改放最右角。手機版（max-width:680px）完全不受影響。 */
+    .header-right {
+      margin-left: 0;
+      flex: 1;
+      justify-content: center;
+    }
+    .header-fragments {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+  }
   .energy-bar-wrap { display: flex; align-items: center; gap: 5px; }
   .energy-label { font-size: 11px; color: var(--text-dim); }
   .energy-dots { display: flex; gap: 3px; }

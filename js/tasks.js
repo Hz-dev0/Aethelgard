@@ -183,6 +183,11 @@ function deallocateWishPoint(id) {
 }
 
 function renderRewards() {
+  // ★ 頭部碎片顯示（桌面版專用，手機版該元素 display:none，更新無副作用）
+  // 放在 wishList 的早退判斷之前，確保不論目前在哪個頁面都會更新數字
+  const headerFragEl = document.getElementById('headerFragmentCount');
+  if (headerFragEl) headerFragEl.textContent = getAvailableWishPoints();
+
   const wishList = document.getElementById('wishList');
   const wishEmpty = document.getElementById('wishEmpty');
   if (!wishList) return;
@@ -2406,7 +2411,7 @@ function toggleTask(id) {
       setTimeout(() => showAllClearCelebration(_todayAll.length), 800);
     }
     // If interval-recurring, schedule next occurrence BEFORE onTaskCompleted
-    // so the 💎 碎片 toast from onTaskCompleted is the last one shown (not overwritten by 🔁 toast)
+    // so the 🌟 碎片 toast from onTaskCompleted is the last one shown (not overwritten by 🔁 toast)
     if (t.recurring && t.recurMode === 'interval') {
       const cloneId = scheduleIntervalTask(t);
       // Mark with clone id so undo can remove the future clone

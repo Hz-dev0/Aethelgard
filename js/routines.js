@@ -211,7 +211,7 @@ function toggleRoutineItem(id) {
       // badge 從 item 位置飛出
       const rect = itemEl.getBoundingClientRect();
       const badge = document.createElement('div');
-      badge.textContent = '💎 +1 願望碎片';
+      badge.textContent = '🌟 +1 願望碎片';
       badge.style.cssText = `
         position:fixed;
         left:${rect.left + rect.width / 2}px;
@@ -228,7 +228,7 @@ function toggleRoutineItem(id) {
       document.body.appendChild(badge);
       setTimeout(() => badge.remove(), 1500);
     } else {
-      showToast('💎 +1 願望碎片');
+      showToast('🌟 +1 願望碎片');
     }
   } else {
     // 取消：-1 願望碎片
@@ -237,7 +237,7 @@ function toggleRoutineItem(id) {
     renderRewards();
     _markSyncWrite();
     syncToCloud();
-    showToast('💎 -1 願望碎片');
+    showToast('🌟 -1 願望碎片');
     // 紅色閃爍回饋
     const itemEl = document.getElementById(`routine-${id}`);
     if (itemEl) {
