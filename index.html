@@ -164,8 +164,8 @@
               <div id="flatFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
                 <!-- 分類 pills -->
                 <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')">全部</div>
-                <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">💎 素材</div>
-                <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🚩 活動</div>
+                <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">🚩 活動</div>
+                <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">💎 素材</div>
                 <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🧭 委託</div>
                 <!-- 分隔點 -->
                 <span style="color:var(--border);font-size:14px;margin:0 2px;user-select:none">·</span>
@@ -239,17 +239,17 @@
 
         <!-- Lottery pane -->
         <div id="lotteryPane">
-          <div class="lottery-info">
+          <div class="lottery-info" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <div class="lottery-ticket">🎫 抽卡券 <strong id="lotteryTickets">0</strong> 張</div>
             <span id="todayDone" style="display:none">0</span>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0">
-            <button onclick="exchangeFragmentsForTicket()" id="exchangeFragmentBtn" class="btn-ghost-green" style="font-size:12px;padding:6px 12px">
-              🌟 兌換抽卡券（10 碎片 → 1 券，現有 <span id="exchangeFragmentCount">0</span>）
-            </button>
-            <button onclick="drawTenPull()" id="tenPullBtn" class="btn-ghost-green" style="font-size:12px;padding:6px 12px;border-color:rgba(201,162,39,0.4);color:#C9A227">
-              🎉 十連抽（持有 <span id="tenPullTicketCount">0</span> 張）
-            </button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onclick="exchangeFragmentsForTicket()" id="exchangeFragmentBtn" class="btn-ghost-green" title="10 個願望碎片兌換 1 張抽卡券" style="font-size:12px;padding:6px 12px">
+                🌟 兌換
+              </button>
+              <button onclick="drawTenPull()" id="tenPullBtn" class="btn-ghost-green" title="消耗 1 張十連抽券，連續抽 10 次" style="font-size:12px;padding:6px 12px;border-color:rgba(201,162,39,0.4);color:#C9A227">
+                🎉 十連抽
+              </button>
+            </div>
           </div>
           <div class="lottery-grid" id="lotteryGrid"></div>
           <div style="font-size:11px;color:var(--text-faint);margin-top:12px;text-align:center">核心任務完成得抽卡券 · 每日委託得🌟碎片 · 限時活動得十連抽券 · 𖦏專注任務20%機率多一券 · ⚡充電任務不計入</div>
@@ -297,7 +297,7 @@
 
     <!-- 目標 + 能量：點擊切換 -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button type="button" id="newGoalBtn" onclick="cycleGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">💎 突破素材</button>
+      <button type="button" id="newGoalBtn" onclick="cycleGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🚩 限時活動</button>
       <button type="button" id="newEnergyBtn" onclick="cycleEnergy()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🍃 輕鬆</button>
       <input type="hidden" id="newTaskGoal" value="技能">
       <input type="hidden" id="newTaskEnergy" value="easy">
@@ -502,7 +502,7 @@
 
     <!-- 目標 + 能量：點擊切換 -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button type="button" id="editGoalBtn" onclick="cycleEditGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">💎 突破素材</button>
+      <button type="button" id="editGoalBtn" onclick="cycleEditGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🚩 限時活動</button>
       <button type="button" id="editEnergyBtn" onclick="cycleEditEnergy()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🍃 輕鬆</button>
       <input type="hidden" id="editTaskGoal" value="技能">
       <input type="hidden" id="editTaskEnergy" value="easy">
@@ -757,8 +757,8 @@
       <div>
         <select id="newRewardGoal">
           <option value="任意">🌈 任意分類</option>
-          <option value="技能">💎 突破素材</option>
-          <option value="自我">🚩 限時活動</option>
+          <option value="技能">🚩 限時活動</option>
+          <option value="自我">💎 突破素材</option>
           <option value="日常">🧭 每日委託</option>
         </select>
       </div>
@@ -797,8 +797,8 @@
       <div>
         <select id="editWishGoal">
           <option value="任意">🌈 任意分類</option>
-          <option value="技能">💎 突破素材</option>
-          <option value="自我">🚩 限時活動</option>
+          <option value="技能">🚩 限時活動</option>
+          <option value="自我">💎 突破素材</option>
           <option value="日常">🧭 每日委託</option>
         </select>
       </div>

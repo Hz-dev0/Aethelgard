@@ -1,7 +1,7 @@
 // ── Life Tree (responsive SVG) ──
 const treeNodes = [
-  { key: '技能', icon: '💎', label: '突破素材', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 2 },
-  { key: '自我', icon: '🚩', label: '限時活動', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 1 },
+  { key: '技能', icon: '🚩', label: '限時活動', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 2 },
+  { key: '自我', icon: '💎', label: '突破素材', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 1 },
   { key: '日常', icon: '🧭', label: '每日委託', ringColor: '#3A6EA5', ringBg: 'rgba(58,110,165,0.12)', accent: '#3A6EA5', dailyGoal: 3 },
 ];
 
@@ -89,7 +89,7 @@ function renderTree() {
 }
 
 // ── Wish Pool (許願池) ──
-const goalIcons = { 技能:'💎', 自我:'🚩', 日常:'🧭', 任意:'🌈' };
+const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' };
 
 
 
@@ -1763,8 +1763,8 @@ function _taskGoalsList() {
     return treeNodes.map(n => ({ name: n.key, icon: n.icon, label: n.label }));
   }
   return (state.goals && state.goals.length) ? state.goals : [
-    { name: '技能', icon: '💎', label: '突破素材' },
-    { name: '自我', icon: '🚩', label: '限時活動' },
+    { name: '技能', icon: '🚩', label: '限時活動' },
+    { name: '自我', icon: '💎', label: '突破素材' },
     { name: '日常', icon: '🧭', label: '每日委託' }
   ];
 }
@@ -2188,7 +2188,7 @@ function renderTodayPanel() {
     list.innerHTML = '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
     return;
   }
-  const goalIconMap = { 技能:'💎', 自我:'🚩', 日常:'🧭', 任意:'🌈' };
+  const goalIconMap = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' };
   list.innerHTML = allToday.map((t, idx) => {
     const gIcon = goalIconMap[t.goal] || '●';
     const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;

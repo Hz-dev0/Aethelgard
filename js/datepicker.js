@@ -92,7 +92,7 @@ function showRecurMorningDialog() {
 }
 
 function _renderRecurMorningList(items) {
-  const goalIconMap = { 技能:'💎', 自我:'🚩', 日常:'🧭' };
+  const goalIconMap = { 技能:'🚩', 自我:'💎', 日常:'🧭' };
   const energyLabelMap = { charge:'⚡ 充電', easy:'🍃 輕鬆', focus:'𖦏 專注' };
 
   // Group: daily first, then interval

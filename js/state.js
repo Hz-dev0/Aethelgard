@@ -1,7 +1,7 @@
 // ── 目標 / 能量循環切換 ────────────────────────────────────
 const _goalCycle  = [
-  { key:'技能', label:'💎 突破素材' },
-  { key:'自我', label:'🚩 限時活動' },
+  { key:'技能', label:'🚩 限時活動' },
+  { key:'自我', label:'💎 突破素材' },
   { key:'日常', label:'🧭 每日委託' },
 ];
 const _energyCycle = [

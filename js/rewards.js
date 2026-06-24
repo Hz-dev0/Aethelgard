@@ -134,8 +134,8 @@ function onTaskCompleted(task) {
   if (!isCharge) {
     if (!isDaily) {
       lotteryState.todayDone++;
-      // ★ 限時活動（自我）任務完成，額外贈送一張十連抽券
-      if (goal === '自我') {
+      // ★ 限時活動（技能）任務完成，額外贈送一張十連抽券
+      if (goal === '技能') {
         lotteryState.tenPullTickets = (lotteryState.tenPullTickets || 0) + 1;
         _showRewardBadge(goal, '🎉 +1 十連抽券！', '#D4608A');
       } else {
@@ -626,21 +626,19 @@ function renderLottery() {
   const availableFlips = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
   ticketEl.textContent = Math.max(0, availableFlips);
 
-  // 兌換按鈕：顯示目前可用碎片數
-  const exFragEl = document.getElementById('exchangeFragmentCount');
-  if (exFragEl) {
+  // 兌換按鈕：依可用碎片數決定透明度，並把目前數量放進 title 提示
+  const exBtn = document.getElementById('exchangeFragmentBtn');
+  if (exBtn) {
     const available = (typeof getAvailableWishPoints === 'function') ? getAvailableWishPoints() : 0;
-    exFragEl.textContent = available;
-    const exBtn = document.getElementById('exchangeFragmentBtn');
-    if (exBtn) exBtn.style.opacity = available >= 10 ? '1' : '0.5';
+    exBtn.style.opacity = available >= 10 ? '1' : '0.5';
+    exBtn.title = `目前可用碎片 ${available} 個，10 個碎片可兌換 1 張抽卡券`;
   }
-  // 十連抽按鈕：顯示持有券數
-  const tenPullCountEl = document.getElementById('tenPullTicketCount');
-  if (tenPullCountEl) {
+  // 十連抽按鈕：依持有券數決定透明度，並把目前數量放進 title 提示
+  const tpBtn = document.getElementById('tenPullBtn');
+  if (tpBtn) {
     const cnt = lotteryState.tenPullTickets || 0;
-    tenPullCountEl.textContent = cnt;
-    const tpBtn = document.getElementById('tenPullBtn');
-    if (tpBtn) tpBtn.style.opacity = cnt >= 1 ? '1' : '0.5';
+    tpBtn.style.opacity = cnt >= 1 ? '1' : '0.5';
+    tpBtn.title = `目前持有 ${cnt} 張十連抽券`;
   }
 
   // lotteryProgress 已移除，不顯示碎片於抽獎區
