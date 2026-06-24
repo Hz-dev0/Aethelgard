@@ -126,43 +126,63 @@
     <div class="page" id="page-tasks">
       <div class="section-title">任務總覽 <span class="sub" id="filtered-label"></span><span id="clear-filter-btn" onclick="clearGoalFilter()" style="display:none" class="btn-clear-filter">✕ 清除篩選</span></div>
 
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div class="card-title" style="margin-bottom:0">任務清單</div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <button class="add-btn" onclick="openAddTask()" style="margin:0;padding:5px 14px;font-size:12px">＋ 新增任務</button>
-            <span id="taskSectionArrow" onclick="toggleTaskSection()" title="收合篩選區" style="font-size:11px;color:var(--text-faint);transition:transform 0.2s;display:inline-block;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">▼</span>
-          </div>
+      <div class="task-page-layout" id="taskPageLayout">
+
+        <!-- ── 桌面專用：分類欄（手機隱藏） ── -->
+        <div class="task-cat-col" id="taskCatCol">
+          <div class="task-cat-col-title">分類</div>
+          <div id="taskCatNav"></div>
+          <div id="taskGlobalProgress" class="task-global-progress"></div>
         </div>
-        <div id="taskSectionBody" style="overflow:hidden;transition:max-height 0.3s ease,opacity 0.2s ease;max-height:300px;opacity:1">
-          <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:10px">
 
-            <!-- ── 扁平 Pill 篩選列 ── -->
-            <div id="flatFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-              <!-- 分類 pills -->
-              <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')">全部</div>
-              <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">🌟 技能</div>
-              <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🌿 自我</div>
-              <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🏠 日常</div>
-              <!-- 分隔點 -->
-              <span style="color:var(--border);font-size:14px;margin:0 2px;user-select:none">·</span>
-              <!-- 快速篩 pills -->
-              <div id="fpill-time-recurring" class="fpill" onclick="flatSetTime('recurring')">🔁 重複</div>
-              <div id="fpill-time-overdue"   class="fpill fpill-danger" onclick="flatSetTime('overdue')">⚠ 逾期</div>
+        <div class="card" style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="card-title" style="margin-bottom:0">任務清單</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="add-btn" onclick="openAddTask()" style="margin:0;padding:5px 14px;font-size:12px">＋ 新增任務</button>
+              <span id="taskSectionArrow" onclick="toggleTaskSection()" title="收合篩選區" style="font-size:11px;color:var(--text-faint);transition:transform 0.2s;display:inline-block;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">▼</span>
             </div>
-
-            <!-- 保留舊 DOM id 供 JS 相容（隱藏） -->
-            <div id="filterStrip" style="display:none">
-              <span id="fstrip-freq-val"></span><span id="fstrip-freq-num"></span>
-              <span id="fstrip-time-val"></span><span id="fstrip-time-num"></span>
-              <span id="fstrip-energy-val"></span><span id="fstrip-energy-num"></span>
-              <span id="fstrip-goal-val"></span><span id="fstrip-goal-num"></span>
-            </div>
-            <div id="filterExpand" style="display:none"><div id="filterSubChips"></div></div>
-
           </div>
+          <div id="taskSectionBody" style="overflow:hidden;transition:max-height 0.3s ease,opacity 0.2s ease;max-height:300px;opacity:1">
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:10px">
+
+              <!-- ── 手機版：扁平 Pill 篩選列（桌面隱藏，邏輯與外觀完全不變） ── -->
+              <div id="flatFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                <!-- 分類 pills -->
+                <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')">全部</div>
+                <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">🌟 技能</div>
+                <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🌿 自我</div>
+                <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🏠 日常</div>
+                <!-- 分隔點 -->
+                <span style="color:var(--border);font-size:14px;margin:0 2px;user-select:none">·</span>
+                <!-- 快速篩 pills -->
+                <div id="fpill-time-recurring" class="fpill" onclick="flatSetTime('recurring')">🔁 重複</div>
+                <div id="fpill-time-overdue"   class="fpill fpill-danger" onclick="flatSetTime('overdue')">⚠ 逾期</div>
+              </div>
+
+              <!-- ── 桌面版：分類標籤 + 今日/逾期/重複 篩選鈕（靠右上角，手機隱藏） ── -->
+              <div id="taskDesktopFilterRow">
+                <span id="taskDesktopCatLabel"></span>
+                <div style="display:flex;gap:6px">
+                  <div id="fpill-time-today2"     class="fpill" onclick="flatSetTimeDesktop('today')">☀ 今日</div>
+                  <div id="fpill-time-recurring2" class="fpill" onclick="flatSetTimeDesktop('recurring')">🔁 重複</div>
+                  <div id="fpill-time-overdue2"   class="fpill fpill-danger" onclick="flatSetTimeDesktop('overdue')">⚠ 逾期</div>
+                </div>
+              </div>
+
+              <!-- 保留舊 DOM id 供 JS 相容（隱藏） -->
+              <div id="filterStrip" style="display:none">
+                <span id="fstrip-freq-val"></span><span id="fstrip-freq-num"></span>
+                <span id="fstrip-time-val"></span><span id="fstrip-time-num"></span>
+                <span id="fstrip-energy-val"></span><span id="fstrip-energy-num"></span>
+                <span id="fstrip-goal-val"></span><span id="fstrip-goal-num"></span>
+              </div>
+              <div id="filterExpand" style="display:none"><div id="filterSubChips"></div></div>
+
+            </div>
+          </div>
+          <div class="task-list" id="taskList"></div>
         </div>
-        <div class="task-list" id="taskList"></div>
       </div>
     </div>
 
