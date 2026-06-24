@@ -279,6 +279,61 @@
   .tag-energy { border-color: rgba(200,169,110,0.4); color: var(--gold); background: rgba(200,169,110,0.08); }
   .tag-goal   { border-color: rgba(120,200,150,0.3); color: var(--green); background: rgba(120,200,150,0.08); }
   .tag-deep   { border-color: rgba(120,180,200,0.4); color: var(--sky);  background: rgba(120,180,200,0.08); }
+  /* ══════════════════════════════════════════════════════════
+     生命樹頁 — 桌面三欄佈局
+     手機（max-width: 680px）完全不受影響：.tree-page-layout 預設
+     display:block，.tree-right-col 預設 display:none。
+     ══════════════════════════════════════════════════════════ */
+  .tree-page-layout { display: block; }
+  .tree-right-col { display: none; }
+
+  @media (min-width: 681px) {
+    .tree-page-layout {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .tree-middle-col {
+      flex: 1 1 560px;
+      max-width: 600px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .tree-right-col {
+      display: block;
+      flex: 1 1 320px;
+      min-width: 280px;
+      position: sticky;
+      top: 0;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+    .tree-right-placeholder {
+      text-align: center;
+      color: var(--text-faint);
+      font-size: 13px;
+      line-height: 1.8;
+      padding: 60px 16px;
+    }
+    .tree-right-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+  }
+
   .task-meaning { font-size: 12px; color: var(--text); margin-top: 4px; font-style: italic; font-weight: 500; }
 
   /* ══════════════════════════════════════════════════════════
@@ -346,21 +401,27 @@
     }
     #taskDesktopCatLabel { font-size: 15px; font-weight: 500; }
 
-    /* 任務卡片：能量/重複/逾期/日期標籤 改成跟標題同一行、靠右對齊 */
-    #page-tasks .task-body {
+    /* 任務卡片：能量/重複/逾期/日期標籤 改成跟標題同一行、靠右對齊
+       （同時套用在任務頁 #page-tasks 跟生命樹右欄 .tree-right-col，兩邊都用 taskHTML() 產生卡片）*/
+    #page-tasks .task-body,
+    .tree-right-col .task-body {
       display: grid;
       grid-template-columns: 1fr auto;
       column-gap: 12px;
       align-items: start;
     }
-    #page-tasks .task-name { grid-column: 1; grid-row: 1; }
-    #page-tasks .task-meta {
+    #page-tasks .task-name,
+    .tree-right-col .task-name { grid-column: 1; grid-row: 1; }
+    #page-tasks .task-meta,
+    .tree-right-col .task-meta {
       grid-column: 2; grid-row: 1;
       margin-top: 2px; justify-content: flex-end;
       max-width: 280px;
     }
     #page-tasks .task-meaning,
-    #page-tasks .task-note-preview { grid-column: 1 / -1; }
+    #page-tasks .task-note-preview,
+    .tree-right-col .task-meaning,
+    .tree-right-col .task-note-preview { grid-column: 1 / -1; }
   }
 
   /* ── Flat Pill Filter ── */

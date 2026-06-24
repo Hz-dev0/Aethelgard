@@ -1,8 +1,8 @@
 // ── Life Tree (responsive SVG) ──
 const treeNodes = [
-  { key: '技能', icon: '🌟', label: '技能修練', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 2 },
-  { key: '自我', icon: '🌿', label: '自我實現', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 1 },
-  { key: '日常', icon: '🏠', label: '日常維運', ringColor: '#3A6EA5', ringBg: 'rgba(58,110,165,0.12)', accent: '#3A6EA5', dailyGoal: 3 },
+  { key: '技能', icon: '💎', label: '突破素材', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 2 },
+  { key: '自我', icon: '🚩', label: '限時活動', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 1 },
+  { key: '日常', icon: '🧭', label: '每日委託', ringColor: '#3A6EA5', ringBg: 'rgba(58,110,165,0.12)', accent: '#3A6EA5', dailyGoal: 3 },
 ];
 
 function renderTree() {
@@ -83,10 +83,13 @@ function renderTree() {
   });
 
   renderTodayPanel();
+  // ★ 桌面版：生命樹頁右欄（顯示目前選中分類的任務細項）。
+  //   手機上沒有對應 DOM（getElementById 會是 null），函式內部會直接 return，無副作用。
+  _renderTreeRightPanel();
 }
 
 // ── Wish Pool (許願池) ──
-const goalIcons = { 技能:'🌟', 自我:'🌿', 日常:'🏠', 任意:'🌈' };
+const goalIcons = { 技能:'💎', 自我:'🚩', 日常:'🧭', 任意:'🌈' };
 
 
 
@@ -864,14 +867,6 @@ async function init() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.style.display = 'none'; // 登入前隱藏同步燈
 
-  // ── 桌面版：預設直接停在「任務總覽」三欄頁，不用先看到生命樹再手動切換 ──
-  // 這裡只是切換 active page 的 CSS class（skipRender=true，不渲染），此時整個畫面
-  // 還被登入鎖屏蓋著，使用者看不到這個切換過程。手機版 _isDesktopTaskLayout() 為 false，
-  // 完全不會執行，預設仍停在生命樹頁，行為跟改版前一致。
-  if (_isDesktopTaskLayout()) {
-    showPage('tasks', true);
-  }
-
   // 等待 Firebase 登入就緒（Owner 自動免登入 或 訪客 OTP 驗證完成）
   // ★ Fix：提前設好 callback，消除 submitGuestToken 與 init 的競態條件
   let _initResolved = false;
@@ -1244,11 +1239,9 @@ const _filterDims = {
   },
   goal: {
     get options() {
-      const goals = (state.goals && state.goals.length) ? state.goals : [
-        {name:'技能',icon:'🌟'},{name:'自我',icon:'🌿'},{name:'日常',icon:'🏠'}
-      ];
+      const goals = _taskGoalsList();
       return [{ key: 'all', label: '全部', color: null },
-        ...goals.map(g => ({ key: g.name, label: (g.icon ? g.icon + ' ' : '') + g.name, color: null }))];
+        ...goals.map(g => ({ key: g.name, label: (g.icon ? g.icon + ' ' : '') + (g.label || g.name), color: null }))];
     },
     getState: () => state.goalFilter || 'all',
     setState: v => {
@@ -1441,6 +1434,16 @@ function filterByGoal(goal) {
   state.energyFilter = 'all';
   state.taskTypeFilter = 'all';
   state.timeFilter = 'all';
+  // Pre-set the goal in add modal for convenience
+  state.pendingGoalForAdd = goal;
+
+  // ★ 桌面版：留在生命樹頁，直接在右欄顯示該分類的任務細項，不跳轉到任務總覽頁。
+  //   手機版完全不受影響，下面維持原本「跳轉到任務頁」的行為。
+  if (_isDesktopTaskLayout()) {
+    renderTree(); // 重新渲染 ring card 的 active 樣式，並連動更新右欄（見 renderTree 結尾）
+    return;
+  }
+
   // Navigate without triggering a render yet
   showPage('tasks', true);
   // Update label
@@ -1453,9 +1456,33 @@ function filterByGoal(goal) {
   // Now render once with correct state
   renderTasks();
   renderTree();
-  // Pre-set the goal in add modal for convenience
-  state.pendingGoalForAdd = goal;
 }
+
+// ── 桌面版生命樹頁右欄：顯示目前選中分類的任務細項 ──────────────
+function _renderTreeRightPanel() {
+  const wrap = document.getElementById('treeRightCol');
+  if (!wrap) return; // 手機版沒有這個元素，直接結束，無副作用
+
+  if (!state.goalFilter) {
+    wrap.innerHTML = `<div class="tree-right-placeholder">👈 點選左邊的目標卡片<br>看看裡面有哪些任務</div>`;
+    return;
+  }
+
+  const node = treeNodes.find(n => n.key === state.goalFilter);
+  const todayStrFilter = localDateStr();
+  const activeTasks = state.tasks.filter(t => !t.done && t.goal === state.goalFilter && !_isFutureIntervalTask(t, todayStrFilter));
+  const doneTasks   = state.tasks.filter(t =>  t.done && t.goal === state.goalFilter);
+  const listHtml = _buildTaskListHTML(activeTasks, doneTasks);
+
+  wrap.innerHTML = `
+    <div class="tree-right-header">
+      <span style="color:${node ? node.ringColor : 'inherit'}">${node ? node.icon : ''} ${escHtml(state.goalFilter)}</span>
+      <button class="btn-ghost-green" onclick="openAddTask()" style="margin:0;padding:4px 12px;font-size:11px;white-space:nowrap">＋ 新增任務</button>
+    </div>
+    <div class="tree-right-list">${listHtml}</div>
+  `;
+}
+window._renderTreeRightPanel = _renderTreeRightPanel;
 
 // ── Daily Goal Context Menu ──────────────────────────────
 function openDailyGoalCtx(e, key, refEl) {
@@ -1592,6 +1619,74 @@ function _isFutureIntervalTask(t, todayStr) {
 }
 
 // ── Tasks ──
+// ── 共用：依排序規則產生任務清單 HTML（卡片 + 今日已完成收合區）──────────────
+// renderTasks()（任務頁）跟 _renderTreeRightPanel()（生命樹頁右欄）都呼叫這個函式，
+// 確保兩邊任務卡片的排序規則、外觀完全一致，不會各寫一份慢慢長歪。
+function _buildTaskListHTML(activeTasks, doneTasks) {
+  activeTasks = activeTasks.slice(); // 複製一份，不動到傳進來的原陣列
+  // 排序：
+  // 1. neglected 優先
+  // 2. 無日期非重複任務
+  // 3. 有日期非重複任務（由早到晚）
+  // 4. 重複任務（interval 天數由多到少，每天置最下）
+  activeTasks.sort((a, b) => {
+    // 1. neglected 優先
+    const aN = isNeglected(a) ? 0 : 1;
+    const bN = isNeglected(b) ? 0 : 1;
+    if (aN !== bN) return aN - bN;
+
+    // 2. 重複任務排最後
+    const aRec = a.recurring ? 1 : 0;
+    const bRec = b.recurring ? 1 : 0;
+    if (aRec !== bRec) return aRec - bRec;
+
+    // 3. 同為重複任務：interval 天數多的靠上，每天（daily）置最下
+    if (a.recurring && b.recurring) {
+      const aIsDaily = a.recurMode !== 'interval';
+      const bIsDaily = b.recurMode !== 'interval';
+      if (aIsDaily !== bIsDaily) return aIsDaily ? 1 : -1;
+      if (!aIsDaily && !bIsDaily) {
+        const aInt = a.recurInterval || 1;
+        const bInt = b.recurInterval || 1;
+        if (aInt !== bInt) return bInt - aInt;
+      }
+      return 0;
+    }
+
+    // 4. 同為非重複任務：無日期靠上，有日期由早到晚
+    const aHasDate = a.taskDate ? 1 : 0;
+    const bHasDate = b.taskDate ? 1 : 0;
+    if (aHasDate !== bHasDate) return aHasDate - bHasDate;
+    if (a.taskDate && b.taskDate && a.taskDate !== b.taskDate) {
+      return a.taskDate.localeCompare(b.taskDate);
+    }
+    return 0;
+  });
+
+  let html = '';
+  if (activeTasks.length === 0) {
+    html += '<div style="text-align:center;padding:24px;color:var(--text-faint);font-size:13px;font-style:italic">沒有符合條件的任務。也許這就是你休息的訊號？</div>';
+  } else {
+    html += activeTasks.map(t => taskHTML(t)).join('');
+  }
+
+  // Done section — only show today's completed tasks; past completed tasks belong in 成長軌跡
+  const todayDoneTasks = doneTasks.filter(t => t.completedAt === localDateStr(new Date(getLastResetTimestamp())));
+  if (todayDoneTasks.length > 0) {
+    const isOpen = state.doneOpen;
+    html += `
+      <div class="done-section-header" onclick="toggleDoneSection()">
+        <span class="done-toggle-arrow ${isOpen ? 'open' : ''}">▶</span>
+        今日已完成 ${todayDoneTasks.length} 件
+        <span style="font-size:10px;color:var(--text-faint);margin-left:4px">（點擊 ✓ 可取消勾選）</span>
+      </div>
+      <div class="done-tasks-wrap ${isOpen ? 'open' : ''}" id="doneTasksWrap">
+        ${todayDoneTasks.map(t => taskHTML(t)).join('')}
+      </div>`;
+  }
+  return html;
+}
+
 function renderTasks() {
   // ── 桌面版：首次進入任務頁時，預設選第一個分類 + 只看今日 ──
   // （手機版 _isDesktopTaskLayout() 為 false，這段邏輯完全不會執行，行為與改版前一致）
@@ -1629,62 +1724,7 @@ function renderTasks() {
   // 2. 無日期非重複任務
   // 3. 有日期非重複任務（由早到晚）
   // 4. 重複任務（interval 天數由多到少，每天置最下）
-  activeTasks.sort((a, b) => {
-    // 1. neglected 優先
-    const aN = isNeglected(a) ? 0 : 1;
-    const bN = isNeglected(b) ? 0 : 1;
-    if (aN !== bN) return aN - bN;
-
-    // 2. 重複任務排最後
-    const aRec = a.recurring ? 1 : 0;
-    const bRec = b.recurring ? 1 : 0;
-    if (aRec !== bRec) return aRec - bRec;
-
-    // 3. 同為重複任務：interval 天數多的靠上，每天（daily）置最下
-    if (a.recurring && b.recurring) {
-      const aIsDaily = a.recurMode !== 'interval'; // daily / weekly 等非 interval 視為「每天」類
-      const bIsDaily = b.recurMode !== 'interval';
-      if (aIsDaily !== bIsDaily) return aIsDaily ? 1 : -1; // daily 排後面
-      if (!aIsDaily && !bIsDaily) {
-        // 兩者都是 interval，天數多的靠上（每7天 > 每3天 > 每1天）
-        const aInt = a.recurInterval || 1;
-        const bInt = b.recurInterval || 1;
-        if (aInt !== bInt) return bInt - aInt;
-      }
-      return 0;
-    }
-
-    // 4. 同為非重複任務：無日期靠上，有日期由早到晚
-    const aHasDate = a.taskDate ? 1 : 0;
-    const bHasDate = b.taskDate ? 1 : 0;
-    if (aHasDate !== bHasDate) return aHasDate - bHasDate; // 無日期靠上
-    if (a.taskDate && b.taskDate && a.taskDate !== b.taskDate) {
-      return a.taskDate.localeCompare(b.taskDate); // 日期近的靠上
-    }
-    return 0;
-  });
-
-  let html = '';
-  if (activeTasks.length === 0) {
-    html += '<div style="text-align:center;padding:24px;color:var(--text-faint);font-size:13px;font-style:italic">沒有符合條件的任務。也許這就是你休息的訊號？</div>';
-  } else {
-    html += activeTasks.map(t => taskHTML(t)).join('');
-  }
-
-  // Done section — only show today's completed tasks; past completed tasks belong in 成長軌跡
-  const todayDoneTasks = doneTasks.filter(t => t.completedAt === localDateStr(new Date(getLastResetTimestamp())));
-  if (todayDoneTasks.length > 0) {
-    const isOpen = state.doneOpen;
-    html += `
-      <div class="done-section-header" onclick="toggleDoneSection()">
-        <span class="done-toggle-arrow ${isOpen ? 'open' : ''}">▶</span>
-        今日已完成 ${todayDoneTasks.length} 件
-        <span style="font-size:10px;color:var(--text-faint);margin-left:4px">（點擊 ✓ 可取消勾選）</span>
-      </div>
-      <div class="done-tasks-wrap ${isOpen ? 'open' : ''}" id="doneTasksWrap">
-        ${todayDoneTasks.map(t => taskHTML(t)).join('')}
-      </div>`;
-  }
+  const html = _buildTaskListHTML(activeTasks, doneTasks);
 
   list.innerHTML = html;
   // update strip counts
@@ -1711,8 +1751,16 @@ function _isDesktopTaskLayout() {
 }
 
 function _taskGoalsList() {
+  // treeNodes 是分類命名（icon/label）的唯一真相來源；state.goals 目前整個專案
+  // 沒有任何地方賦值過，只是舊版留下的防呆 fallback，這裡改成優先讀 treeNodes，
+  // 這樣分類改名/換 icon 只需要改 treeNodes 一處，這裡會自動跟著更新。
+  if (typeof treeNodes !== 'undefined' && treeNodes.length) {
+    return treeNodes.map(n => ({ name: n.key, icon: n.icon, label: n.label }));
+  }
   return (state.goals && state.goals.length) ? state.goals : [
-    { name: '技能', icon: '🌟' }, { name: '自我', icon: '🌿' }, { name: '日常', icon: '🏠' }
+    { name: '技能', icon: '💎', label: '突破素材' },
+    { name: '自我', icon: '🚩', label: '限時活動' },
+    { name: '日常', icon: '🧭', label: '每日委託' }
   ];
 }
 
@@ -1727,12 +1775,12 @@ function _renderTaskCatNav() {
     const isActive = state.goalFilter === g.name;
     const icon = g.icon || '';
     return `<div class="task-cat-row${isActive ? ' active' : ''}" onclick="taskCatNavSelect('${g.name}')">
-      <span>${icon} ${escHtml(g.name)}</span><span class="task-cat-count">${cnt}</span>
+      <span>${icon} ${escHtml(g.label || g.name)}</span><span class="task-cat-count">${cnt}</span>
     </div>`;
   }).join('');
   if (labelEl) {
     const activeGoal = goals.find(g => g.name === state.goalFilter);
-    labelEl.textContent = activeGoal ? `${activeGoal.icon || ''} ${activeGoal.name}` : (state.goalFilter || '');
+    labelEl.textContent = activeGoal ? `${activeGoal.icon || ''} ${activeGoal.label || activeGoal.name}` : (state.goalFilter || '');
   }
 }
 
@@ -2135,7 +2183,7 @@ function renderTodayPanel() {
     list.innerHTML = '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
     return;
   }
-  const goalIconMap = { 技能:'🌟', 自我:'🌿', 日常:'🏠', 任意:'🌈' };
+  const goalIconMap = { 技能:'💎', 自我:'🚩', 日常:'🧭', 任意:'🌈' };
   list.innerHTML = allToday.map((t, idx) => {
     const gIcon = goalIconMap[t.goal] || '●';
     const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;

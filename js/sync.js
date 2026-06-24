@@ -769,6 +769,17 @@ function _buildSyncPayload() {
 
 // ── 緊急推送：繞過 isSyncing 鎖，直接呼叫 _fbSave（用於 beforeunload / visibilitychange）──
 function _emergencySave() {
+  // ★★★ 重要防呆：雲端初始資料還沒載入完成前，絕對不能推送。
+  //   原因：state.tasks 在 loadFromCloud() 完成前是空陣列（剛 init 的預設值）。
+  //   _isFirebaseReady() 只檢查 _fbUid/_fbDb 是否存在，並不保證資料已經載入——
+  //   如果使用者在這個空窗期切換分頁（觸發 visibilitychange）或關閉分頁
+  //   （觸發 beforeunload），_emergencySave() 會把這個「空」的 state 直接寫回雲端，
+  //   而所有資料共用同一份 Aethelgard/data 文件，等於把真實資料覆寫成空的。
+  //   無痕模式下，匿名登入要走完整網路來回，這個空窗期被拉長，問題更容易被踩到。
+  if (typeof state === 'undefined' || !state._initDone) {
+    console.warn('[emergencySave] 資料尚未載入完成，跳過推送（避免覆寫雲端資料）');
+    return;
+  }
   if (!_isFirebaseReady()) return;
   const payload = _buildSyncPayload();
   const hash = _quickHash(payload);
@@ -782,6 +793,11 @@ function _emergencySave() {
 window._emergencySave = _emergencySave;
 
 async function _doSyncToCloud() {
+  // ★ 同樣的防呆也套用在一般同步上，理由跟 _emergencySave 一致。
+  if (typeof state === 'undefined' || !state._initDone) {
+    console.warn('[sync] 資料尚未載入完成，跳過推送（避免覆寫雲端資料）');
+    return;
+  }
   if (!_isFirebaseReady()) return;
   if (isSyncing) { _pendingSync = true; return; }
   if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }

@@ -87,38 +87,48 @@
     <!-- Page: Life Tree -->
     <div class="page active" id="page-tree">
       <div class="section-title">生命樹 <span class="sub">每個任務都扎根於你認同的意義</span></div>
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div class="card-title" style="margin-bottom:0">你的核心目標</div>
-          <button onclick="openRoutinePanel()" id="routineBtn" class="btn-ghost-green"><span id="routineBtnIcon">🫧</span> 例行任務 <span id="routineBtnBadge" style="display:none;font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:0 6px;font-weight:600"></span></button>
-        </div>
-        <div class="tree-grid" id="treeGrid">
-          <!-- Rendered by renderTree() -->
-        </div>
-        <div style="text-align:center;font-size:12px;color:var(--text-faint);margin-top:8px">點擊目標卡片，篩選相關任務並新增任務時自動帶入分類</div>
-        <div style="text-align:center;margin-top:12px">
-          <button onclick="showInstantWants()" class="btn-ghost-green-lg">妳現在想要…？</button>
-        </div>
-      </div>
-      <!-- Today Tasks Panel -->
-      <div class="today-panel" id="todayPanel">
-        <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span style="white-space:nowrap">☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
-          <div id="resetCountdownBar" style="flex:1">
-            <span id="resetCountdownLabel"></span>
-            <div class="countdown-progress-track">
-              <div class="countdown-progress-fill" id="resetCountdownFill"></div>
+
+      <div class="tree-page-layout" id="treePageLayout">
+        <div class="tree-middle-col">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <div class="card-title" style="margin-bottom:0">你的核心目標</div>
+              <button onclick="openRoutinePanel()" id="routineBtn" class="btn-ghost-green"><span id="routineBtnIcon">🫧</span> 例行任務 <span id="routineBtnBadge" style="display:none;font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:0 6px;font-weight:600"></span></button>
             </div>
-            <span id="resetCountdownTime"></span>
+            <div class="tree-grid" id="treeGrid">
+              <!-- Rendered by renderTree() -->
+            </div>
+            <div style="text-align:center;font-size:12px;color:var(--text-faint);margin-top:8px">點擊目標卡片，篩選相關任務並新增任務時自動帶入分類</div>
+            <div style="text-align:center;margin-top:12px">
+              <button onclick="showInstantWants()" class="btn-ghost-green-lg">妳現在想要…？</button>
+            </div>
           </div>
-          <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務" style="white-space:nowrap;flex-shrink:0">＋ 新增</button>
+          <!-- Today Tasks Panel -->
+          <div class="today-panel" id="todayPanel">
+            <div class="today-panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="white-space:nowrap">☀ 今日任務&#x20;<span id="todayPanelCount" style="font-size:10px;background:var(--green-dim);color:var(--green);border-radius:20px;padding:1px 8px;font-weight:600;letter-spacing:0"></span></span>
+              <div id="resetCountdownBar" style="flex:1">
+                <span id="resetCountdownLabel"></span>
+                <div class="countdown-progress-track">
+                  <div class="countdown-progress-fill" id="resetCountdownFill"></div>
+                </div>
+                <span id="resetCountdownTime"></span>
+              </div>
+              <button onclick="openAddTaskForToday()" class="btn-today-add" title="新增今日任務" style="white-space:nowrap;flex-shrink:0">＋ 新增</button>
+            </div>
+            <div id="todayPanelList"></div>
+          </div>
+          <div id="allClearBanner">
+            <div style="font-size:22px;margin-bottom:4px">🎉</div>
+            <div style="font-size:14px;font-weight:700;letter-spacing:0.04em">今日全部完成！</div>
+            <div id="allClearSub" style="font-size:11px;opacity:0.75;margin-top:3px"></div>
+          </div>
         </div>
-        <div id="todayPanelList"></div>
-      </div>
-      <div id="allClearBanner">
-        <div style="font-size:22px;margin-bottom:4px">🎉</div>
-        <div style="font-size:14px;font-weight:700;letter-spacing:0.04em">今日全部完成！</div>
-        <div id="allClearSub" style="font-size:11px;opacity:0.75;margin-top:3px"></div>
+
+        <!-- ── 桌面專用：右欄，顯示中間欄目前選中分類的任務細項（手機隱藏）── -->
+        <div class="tree-right-col" id="treeRightCol">
+          <div class="tree-right-placeholder">👈 點選左邊的目標卡片<br>看看裡面有哪些任務</div>
+        </div>
       </div>
     </div>
 
@@ -150,9 +160,9 @@
               <div id="flatFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
                 <!-- 分類 pills -->
                 <div id="fpill-goal-all"      class="fpill fpill-active" onclick="flatSetGoal('all')">全部</div>
-                <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">🌟 技能</div>
-                <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🌿 自我</div>
-                <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🏠 日常</div>
+                <div id="fpill-goal-技能"     class="fpill" onclick="flatSetGoal('技能')">💎 素材</div>
+                <div id="fpill-goal-自我"     class="fpill" onclick="flatSetGoal('自我')">🚩 活動</div>
+                <div id="fpill-goal-日常"     class="fpill" onclick="flatSetGoal('日常')">🧭 委託</div>
                 <!-- 分隔點 -->
                 <span style="color:var(--border);font-size:14px;margin:0 2px;user-select:none">·</span>
                 <!-- 快速篩 pills -->
@@ -231,7 +241,7 @@
 
           </div>
           <div class="lottery-grid" id="lotteryGrid"></div>
-          <div style="font-size:11px;color:var(--text-faint);margin-top:12px;text-align:center">核心任務完成得抽卡券 · 日常維運得💎碎片 · 𖦏專注任務20%機率多一券 · ⚡充電任務不計入</div>
+          <div style="font-size:11px;color:var(--text-faint);margin-top:12px;text-align:center">核心任務完成得抽卡券 · 每日委託得💎碎片 · 𖦏專注任務20%機率多一券 · ⚡充電任務不計入</div>
         </div>
 
         <!-- Quote pane -->
@@ -276,7 +286,7 @@
 
     <!-- 目標 + 能量：點擊切換 -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button type="button" id="newGoalBtn" onclick="cycleGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🌟 技能修練</button>
+      <button type="button" id="newGoalBtn" onclick="cycleGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">💎 突破素材</button>
       <button type="button" id="newEnergyBtn" onclick="cycleEnergy()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🍃 輕鬆</button>
       <input type="hidden" id="newTaskGoal" value="技能">
       <input type="hidden" id="newTaskEnergy" value="easy">
@@ -481,7 +491,7 @@
 
     <!-- 目標 + 能量：點擊切換 -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button type="button" id="editGoalBtn" onclick="cycleEditGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🌟 技能修練</button>
+      <button type="button" id="editGoalBtn" onclick="cycleEditGoal()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">💎 突破素材</button>
       <button type="button" id="editEnergyBtn" onclick="cycleEditEnergy()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;text-align:left;transition:all 0.15s">🍃 輕鬆</button>
       <input type="hidden" id="editTaskGoal" value="技能">
       <input type="hidden" id="editTaskEnergy" value="easy">
@@ -736,9 +746,9 @@
       <div>
         <select id="newRewardGoal">
           <option value="任意">🌈 任意分類</option>
-          <option value="技能">🌟 技能修練</option>
-          <option value="自我">🌿 自我實現</option>
-          <option value="日常">🏠 日常維運</option>
+          <option value="技能">💎 突破素材</option>
+          <option value="自我">🚩 限時活動</option>
+          <option value="日常">🧭 每日委託</option>
         </select>
       </div>
       <div>
@@ -776,9 +786,9 @@
       <div>
         <select id="editWishGoal">
           <option value="任意">🌈 任意分類</option>
-          <option value="技能">🌟 技能修練</option>
-          <option value="自我">🌿 自我實現</option>
-          <option value="日常">🏠 日常維運</option>
+          <option value="技能">💎 突破素材</option>
+          <option value="自我">🚩 限時活動</option>
+          <option value="日常">🧭 每日委託</option>
         </select>
       </div>
       <div>
