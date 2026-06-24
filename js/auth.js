@@ -593,6 +593,17 @@ async function submitGuestToken() {
     window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
 
+    // ★ 修正競態條件：_fbUid 必須在呼叫 signInAnonymously() 之前就設成 ownerUid。
+    //   原因：signInAnonymously() 若需要真的跟 Firebase 伺服器來回建立全新匿名帳號
+    //   （無痕模式下一定會，因為沒有任何快取憑證），onAuthStateChanged 監聽器可能在
+    //   這個 await 真正 resolve 回來之前就先被觸發，並呼叫 _onFirebaseReadyCallback()
+    //   讓 init() 提前繼續往下跑去呼叫 loadFromCloud()——這時若 _fbUid 還是空字串，
+    //   loadFromCloud() 會直接判斷「未就緒」並回傳 false，資料就讀空了。
+    //   ownerUid 在這裡已經從 token 文件讀出來了，不需要等匿名登入完成才能設定。
+    window._fbUid = ownerUid;
+    window._fbOwnerUid = ownerUid;
+    try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
+
     const guestUser = await window._fbGuestSignInAnon();
     const guestUid = guestUser.uid;
     window._fbAuthUid = guestUid;
@@ -602,10 +613,6 @@ async function submitGuestToken() {
       console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
     }
 
-    // ── 切換資料路徑到 ownerUid ──
-    window._fbUid = ownerUid;
-    window._fbOwnerUid = ownerUid;
-    try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // ★ 切換 UID 後立刻抑制 snapshot，避免舊版 snapshot 在 init/loadFromCloud 完成前進來蓋掉資料
     if (typeof _markSyncWrite === 'function') _markSyncWrite();
