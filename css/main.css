@@ -319,11 +319,11 @@
      display:block，.tree-right-col 預設 display:none。
 
      縮放優先順序（配合上面側邊欄的 4 階段）：
-     寬螢幕時，多出來的空間優先分給中欄（核心目標/今日任務），
-     右欄（任務細項）不再無限制變寬，避免留白過多；
-     視窗變窄時，中欄先縮（440px 內三張目標卡會自動換成可換行排列，
-     今日任務標題本身已用 flex 壓縮倒數條，不會斷行），
-     右欄維持較寬的下限（260px）最後才開始真的局促。
+     寬螢幕時，多出來的空間先給中欄（核心目標/今日任務）用到舒服
+     的寬度（上限 560px）就好，中欄到頂之後，剩下的空間才繼續給
+     右欄（任務細項）——這樣中等寬度時兩欄是一起變寬，不會變成
+     中欄把所有空間獨吞、右欄卻被釘死在固定寬度動不了；
+     視窗變窄時，中欄先縮，右欄維持較寬的下限最後才開始局促。
      ══════════════════════════════════════════════════════════ */
   .tree-page-layout { display: block; }
   .tree-right-col { display: none; }
@@ -337,15 +337,16 @@
     .tree-middle-col {
       flex: 1 1 440px;
       min-width: 280px;
-      max-width: 760px;
+      max-width: 560px;
       display: flex;
       flex-direction: column;
       gap: 24px;
     }
     .tree-right-col {
       display: block;
-      flex: 0 0 320px;
-      min-width: 260px;
+      flex: 1 1 320px;
+      min-width: 300px;
+      max-width: 640px;
       position: sticky;
       top: 0;
       background: var(--bg2);
@@ -354,7 +355,8 @@
       padding: 18px;
       max-height: calc(100vh - 32px);
       overflow-y: auto;
-      container-type: inline-size; /* 讓「＋新增任務」按鈕依右欄自己的寬度收成純 icon */
+      container-type: inline-size; /* 讓「＋新增任務」按鈕、任務卡片名稱/標籤排列
+                                       都能依右欄自己的實際寬度調整，不綁死視窗寬度 */
     }
     .tree-right-placeholder {
       text-align: center;
@@ -379,6 +381,33 @@
       .btn-add-task-right-label { display: none; }
       .btn-add-task-right { padding: 4px 8px; }
     }
+    /* 任務卡片：能量/重複/逾期/日期標籤跟標題同一行、靠右對齊。
+       這是右欄夠寬時的預設排法；寬度不夠時下面的 container query
+       會把它切回直排（名稱單獨一行、標籤另起一行）。 */
+    .tree-right-col .task-body {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 12px;
+      align-items: start;
+    }
+    .tree-right-col .task-name { grid-column: 1; grid-row: 1; }
+    .tree-right-col .task-meta {
+      grid-column: 2; grid-row: 1;
+      margin-top: 2px; justify-content: flex-end;
+      max-width: 280px;
+    }
+    .tree-right-col .task-meaning,
+    .tree-right-col .task-note-preview { grid-column: 1 / -1; }
+    /* 右欄寬度不夠時，任務卡片的名稱跟標籤（輕鬆/重複/日期）改回
+       自然堆疊（名稱單獨一行、標籤在下面自動換行），不要硬擠在
+       同一行搶寬度——這是依右欄「自己的」寬度判斷，不管是因為
+       視窗整體變窄、還是中欄把空間吃掉了才變窄，都會自動套用，
+       不會再出現短短兩三個字的標題被擠到逐字換行的情況。 */
+    @container (max-width: 360px) {
+      .tree-right-col .task-body { display: block; }
+      .tree-right-col .task-name { display: block; }
+      .tree-right-col .task-meta { margin-top: 5px; max-width: none; justify-content: flex-start; }
+    }
   }
 
   /* 視窗窄到容不下「中欄三張卡片橫排 + 右欄」時：
@@ -393,17 +422,11 @@
   @media (min-width: 681px) and (max-width: 900px) {
     .tree-grid { grid-template-columns: 1fr; }
     .tree-middle-col { flex: 0 0 260px; max-width: 260px; min-width: 220px; }
-    .tree-right-col  { flex: 1 1 auto; min-width: 0; }
+    .tree-right-col  { flex: 1 1 auto; min-width: 0; max-width: none; }
     /* 中欄變窄、卡片直排後，圖示圓環跟文字改成橫向排列，
        不然 260px 寬底下「圓環在上、文字在下」的卡片會顯得過於細長 */
     .goal-ring-card { flex-direction: row; justify-content: flex-start; gap: 14px; padding: 12px 16px; }
     .goal-ring-text { align-items: flex-start; gap: 3px; text-align: left; }
-    /* 右欄夠窄時，任務名稱跟標籤改回自然堆疊（名稱單獨一行、
-       標籤在下面自動換行），而不是硬擠在同一行搶寬度，
-       避免短短兩三個字的標題被擠到逐字換行 */
-    .tree-right-col .task-body { display: block; }
-    .tree-right-col .task-name { display: block; }
-    .tree-right-col .task-meta { margin-top: 5px; max-width: none; justify-content: flex-start; }
   }
 
   .task-meaning { font-size: 12px; color: var(--text); margin-top: 4px; font-style: italic; font-weight: 500; }
@@ -474,26 +497,23 @@
     #taskDesktopCatLabel { font-size: 15px; font-weight: 500; }
 
     /* 任務卡片：能量/重複/逾期/日期標籤 改成跟標題同一行、靠右對齊
-       （同時套用在任務頁 #page-tasks 跟生命樹右欄 .tree-right-col，兩邊都用 taskHTML() 產生卡片）*/
-    #page-tasks .task-body,
-    .tree-right-col .task-body {
+       （這條只管任務頁 #page-tasks；生命樹右欄 .tree-right-col 的
+       對應規則改用 container query 控制，見上面 .tree-right-col 區塊，
+       這樣才能依右欄「自己的」寬度切換，不會被這裡的固定規則蓋掉）*/
+    #page-tasks .task-body {
       display: grid;
       grid-template-columns: 1fr auto;
       column-gap: 12px;
       align-items: start;
     }
-    #page-tasks .task-name,
-    .tree-right-col .task-name { grid-column: 1; grid-row: 1; }
-    #page-tasks .task-meta,
-    .tree-right-col .task-meta {
+    #page-tasks .task-name { grid-column: 1; grid-row: 1; }
+    #page-tasks .task-meta {
       grid-column: 2; grid-row: 1;
       margin-top: 2px; justify-content: flex-end;
       max-width: 280px;
     }
     #page-tasks .task-meaning,
-    #page-tasks .task-note-preview,
-    .tree-right-col .task-meaning,
-    .tree-right-col .task-note-preview { grid-column: 1 / -1; }
+    #page-tasks .task-note-preview { grid-column: 1 / -1; }
   }
 
   /* ── Flat Pill Filter ── */
