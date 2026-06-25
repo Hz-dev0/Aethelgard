@@ -216,7 +216,11 @@
 
     <!-- Page: WishZone (許願池 + 抽獎區 combined) -->
     <div class="page" id="page-wishzone">
-      <div class="section-title">許願池 <span class="sub">寫下願望，完成任務換取抽獎券</span></div>
+      <div class="section-title">許願池
+        <span class="sub" id="wishzoneRulesTrigger" onclick="toggleWishzoneRules(event)" style="cursor:pointer;text-decoration:underline dotted;text-decoration-color:var(--text-faint);text-underline-offset:3px">
+          寫下願望，完成任務換取抽獎券 <span style="opacity:0.6">ⓘ</span>
+        </span>
+      </div>
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
           <div class="toggle-tabs">
@@ -252,7 +256,6 @@
             </div>
           </div>
           <div class="lottery-grid" id="lotteryGrid"></div>
-          <div style="font-size:11px;color:var(--text-faint);margin-top:12px;text-align:center">核心任務完成得抽卡券 · 每日委託得🌟碎片 · 限時活動得十連抽券 · 𖦏專注任務20%機率多一券 · ⚡充電任務不計入</div>
         </div>
 
         <!-- Quote pane -->

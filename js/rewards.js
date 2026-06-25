@@ -208,7 +208,8 @@ function onTaskUncompleted(task) {
   renderLottery();
 }
 
-function buildCardPool() {
+function buildCardPool(total) {
+  const TOTAL = total || 9;
   // Gather unlocked wishes (not claimed)
   const unlockedWishes = [];
   if (state.rewards) {
@@ -223,7 +224,6 @@ function buildCardPool() {
   const allQuotes = (state.customQuotes || []).map(q => ({ text: q, icon: '✦', isWish: false }));
 
   const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
-  const TOTAL = 9;
 
   const rmCard = { isRandomMission: true };
   const deck = [rmCard];
@@ -478,6 +478,39 @@ function _doFlipCard(i) {
 }
 
 // ── 願望碎片兌換抽卡券 / 十連抽 ──────────────────────────────────────
+function toggleWishzoneRules(e) {
+  if (e) e.stopPropagation();
+  const existing = document.getElementById('wishzoneRulesPopover');
+  if (existing) { existing.remove(); return; }
+
+  const trigger = (e && e.currentTarget) || document.getElementById('wishzoneRulesTrigger');
+  const rect = trigger ? trigger.getBoundingClientRect() : { bottom: 60, left: 16 };
+
+  const pop = document.createElement('div');
+  pop.id = 'wishzoneRulesPopover';
+  pop.style.cssText = `position:fixed;top:${rect.bottom + 8}px;left:${Math.max(12, Math.min(rect.left, window.innerWidth - 300))}px;max-width:280px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.85;color:var(--text-dim);box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999`;
+  pop.innerHTML = `
+    <div style="font-weight:600;color:var(--text);margin-bottom:8px;font-size:13px">規則說明</div>
+    <div>🎫 核心任務完成 → 抽卡券</div>
+    <div>🌟 每日委託完成 → 願望碎片</div>
+    <div>🎉 限時活動完成 → 十連抽券</div>
+    <div>𖦏 專注任務 → 20% 機率多 1 券</div>
+    <div>⚡ 充電任務 → 不計入獎勵</div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">🌟 10 個碎片可在抽獎區兌換 1 張抽卡券</div>
+  `;
+  document.body.appendChild(pop);
+  pop.onclick = (ev) => ev.stopPropagation();
+  setTimeout(() => {
+    document.addEventListener('click', _closeWishzoneRulesOnce, { once: true });
+  }, 0);
+}
+window.toggleWishzoneRules = toggleWishzoneRules;
+
+function _closeWishzoneRulesOnce() {
+  const pop = document.getElementById('wishzoneRulesPopover');
+  if (pop) pop.remove();
+}
+
 function exchangeFragmentsForTicket() {
   const available = (typeof getAvailableWishPoints === 'function') ? getAvailableWishPoints() : 0;
   if (available < 10) {
@@ -496,11 +529,9 @@ function exchangeFragmentsForTicket() {
 }
 window.exchangeFragmentsForTicket = exchangeFragmentsForTicket;
 
-// 解析「一抽」的結果（不綁定特定 DOM 卡片格，給十連抽批次呼叫用）。
-// 重用 buildCardPool() 的機率分佈，所以單抽跟十連抽的中獎機率完全一致。
-function _resolveOneDraw() {
-  const pool = buildCardPool();
-  const item = pool[Math.floor(Math.random() * pool.length)];
+// 解析「一張已抽出的卡片」的結果（不綁定特定 DOM 卡片格，給十連抽批次呼叫用）。
+// item 是從卡池裡「抽出後立刻移除」的卡片物件，所以同一張願望卡不會在同一次十連抽裡重複出現。
+function _resolveDrawnCard(item) {
   const result = {
     icon: item.icon || '✦',
     text: item.text || '',
@@ -545,7 +576,7 @@ function _resolveOneDraw() {
       result.text = `願望成真：${r.name}`;
       result.wishFulfilled = r.name;
     } else {
-      // 十連抽過程中同一願望已被前面某抽兌現過，這抽退化成格言牌安慰獎
+      // 理論上不該發生（同一願望已從卡池移除，不會被抽兩次），保留這個分支純粹防呆
       result.isWish = false;
       if (state.wishPoints === undefined) state.wishPoints = 0;
       state.wishPoints++;
@@ -568,8 +599,9 @@ function drawTenPull() {
     return;
   }
   lotteryState.tenPullTickets--;
-  const results = [];
-  for (let i = 0; i < 10; i++) results.push(_resolveOneDraw());
+  // 一次建好 10 張不重複的卡池，逐張依序處理 —— 保證同一個願望不會在這次十連抽裡被抽中兩次
+  const pool = buildCardPool(10);
+  const results = pool.map(item => _resolveDrawnCard(item));
 
   checkRandomMissionProgress();
   saveStateLocal();
