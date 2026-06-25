@@ -1,7 +1,7 @@
 // ── Life Tree (responsive SVG) ──
 const treeNodes = [
-  { key: '技能', icon: '🚩', label: '限時活動', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 2 },
-  { key: '自我', icon: '💎', label: '突破素材', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 1 },
+  { key: '技能', icon: '🚩', label: '限時活動', ringColor: '#D4608A', ringBg: 'rgba(212,96,138,0.10)', accent: '#D4608A', dailyGoal: 2 },
+  { key: '自我', icon: '💎', label: '突破素材', ringColor: '#C9A227', ringBg: 'rgba(201,162,39,0.12)', accent: '#C9A227', dailyGoal: 1 },
   { key: '日常', icon: '🧭', label: '每日委託', ringColor: '#3A6EA5', ringBg: 'rgba(58,110,165,0.12)', accent: '#3A6EA5', dailyGoal: 3 },
 ];
 
@@ -1111,6 +1111,10 @@ function setEnergySegment(filter) {
   _syncSegmentedUI(filter);
   _syncStripToState();
   renderTasks();
+  // ★ 擴大精力篩選的作用範圍：今日任務面板跟生命樹右欄現在也吃這個篩選，
+  //   所以切換時要連同這兩處一起重新渲染，否則畫面不會跟著動。
+  renderTodayPanel();
+  renderTree();
   const toastMap = { all:'✦ 顯示全部', charge:'⚡ 充電模式', easy:'🍃 輕鬆模式', focus:'𖦏 專注模式' };
   showToast(toastMap[filter] || '');
 }
@@ -1475,8 +1479,13 @@ function _renderTreeRightPanel() {
 
   const node = treeNodes.find(n => n.key === state.goalFilter);
   const todayStrFilter = localDateStr();
-  const activeTasks = state.tasks.filter(t => !t.done && t.goal === state.goalFilter && !_isFutureIntervalTask(t, todayStrFilter));
-  const doneTasks   = state.tasks.filter(t =>  t.done && t.goal === state.goalFilter);
+  let activeTasks = state.tasks.filter(t => !t.done && t.goal === state.goalFilter && !_isFutureIntervalTask(t, todayStrFilter));
+  let doneTasks   = state.tasks.filter(t =>  t.done && t.goal === state.goalFilter);
+  // ★ 套用頂部精力切換器篩選，讓「全/⚡/🍃/𖦏」在生命樹右欄也真的有效果
+  if (state.energyFilter && state.energyFilter !== 'all') {
+    activeTasks = activeTasks.filter(t => t.energy === state.energyFilter);
+    doneTasks   = doneTasks.filter(t => t.energy === state.energyFilter);
+  }
   const listHtml = _buildTaskListHTML(activeTasks, doneTasks);
 
   wrap.innerHTML = `
@@ -1902,7 +1911,7 @@ function taskHTML(t) {
   const isOpen = t._breakdownOpen || false;
 
   // Goal color map
-  const goalColorMap = { '技能': '#C9A227', '自我': '#D4608A', '日常': '#3A6EA5' };
+  const goalColorMap = { '技能': '#D4608A', '自我': '#C9A227', '日常': '#3A6EA5' };
   const taskNameColor = goalColorMap[t.goal] || 'var(--text)';
 
   // Due date / status logic
@@ -2071,6 +2080,10 @@ function setTaskStatus(id, status) {
   }
   renderTasks();
   renderTodayPanel();
+  // ★ 補上 renderTree()：三大分類卡片的「今日未完成數量」紅色提示，以及生命樹右欄
+  //   （顯示目前選中分類任務細項）都是在 renderTree() 裡才會重新渲染。
+  //   少了這行，標記/取消今日只會更新任務頁的色條，生命樹頁那兩處會停在舊狀態。
+  renderTree();
   // 標記今日是高優先操作，直接寫入不等 debounce，避免重整後消失
   _markSyncWrite();
   _doSyncToCloud();
@@ -2148,6 +2161,11 @@ function renderTodayPanel() {
     t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled'
   );
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
+
+  // ★ 套用頂部精力切換器篩選，讓「全/⚡/🍃/𖦏」在生命樹頁的今日任務面板也真的有效果
+  if (state.energyFilter && state.energyFilter !== 'all') {
+    allToday = allToday.filter(t => t.energy === state.energyFilter);
+  }
 
   // Apply saved order: undone first (by saved order), done sinks to bottom
   if (!state.todayOrder) state.todayOrder = [];
@@ -2280,6 +2298,10 @@ function todayChipDrop(e, toIdx) {
   const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled');
   const overdueTasks = state.tasks.filter(t => t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled');
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
+  // ★ 跟 renderTodayPanel 的篩選邏輯保持一致，否則篩選中拖曳排序的索引會跟畫面顯示的不對應
+  if (state.energyFilter && state.energyFilter !== 'all') {
+    allToday = allToday.filter(t => t.energy === state.energyFilter);
+  }
 
   if (!state.todayOrder) state.todayOrder = [];
   const orderMap = {};
@@ -2357,6 +2379,24 @@ function _wireTodayChipTouchDrag(list) {
 
 // ── Navigate to task in task overview with highlight effect ──
 function navigateToTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+
+  // ★ 桌面版：不跳轉到任務頁（該頁桌面已隱藏導覽入口），改成留在生命樹頁，
+  //   直接把右欄切到這個任務所屬的分類，並對該任務卡片加搖動動畫強調。
+  if (_isDesktopTaskLayout() && t) {
+    state.goalFilter = t.goal;
+    renderTree(); // 連動更新右欄（見 renderTree 結尾）
+    setTimeout(() => {
+      const el = document.getElementById('task-' + id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('task-shake');
+      setTimeout(() => el.classList.remove('task-shake'), 600);
+    }, 80);
+    return;
+  }
+
+  // ── 手機版：維持原本行為，跳轉到任務頁並用脈動效果強調 ──
   // Clear goal filter and switch to tasks page
   state.goalFilter = null;
   state.energyFilter = 'all';
@@ -2696,6 +2736,7 @@ function checkTaskDates() {
   if (changed) {
     renderTodayPanel();
     renderTasks();
+    renderTree(); // ★ 補上：自動排入今日後，分類卡片紅色未完成數量要跟著更新
     syncToCloud();
   }
 }

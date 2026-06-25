@@ -172,6 +172,7 @@ function confirmRecurMorning() {
   if (count > 0) {
     renderTodayPanel();
     renderTasks();
+    renderTree(); // ★ 補上：分類卡片紅色未完成數量、生命樹右欄都要跟著更新
     showToast(`☀ 已加入 ${count} 個重複任務到今日清單`);
   }
 }
