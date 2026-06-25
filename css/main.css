@@ -316,6 +316,13 @@
      生命樹頁 — 桌面三欄佈局
      手機（max-width: 680px）完全不受影響：.tree-page-layout 預設
      display:block，.tree-right-col 預設 display:none。
+
+     縮放優先順序（配合上面側邊欄的 4 階段）：
+     寬螢幕時，多出來的空間優先分給中欄（核心目標/今日任務），
+     右欄（任務細項）不再無限制變寬，避免留白過多；
+     視窗變窄時，中欄先縮（440px 內三張目標卡會自動換成可換行排列，
+     今日任務標題本身已用 flex 壓縮倒數條，不會斷行），
+     右欄維持較寬的下限（260px）最後才開始真的局促。
      ══════════════════════════════════════════════════════════ */
   .tree-page-layout { display: block; }
   .tree-right-col { display: none; }
@@ -327,17 +334,17 @@
       gap: 16px;
     }
     .tree-middle-col {
-      flex: 1 1 560px;
-      max-width: 600px;
-      min-width: 0;
+      flex: 1 1 440px;
+      min-width: 280px;
+      max-width: 760px;
       display: flex;
       flex-direction: column;
       gap: 24px;
     }
     .tree-right-col {
       display: block;
-      flex: 1 1 320px;
-      min-width: 280px;
+      flex: 0 0 320px;
+      min-width: 260px;
       position: sticky;
       top: 0;
       background: var(--bg2);
@@ -365,6 +372,16 @@
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
+  }
+
+  /* 視窗窄到中欄已經縮到下限（280px）也放不下右欄固定的 320px 時：
+     三張核心目標卡片改直排（避免被擠得太扁，今日任務面板不受影響，
+     本身已能自行壓縮、不會斷行），右欄也開始一起縮並降低下限，
+     避免左右兩欄打架溢出。這個範圍已經是側邊欄完全消失之後
+     （見上面 681–900px 規則），所以右欄是「最後才被擠」的那一欄。 */
+  @media (min-width: 681px) and (max-width: 760px) {
+    .tree-grid { grid-template-columns: 1fr; }
+    .tree-right-col { flex: 1 1 240px; min-width: 200px; }
   }
 
   .task-meaning { font-size: 12px; color: var(--text); margin-top: 4px; font-style: italic; font-weight: 500; }
@@ -1266,9 +1283,33 @@
     .mob-nav-icon { font-size: 20px; }
   }
 
-  @media (min-width: 681px) and (max-width: 900px) {
+  /* ══════════════════════════════════════════════════════════
+     桌面版側邊欄：視窗變窄時的縮放優先順序
+     階段1（寬螢幕 ≥1400px）：側邊欄正常 240px，文字不換行
+     階段2（1101px–1399px）：側邊欄縮到 180px，文字不換行
+     階段3（901px–1100px）：側邊欄縮成「只剩 icon」，文字隱藏（不換行、不裁切）
+     階段4（681px–900px）：側邊欄整個消失，main 拿滿寬度
+     手機（≤680px）完全不受影響，aside 本來就 display:none。
+     ══════════════════════════════════════════════════════════ */
+  .nav-item, .sidebar-section { white-space: nowrap; }
+
+  @media (min-width: 1101px) and (max-width: 1399px) {
     .app { grid-template-columns: 180px 1fr; }
-    main { padding: 20px; }
+  }
+
+  @media (min-width: 901px) and (max-width: 1100px) {
+    .app { grid-template-columns: 60px 1fr; }
+    aside { padding: 20px 0; align-items: center; }
+    .sidebar-section { display: none; } /* 只剩 icon 時，分組標題文字沒有對應 icon，先隱藏 */
+    .nav-item { justify-content: center; padding: 11px 0; gap: 0; }
+    .nav-icon { font-size: 17px; width: auto; }
+    .nav-label { display: none; }
+  }
+
+  @media (min-width: 681px) and (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    aside { display: none; }
+    main { grid-column: 1 / -1; }
   }
 
   /* ── Recurring Morning Dialog ── */

@@ -1457,7 +1457,7 @@ function filterByGoal(goal) {
   showPage('tasks', true);
   // Update label
   const label = document.getElementById('filtered-label');
-  if (label) label.textContent = '— 篩選：' + goal;
+  if (label) label.textContent = '— 篩選：' + goalLabel(goal);
   // Update task type filter chips to show "all" as active
   updateFilterChips('all');
   // Sync flat pills

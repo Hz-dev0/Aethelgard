@@ -4,6 +4,20 @@ const _goalCycle  = [
   { key:'自我', label:'💎 突破素材' },
   { key:'日常', label:'🧭 每日委託' },
 ];
+
+// 分類 key（技能/自我/日常）→ 顯示用 label 的共用查表。
+// 任何要把分類「印給人看」的地方都應該呼叫這個，而不是直接印 key，
+// 否則改了 treeNodes/_goalCycle 的 label 之後，這些地方還是會顯示舊的內部代號。
+function goalLabel(key) {
+  if (typeof treeNodes !== 'undefined' && treeNodes.length) {
+    const n = treeNodes.find(x => x.key === key);
+    if (n) return n.label;
+  }
+  const g = _goalCycle.find(x => x.key === key);
+  if (g) return g.label.replace(/^\S+\s*/, ''); // 去掉 _goalCycle label 開頭的 emoji，只取文字
+  return key || '';
+}
+window.goalLabel = goalLabel;
 const _energyCycle = [
   { key:'easy',   label:'🍃 輕鬆' },
   { key:'focus',  label:'𖦏 專注' },

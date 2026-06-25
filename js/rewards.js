@@ -803,7 +803,7 @@ function renderStats() {
           <div class="task-body">
             <div class="task-name" style="text-decoration:line-through;color:var(--text-dim)">${escHtml(t.name)}</div>
             <div class="task-meta">
-              <span class="tag tag-goal">${escHtml(t.goal || '')}</span>
+              <span class="tag tag-goal">${escHtml(goalLabel(t.goal))}</span>
               <span style="font-size:10px;color:var(--text-faint)">${t.completedAt}</span>
             </div>
           </div>
@@ -825,7 +825,7 @@ function renderStats() {
           <div class="task-body">
             <div class="task-name" style="text-decoration:line-through;color:var(--text-dim)">${escHtml(t.name)}</div>
             <div class="task-meta">
-              <span class="tag tag-goal">${escHtml(t.goal || '')}</span>
+              <span class="tag tag-goal">${escHtml(goalLabel(t.goal))}</span>
               <span style="font-size:10px;color:var(--text-faint)">${t.completedAt}</span>
             </div>
           </div>
@@ -890,7 +890,7 @@ function renderStats() {
                       <div class="task-body">
                         <div class="task-name" style="text-decoration:line-through;color:var(--text-dim)">${escHtml(t.name)}</div>
                         <div class="task-meta">
-                          <span class="tag tag-goal">${escHtml(t.goal || '')}</span>
+                          <span class="tag tag-goal">${escHtml(goalLabel(t.goal))}</span>
                         </div>
                       </div>
                       ${t.id ? `<span onclick="deletePastDoneTask(${t.id})" class="btn-del-icon" title="從任務列表刪除（熱力圖紀錄保留）">×</span>` : ''}

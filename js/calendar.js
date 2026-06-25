@@ -138,7 +138,7 @@ function showCalPopup(e, dateStr) {
     ${doneTasks.map(t => `
       <div class="cal-popup-item">
         <span style="color:var(--green);flex-shrink:0">✓</span>
-        <span>${escHtml(t.name)}${t.goal ? ` <span style="font-size:10px;color:var(--text-faint)">${escHtml(t.goal)}</span>` : ''}</span>
+        <span>${escHtml(t.name)}${t.goal ? ` <span style="font-size:10px;color:var(--text-faint)">${escHtml(goalLabel(t.goal))}</span>` : ''}</span>
       </div>`).join('')}
   `;
   document.body.appendChild(popup);

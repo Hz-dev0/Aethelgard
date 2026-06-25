@@ -122,7 +122,7 @@ function _recurMorningRowHTML(task, freq, goalIconMap, energyLabelMap) {
     <div class="rm-checkbox">${checked ? '✓' : ''}</div>
     <div class="rm-task-info">
       <div class="rm-task-name">${escHtml(task.name)}${streakHint}</div>
-      <div class="rm-task-meta">${gIcon} ${escHtml(task.goal || '')}${eLabel ? ' · ' + eLabel : ''}</div>
+      <div class="rm-task-meta">${gIcon} ${escHtml(goalLabel(task.goal))}${eLabel ? ' · ' + eLabel : ''}</div>
     </div>
     <div class="rm-freq-badge">${freq}</div>
   </div>`;
