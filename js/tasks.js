@@ -66,9 +66,11 @@ function renderTree() {
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px">${n.icon}</div>
         ${undoneTodayCnt > 0 ? `<div class="goal-ring-badge">${undoneTodayCnt}</div>` : ''}
       </div>
-      <div style="font-size:13px;font-weight:500;color:var(--text);text-align:center;line-height:1.3">${n.label}</div>
-      <div style="font-size:11px;color:${labelColor}">${doneCnt}/${goal} 今日</div>
-      ${streakHtml}
+      <div class="goal-ring-text">
+        <div style="font-size:13px;font-weight:500;color:var(--text);line-height:1.3">${n.label}</div>
+        <div style="font-size:11px;color:${labelColor}">${doneCnt}/${goal} 今日</div>
+        ${streakHtml}
+      </div>
     </div>`;
   }).join('');
 
