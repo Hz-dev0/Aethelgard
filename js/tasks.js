@@ -1493,7 +1493,7 @@ function _renderTreeRightPanel() {
   wrap.innerHTML = `
     <div class="tree-right-header">
       <span style="color:${node ? node.ringColor : 'inherit'}">${node ? node.icon : ''} ${escHtml(state.goalFilter)}</span>
-      <button class="btn-ghost-green" onclick="openAddTask()" style="margin:0;padding:4px 12px;font-size:11px;white-space:nowrap">＋ 新增任務</button>
+      <button class="btn-ghost-green btn-add-task-right" onclick="openAddTask()" title="新增任務" style="margin:0;padding:4px 12px;font-size:11px;white-space:nowrap">＋<span class="btn-add-task-right-label"> 新增任務</span></button>
     </div>
     <div class="tree-right-list">${listHtml}</div>
   `;

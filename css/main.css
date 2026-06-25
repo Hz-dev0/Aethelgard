@@ -354,6 +354,7 @@
       padding: 18px;
       max-height: calc(100vh - 32px);
       overflow-y: auto;
+      container-type: inline-size; /* 讓「＋新增任務」按鈕依右欄自己的寬度收成純 icon */
     }
     .tree-right-placeholder {
       text-align: center;
@@ -372,6 +373,11 @@
       margin-bottom: 14px;
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
+    }
+    /* 右欄寬度不夠時，「＋ 新增任務」收成「＋」，寬度夠時照常顯示文字 */
+    @container (max-width: 220px) {
+      .btn-add-task-right-label { display: none; }
+      .btn-add-task-right { padding: 4px 8px; }
     }
   }
 
@@ -1875,11 +1881,19 @@
     border-radius: 12px; padding: 16px 20px;
     box-shadow: 0 1px 4px rgba(74,130,196,0.06);
     margin-top: 0;
+    container-type: inline-size; /* 讓「＋新增」按鈕能依這個面板自己的寬度收成純 icon，
+                                     不管是側邊欄收合、中欄變窄、還是視窗本身變窄造成的 */
   }
   .today-panel-title {
     font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
     color: var(--text-dim); margin-bottom: 12px;
     display: flex; align-items: center; gap: 8px;
+  }
+  /* 面板寬度不夠時，「＋ 新增」收成「＋」，避免跟倒數條撞在一起；
+     寬度夠的話文字照常顯示。 */
+  @container (max-width: 360px) {
+    .btn-today-add-label { display: none; }
+    .btn-today-add { padding: 2px 7px; }
   }
   .today-task-chip {
     display: flex; align-items: center; gap: 8px;
