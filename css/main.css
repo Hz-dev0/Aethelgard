@@ -1889,11 +1889,19 @@
     color: var(--text-dim); margin-bottom: 12px;
     display: flex; align-items: center; gap: 8px;
   }
-  /* 面板寬度不夠時，「＋ 新增」收成「＋」，避免跟倒數條撞在一起；
-     寬度夠的話文字照常顯示。 */
+  /* 面板寬度不夠時，分兩段繼續收： */
   @container (max-width: 360px) {
+    /* 第一段：「＋ 新增」收成「＋」 */
     .btn-today-add-label { display: none; }
     .btn-today-add { padding: 2px 7px; }
+  }
+  @container (max-width: 320px) {
+    /* 第二段：光收按鈕還不夠——倒數條本身（圖示+進度條+時間文字）
+       最小寬度加起來還是會跟旁邊擠在一起、文字疊字。
+       這個寬度下進度條本身只是裝飾，藏起來改成只看時間文字就好，
+       資訊不會少（時間文字已經完整表達剩餘時間）。 */
+    .countdown-progress-track { display: none; }
+    #resetCountdownBar { gap: 4px; }
   }
   .today-task-chip {
     display: flex; align-items: center; gap: 8px;
