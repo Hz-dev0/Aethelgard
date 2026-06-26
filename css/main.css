@@ -395,13 +395,13 @@
     }
     /* 任務名稱一律自己獨占一行（不再跟標籤搶同一行的格線欄位），
        不管右欄多寬都不會再被擠到逐字直排。
-       標籤（能量/重複/逾期/日期）簡化成只顯示 icon，移到名稱下方
-       靠右——文字說明改放 title 提示（滑鼠移上去看），版面更乾淨，
-       也不會再跟名稱搶寬度。 */
+       標籤（能量/重複/逾期/日期）簡化成只顯示 icon，搬到卡片最右側
+       那一欄（跟倒數天數、備忘、選單「⋯」同一欄，本來就靠右對齊、
+       而且下面常常有空間），不再佔用名稱下方的版面，文字說明改放
+       title 提示（滑鼠移上去看），資訊不會少。 */
     .tree-right-col .task-name { min-width: 0; }
     .tree-right-col .task-meta {
       justify-content: flex-end;
-      margin-top: 6px;
     }
     .tree-right-col .tag-label { display: none; }
     .tree-right-col .tag { padding: 3px 7px; }
