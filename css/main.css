@@ -393,33 +393,18 @@
       .btn-add-task-right-label { display: none; }
       .btn-add-task-right { padding: 4px 8px; }
     }
-    /* 任務卡片：能量/重複/逾期/日期標籤跟標題同一行、靠右對齊。
-       這是右欄夠寬時的預設排法；寬度不夠時下面的 container query
-       會把它切回直排（名稱單獨一行、標籤另起一行）。 */
-    .tree-right-col .task-body {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      column-gap: 12px;
-      align-items: start;
-    }
-    .tree-right-col .task-name { grid-column: 1; grid-row: 1; min-width: 0; }
+    /* 任務名稱一律自己獨占一行（不再跟標籤搶同一行的格線欄位），
+       不管右欄多寬都不會再被擠到逐字直排。
+       標籤（能量/重複/逾期/日期）簡化成只顯示 icon，移到名稱下方
+       靠右——文字說明改放 title 提示（滑鼠移上去看），版面更乾淨，
+       也不會再跟名稱搶寬度。 */
+    .tree-right-col .task-name { min-width: 0; }
     .tree-right-col .task-meta {
-      grid-column: 2; grid-row: 1;
-      margin-top: 2px; justify-content: flex-end;
-      max-width: 280px;
+      justify-content: flex-end;
+      margin-top: 6px;
     }
-    .tree-right-col .task-meaning,
-    .tree-right-col .task-note-preview { grid-column: 1 / -1; }
-    /* 右欄寬度不夠時，任務卡片的名稱跟標籤（輕鬆/重複/日期）改回
-       自然堆疊（名稱單獨一行、標籤在下面自動換行），不要硬擠在
-       同一行搶寬度——這是依右欄「自己的」寬度判斷，不管是因為
-       視窗整體變窄、還是中欄把空間吃掉了才變窄，都會自動套用，
-       不會再出現短短兩三個字的標題被擠到逐字換行的情況。 */
-    @container (max-width: 360px) {
-      .tree-right-col .task-body { display: block; }
-      .tree-right-col .task-name { display: block; }
-      .tree-right-col .task-meta { margin-top: 5px; max-width: none; justify-content: flex-start; }
-    }
+    .tree-right-col .tag-label { display: none; }
+    .tree-right-col .tag { padding: 3px 7px; }
     /* 中欄寬度不夠時（被擠得跟它的下限 220px 接近），三張核心目標
        卡片改直排（今日任務面板不受影響，本身已能自行壓縮、不會
        斷行），圖示圓環跟文字也改橫向排列，不然會顯得過於細長。

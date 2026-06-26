@@ -2009,11 +2009,11 @@ function taskHTML(t) {
         ${t.meaning ? `<div class="task-meaning">${escHtml(t.meaning)}</div>` : ''}
         ${t.note ? `<div class="task-note-preview" style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
         <div class="task-meta">
-          <span class="tag tag-energy">${eIcon} ${eLabel}</span>
-          ${t.postponed >= 3 ? '<span class="tag" style="border-color:rgba(200,120,120,0.4);color:var(--rose);background:rgba(200,120,120,0.06)">⚠ 已多次延期</span>' : ''}
-          ${t.recurring && t.recurMode === 'interval' ? `<span class="tag" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)">🔁 每${t.recurInterval || '?'}天</span>` : t.recurring ? '<span class="tag" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)">🔁 重複</span>' : ''}
-          ${isOverdue && !t.done ? '<span class="tag" style="border-color:rgba(192,86,90,0.4);color:var(--rose);background:rgba(192,86,90,0.07)">逾期</span>' : ''}
-          ${t.taskDate && !t.done ? `<span class="tag" style="border-color:rgba(130,154,177,0.35);color:var(--sky);background:rgba(130,154,177,0.07);cursor:pointer" title="點擊修改日期" onclick="event.stopPropagation();openDateTagPicker(event,${t.id})">📅 ${t.taskDate}</span>` : ''}
+          <span class="tag tag-energy" title="能量：${eLabel}"><span class="tag-icon">${eIcon}</span><span class="tag-label"> ${eLabel}</span></span>
+          ${t.postponed >= 3 ? '<span class="tag" title="已多次延期" style="border-color:rgba(200,120,120,0.4);color:var(--rose);background:rgba(200,120,120,0.06)"><span class="tag-icon">⚠</span><span class="tag-label"> 已多次延期</span></span>' : ''}
+          ${t.recurring && t.recurMode === 'interval' ? `<span class="tag" title="每${t.recurInterval || '?'}天重複" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)"><span class="tag-icon">🔁</span><span class="tag-label"> 每${t.recurInterval || '?'}天</span></span>` : t.recurring ? '<span class="tag" title="重複任務" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)"><span class="tag-icon">🔁</span><span class="tag-label"> 重複</span></span>' : ''}
+          ${isOverdue && !t.done ? '<span class="tag" title="逾期" style="border-color:rgba(192,86,90,0.4);color:var(--rose);background:rgba(192,86,90,0.07)"><span class="tag-icon">⚠</span><span class="tag-label"> 逾期</span></span>' : ''}
+          ${t.taskDate && !t.done ? `<span class="tag" title="日期：${t.taskDate}（點擊修改）" style="border-color:rgba(130,154,177,0.35);color:var(--sky);background:rgba(130,154,177,0.07);cursor:pointer" onclick="event.stopPropagation();openDateTagPicker(event,${t.id})"><span class="tag-icon">📅</span><span class="tag-label"> ${t.taskDate}</span></span>` : ''}
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
@@ -2022,10 +2022,11 @@ function taskHTML(t) {
             const today = localDateStr();
             const diff = Math.round((new Date(t.taskDate) - new Date(today)) / 86400000);
             const diffLabel = diff === 0 ? '今天截止' : diff > 0 ? `剩 ${diff} 天` : `逾 ${-diff} 天`;
+            const diffCompact = diff === 0 ? '今天' : diff > 0 ? `${diff}` : `-${-diff}`;
             const diffColor = diff < 0 ? 'var(--rose)' : diff <= 2 ? '#C9A227' : 'var(--text-faint)';
-            return `<span style="font-size:11px;color:${diffColor};white-space:nowrap">${diffLabel}</span>`;
+            return `<span class="countdown-badge" title="${diffLabel}" style="font-size:11px;color:${diffColor};white-space:nowrap">⏳<span class="countdown-num">${diffCompact}</span></span>`;
           })() : ''}
-          ${neglected ? `<span class="neglect-badge" title="點擊重新計算天數" onclick="event.stopPropagation();resetNeglect(${t.id})">⏳ 久未完成</span>` : ''}
+          ${neglected ? `<span class="neglect-badge" title="久未完成 — 點擊重新計算天數" onclick="event.stopPropagation();resetNeglect(${t.id})">⏳<span class="tag-label"> 久未完成</span></span>` : ''}
           <div onclick="openNoteModal(${t.id})" id="noteBtn-${t.id}" class="task-icon-btn" style="opacity:${t.note ? 1 : 0.3};color:${t.note ? 'var(--gold)' : 'inherit'}" title="${t.note ? '查看/編輯備忘' : '新增備忘'}">📝</div>
         </div>
         <div onclick="openCtxMenu(event,${t.id})" class="task-icon-btn" style="font-size:16px;opacity:0.3;line-height:1;letter-spacing:1px" title="更多">⋯</div>
