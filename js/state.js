@@ -192,7 +192,7 @@ function showInstantRewardPopup(reward) {
   overlay.innerHTML = `<div style="background:var(--bg2);border:2px solid rgba(201,162,39,0.5);border-radius:16px;padding:28px 24px;width:320px;max-width:90vw;text-align:center;box-shadow:0 20px 60px rgba(201,162,39,0.18)">
     <div style="font-size:28px;margin-bottom:10px">⚡</div>
     <div style="font-family:'DM Serif Display',serif;font-size:16px;color:var(--text);margin-bottom:6px">任務完成！</div>
-    <div style="font-size:18px;font-weight:600;color:#C9A227;margin-bottom:16px">${reward}</div>
+    <div style="font-size:18px;font-weight:600;color:#C9A227;margin-bottom:16px">${escHtml(reward)}</div>
     <button onclick="this.closest('[style*=inset]').remove()" style="padding:9px 28px;border:none;background:var(--green);color:#fff;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px">好的！</button>
   </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });

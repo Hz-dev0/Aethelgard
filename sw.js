@@ -1,11 +1,27 @@
-const _swBuild = '202606241530'; // ← 每次部署手動改這個數字
+const _swBuild = '202606270000'; // ← 每次部署手動改這個數字（或交由 CI 自動注入）
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
   '/Aethelgard/',
   '/Aethelgard/index.html',
   '/Aethelgard/manifest.json',
-  '/Aethelgard/icon.png'
+  '/Aethelgard/icon.png',
+  '/Aethelgard/css/main.css',
+  '/Aethelgard/js/early.js',
+  '/Aethelgard/js/firebase-init.js',
+  '/Aethelgard/js/firebase.js',
+  '/Aethelgard/js/auth.js',
+  '/Aethelgard/js/state.js',
+  '/Aethelgard/js/tasks.js',
+  '/Aethelgard/js/rewards.js',
+  '/Aethelgard/js/sync.js',
+  '/Aethelgard/js/notes.js',
+  '/Aethelgard/js/routines.js',
+  '/Aethelgard/js/calendar.js',
+  '/Aethelgard/js/datepicker.js',
+  '/Aethelgard/js/stats.js',
+  '/Aethelgard/js/ui.js',
+  '/Aethelgard/js/pwa.js',
 ];
 
 self.addEventListener('install', e => {

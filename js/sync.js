@@ -262,6 +262,10 @@ let _syncDebounceTimer = null; // debounce：合批短時間內連續的 sync �
 let _routineResetDate = null;  // in-memory 快取（存重置時間戳字串）
 let _lastSyncHash = '';        // ★ 增量防重：上次成功推送的資料 hash
 
+// 設為 true 可在開發時啟用 sync 偵錯訊息；正式部署請保持 false
+const _SYNC_DEBUG = false;
+function _dbg(...args) { if (_SYNC_DEBUG) console.log(...args); }
+
 // ★ 改用完整 JSON 字串做 hash，避免首尾相同但中間不同被誤判為一致
 function _quickHash(obj) {
   try {
@@ -369,16 +373,16 @@ async function loadFromCloud() {
       const _energyMigMap = { deep:'focus', flow:'charge', light:'easy', rest:'charge', low:'charge', mid:'easy', high:'focus' };
       state.tasks.forEach(t => { if (t.energy && _energyMigMap[t.energy]) t.energy = _energyMigMap[t.energy]; });
       // ── Restore notes
-      console.log('[notes] data.notes:', data.notes ? 'exists, tabs:' + (data.notes.tabs ? data.notes.tabs.length : 'no tabs') : 'MISSING');
+      _dbg('[notes] data.notes:', data.notes ? 'exists, tabs:' + (data.notes.tabs ? data.notes.tabs.length : 'no tabs') : 'MISSING');
       if (data.notes && data.notes.tabs) {
         const _chosen = _pickNotes(data.notes);
-        console.log('[notes] _chosen:', _chosen ? 'ok, tabs:' + _chosen.tabs.length : 'null');
+        _dbg('[notes] _chosen:', _chosen ? 'ok, tabs:' + _chosen.tabs.length : 'null');
         if (_chosen) {
           _lsSafeSet('aethelgard_notes_v1', JSON.stringify(_chosen));
           if (typeof window.notesLoadFromData === 'function') {
-            console.log('[notes] calling notesLoadFromData');
+            _dbg('[notes] calling notesLoadFromData');
             window.notesLoadFromData(_chosen);
-            console.log('[notes] notesLoadFromData done');
+            _dbg('[notes] notesLoadFromData done');
           }
         }
       }
@@ -424,7 +428,7 @@ function _pickNotes(cloudNotes) {
     if (memPayload && window._notesUserEdited) {
       const memTs = window._notesMemUpdatedAt || 0;
       if (memTs > cloudTs) {
-        console.log('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
+        _dbg('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
         return memPayload;
       }
     }
@@ -436,7 +440,7 @@ function _pickNotes(cloudNotes) {
       !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
     );
     const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
-    console.log('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
+    _dbg('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
     return chosen;
   } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
 }
@@ -491,7 +495,7 @@ function syncNotesToCloud() {
       const { updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
       await updateDoc(ref, { notes: notesPayload });
       _notesDirty = false;
-      console.log('[notes] 直接寫入 Firestore 成功');
+      _dbg('[notes] 直接寫入 Firestore 成功');
       const dot = document.getElementById('syncDot');
       if (dot) dot.className = 'sync-dot synced';
     } catch(e) {
@@ -542,7 +546,7 @@ document.addEventListener('visibilitychange', () => {
           const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
           return updateDoc(ref, { notes: notesPayload });
         })
-        .then(() => { _notesDirty = false; console.log('[notes] visibilitychange 緊急推送成功'); })
+        .then(() => { _notesDirty = false; _dbg('[notes] visibilitychange 緊急推送成功'); })
         .catch(e => console.warn('[notes] visibilitychange 推送失敗', e));
     }
   }
@@ -606,7 +610,7 @@ window.addEventListener('beforeunload', () => {
         const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
         return updateDoc(ref, { notes: notesPayload });
       })
-      .then(() => { _notesDirty = false; console.log('[notes] beforeunload 推送成功'); })
+      .then(() => { _notesDirty = false; _dbg('[notes] beforeunload 推送成功'); })
       .catch(e => console.warn('[notes] beforeunload 推送失敗', e));
   } catch(e) {
     console.warn('[notes] beforeunload 例外', e);
@@ -648,7 +652,7 @@ function archiveOldHistory() {
   const archivedIds = new Set(toArchive.map(h => h.id));
   state.doneHistory = state.doneHistory.filter(h => !archivedIds.has(h.id));
   saveStateLocal(); // 更新本地備份，不觸發 syncToCloud（封存不需要立即推送）
-  console.log(`已封存 ${toArchive.length} 筆歷史記錄`);
+  _dbg(`已封存 ${toArchive.length} 筆歷史記錄`);
 }
 window.archiveOldHistory = archiveOldHistory;
 
@@ -784,9 +788,9 @@ function _emergencySave() {
   const payload = _buildSyncPayload();
   const hash = _quickHash(payload);
   if (hash && hash === _lastSyncHash) return; // 資料沒變，不推
-  console.log('[emergencySave] 緊急推送 tasks:', payload.tasks.length, 'wishPoints:', payload.wishPoints);
+  _dbg('[emergencySave] 緊急推送 tasks:', payload.tasks.length, 'wishPoints:', payload.wishPoints);
   _fbSave(payload).then(ok => {
-    if (ok) { _lastSyncHash = hash; console.log('[emergencySave] 成功'); }
+    if (ok) { _lastSyncHash = hash; _dbg('[emergencySave] 成功'); }
     else console.warn('[emergencySave] 失敗');
   }).catch(e => console.warn('[emergencySave] 例外', e));
 }
@@ -804,7 +808,7 @@ async function _doSyncToCloud() {
 
   // ★ 先組出 payload，做 hash 比對，相同就靜默跳過（不發請求）
   const _payload = _buildSyncPayload();
-  console.log('[sync] notes payload:', _payload.notes ? 'ok updatedAt=' + _payload.notes.updatedAt : 'MISSING');
+  _dbg('[sync] notes payload:', _payload.notes ? 'ok updatedAt=' + _payload.notes.updatedAt : 'MISSING');
 
   // ★ Hash 防重：資料未變動就靜默跳過，不耗費任何網路
   const _hash = _quickHash(_payload);

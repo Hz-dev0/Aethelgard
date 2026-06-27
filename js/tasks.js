@@ -723,7 +723,7 @@ function runDailyReset() {
     if (!state.doneHistory.some(h => h.id === compressed.id)) {
       state.doneHistory.push(compressed);
     }
-    console.log(`[壓縮] ${prevDateStr} 的 ${detailed.length} 筆記錄已壓縮`);
+    // [壓縮] ${prevDateStr} 的 ${detailed.length} 筆記錄已壓縮
   })();
 
   // Reset routine tasks for the new day and refund their wishPoints
@@ -752,7 +752,7 @@ function runDailyReset() {
   }
 
   // 所有重置工作完成，才寫 LAST_RESET_KEY，確保中途例外不鎖住下次重置
-  localStorage.setItem(LAST_RESET_KEY, String(thisCycleResetTs));
+  try { localStorage.setItem(LAST_RESET_KEY, String(thisCycleResetTs)); } catch(e) {}
   saveStateLocal(); // 含 cancelled 解除/scheduledFor 修正等隱性變動
   if (resetCount > 0 || toDelete.length > 0) {
     showToast(`🔁 ${resetCount} 個重複任務已重置，新的一天開始！`);
@@ -831,14 +831,14 @@ function checkMissedReset() {
   while (cursor.getTime() <= now.getTime()) {
     const cursorTs = cursor.getTime();
     // 暫時把 LAST_RESET_KEY 清掉讓 runDailyReset 的守衛通過
-    localStorage.removeItem(LAST_RESET_KEY);
+    try { localStorage.removeItem(LAST_RESET_KEY); } catch(e) {}
     runDailyReset();
     // runDailyReset 會把 LAST_RESET_KEY 設為 thisCycleResetTs
     // 若還有更早的重置點要補，手動覆寫回 cursor 前一刻讓下一輪能通過守衛
     cursor.setDate(cursor.getDate() + 1);
     if (cursor.getTime() <= now.getTime()) {
       // 還有更多重置點要補，把 key 設回剛才這個點
-      localStorage.setItem(LAST_RESET_KEY, String(cursorTs));
+      try { localStorage.setItem(LAST_RESET_KEY, String(cursorTs)); } catch(e) {}
     }
     didReset = true;
   }
@@ -1567,10 +1567,11 @@ function _dailyGoalAdj(key, delta) {
 window._dailyGoalAdj = _dailyGoalAdj;
 
 function _dailyGoalSave(key) {
-  const saved = JSON.parse(localStorage.getItem('aethelgard_dailyGoals') || '{}');
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('aethelgard_dailyGoals') || '{}'); } catch(e) {}
   const n = treeNodes.find(x => x.key === key);
   if (n) saved[key] = n.dailyGoal;
-  localStorage.setItem('aethelgard_dailyGoals', JSON.stringify(saved));
+  try { localStorage.setItem('aethelgard_dailyGoals', JSON.stringify(saved)); } catch(e) {}
   const old = document.getElementById('dailyGoalCtx');
   if (old) old.remove();
   renderTree();
@@ -2626,7 +2627,7 @@ function openNoteModal(id) {
   const clearBtn = document.getElementById('noteClearBtn');
   if (t.note) {
     existingEl.style.display = 'block';
-    existingEl.innerHTML = `<div style="font-size:12px;color:var(--text-faint);margin-bottom:4px;letter-spacing:0.06em;text-transform:uppercase">目前備忘</div><div style="font-size:13px;color:var(--gold);padding:8px 10px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.6">${t.note}</div>`;
+    existingEl.innerHTML = `<div style="font-size:12px;color:var(--text-faint);margin-bottom:4px;letter-spacing:0.06em;text-transform:uppercase">目前備忘</div><div style="font-size:13px;color:var(--gold);padding:8px 10px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.6">${escHtml(t.note)}</div>`;
     clearBtn.style.display = 'inline-flex';
   } else {
     existingEl.style.display = 'none';
