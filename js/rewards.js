@@ -8,7 +8,6 @@ let lotteryState = {
   todayDone: 0,    // cumulative tasks completed today (resets at midnight)
   todayFlipped: 0, // how many cards flipped today (each flip costs 3 todayDone)
   randomMission: null, // assigned only when gold card is flipped; { taskIds, taskNames, requiredCount, completedTaskIds, awarded, assignedAt }
-  tenPullTickets: 0, // 十連抽券：完成「限時活動」任務獲得，跨日不重置、不受每日重置邏輯影響
 };
 
 function getTodayKey() {
@@ -134,10 +133,13 @@ function onTaskCompleted(task) {
   if (!isCharge) {
     if (!isDaily) {
       lotteryState.todayDone++;
-      // ★ 限時活動（技能）任務完成，額外贈送一張十連抽券
+      // ★ 限時活動（技能）任務完成 → 給 3 個願望碎片
       if (goal === '技能') {
-        lotteryState.tenPullTickets = (lotteryState.tenPullTickets || 0) + 1;
-        _showRewardBadge(goal, '🎉 +1 十連抽券！', '#D4608A');
+        if (state.wishPoints === undefined) state.wishPoints = 0;
+        state.wishPoints += 3;
+        saveStateLocal();
+        renderRewards();
+        _showRewardBadge(goal, '🌟 +3 願望碎片', '#D4608A');
       } else {
         const hasWishes = (state.rewards || []).some(r => !r.claimed && (r.allocatedPoints||0) >= r.count && r.count > 0);
         const available = lotteryState.todayDone - (lotteryState.todayFlipped || 0);
@@ -195,6 +197,13 @@ function onTaskUncompleted(task) {
       // 核心任務：取消翻牌機會
       const minDone = (lotteryState.todayFlipped || 0);
       if (lotteryState.todayDone > minDone) lotteryState.todayDone--;
+      // 限時活動：取消完成時給的 3 個願望碎片
+      if (goal === '技能') {
+        if (state.wishPoints === undefined) state.wishPoints = 0;
+        state.wishPoints = Math.max(0, state.wishPoints - 3);
+        saveStateLocal();
+        renderRewards();
+      }
     } else {
       // 日常任務：取消碎片（日常任務才有給碎片）
       if (state.wishPoints === undefined) state.wishPoints = 0;
@@ -493,7 +502,7 @@ function toggleWishzoneRules(e) {
     <div style="font-weight:600;color:var(--text);margin-bottom:8px;font-size:13px">規則說明</div>
     <div>🎫 核心任務完成 → 抽卡券</div>
     <div>🌟 每日委託完成 → 願望碎片</div>
-    <div>🎉 限時活動完成 → 十連抽券</div>
+    <div>🌟 限時活動完成 → 3 個願望碎片</div>
     <div>𖦏 專注任務 → 20% 機率多 1 券</div>
     <div>⚡ 充電任務 → 不計入獎勵</div>
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">🌟 10 個碎片可在抽獎區兌換 1 張抽卡券</div>
@@ -593,13 +602,18 @@ function _resolveDrawnCard(item) {
   return result;
 }
 
-function drawTenPull() {
-  if ((lotteryState.tenPullTickets || 0) < 1) {
-    showToast('🎉 沒有十連抽券，完成限時活動任務來獲得！');
+async function drawTenPull() {
+  // 十連抽現在不需要獨立的「十連抽券」——直接消耗 10 張一般抽卡券
+  // （跟畫面上「🎫 抽卡券」顯示的是同一個數字：完成任務或用碎片兌換都算）
+  const availableFlips = (lotteryState.todayDone || 0) - (lotteryState.todayFlipped || 0);
+  if (availableFlips < 10) {
+    showToast(`🎉 十連抽需要 10 張抽卡券（目前 ${Math.max(0, availableFlips)} 張）`);
     return;
   }
-  lotteryState.tenPullTickets--;
+  lotteryState.todayFlipped = (lotteryState.todayFlipped || 0) + 10;
   // 一次建好 10 張不重複的卡池，逐張依序處理 —— 保證同一個願望不會在這次十連抽裡被抽中兩次
+  // （資料/獎勵的判定在這裡就一次性算完，跟改版前完全一樣；下面只是把「播放方式」
+  // 從一次性全部顯示，改成自動洗牌→自動抽一張→重複十次的逐張動畫）
   const pool = buildCardPool(10);
   const results = pool.map(item => _resolveDrawnCard(item));
 
@@ -611,9 +625,96 @@ function drawTenPull() {
   renderTree();
   renderLottery();
   if (typeof syncToCloud === 'function') syncToCloud();
+
+  await _playTenPullSequence(results);
   _showTenPullResultModal(results);
 }
 window.drawTenPull = drawTenPull;
+
+// 十連抽逐張動畫：自動洗牌 → 自動抽一張並翻開 → 重複十次。
+// 沿用單抽（flipCard/_doFlipCard）一樣的洗牌跟翻牌時間，視覺上是同一套語言，
+// 只是這裡不需要使用者點擊，十張會自動依序播放完。
+function _playTenPullSequence(results) {
+  return new Promise(resolve => {
+    const old = document.getElementById('tenPullSeqOverlay');
+    if (old) old.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'tenPullSeqOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(20,30,45,0.78);z-index:99998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px';
+    overlay.innerHTML = `
+      <div id="tpSeqCounter" style="color:#fff;font-size:13px;letter-spacing:0.1em;opacity:0.85">十連抽 1 / ${results.length}</div>
+      <div style="width:150px">
+        <div class="lottery-card shuffle-anim" id="tpSeqCard">
+          <div class="lottery-card-back">
+            <div class="card-face-icon">✦</div>
+            <div class="card-face-hint">洗牌中…</div>
+          </div>
+          <div class="lottery-card-front"></div>
+        </div>
+      </div>
+      <button id="tpSeqSkipBtn" style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.75);font-size:12px;padding:5px 14px;border-radius:20px;cursor:pointer;font-family:inherit">跳過動畫 »</button>
+    `;
+    document.body.appendChild(overlay);
+
+    const cardEl = document.getElementById('tpSeqCard');
+    const frontEl = cardEl.querySelector('.lottery-card-front');
+    const counterEl = document.getElementById('tpSeqCounter');
+    let i = 0;
+    let skipped = false;
+    let pendingTimer = null;
+
+    document.getElementById('tpSeqSkipBtn').onclick = () => {
+      skipped = true;
+      if (pendingTimer) clearTimeout(pendingTimer);
+      overlay.remove();
+      resolve();
+    };
+
+    const renderResultFace = (r) => {
+      frontEl.innerHTML = `
+        <div style="font-size:30px">${r.wishFulfilled ? '🌊' : r.isRandomMission ? '🏆' : (r.icon || '✦')}</div>
+        <div style="font-size:11px;color:var(--text-dim);line-height:1.4;max-width:110px">${escHtml(r.text)}</div>
+      `;
+    };
+
+    const step = () => {
+      if (skipped) return;
+      if (i >= results.length) {
+        overlay.remove();
+        resolve();
+        return;
+      }
+      counterEl.textContent = `十連抽 ${i + 1} / ${results.length}`;
+      // ① 自動洗牌（跟單抽一樣的牌背 + shuffle-anim，480ms）
+      cardEl.className = 'lottery-card shuffle-anim';
+      cardEl.querySelector('.lottery-card-back').style.display = 'flex';
+      frontEl.style.display = 'none';
+      frontEl.innerHTML = '';
+
+      pendingTimer = setTimeout(() => {
+        if (skipped) return;
+        cardEl.classList.remove('shuffle-anim');
+        // ② 自動抽一次：翻牌動畫，跟單抽一樣在轉到一半（220ms）時換成正面內容
+        cardEl.classList.add('flipping');
+        pendingTimer = setTimeout(() => {
+          if (skipped) return;
+          cardEl.classList.remove('flipping');
+          cardEl.classList.add('revealed');
+          const r = results[i];
+          if (r.wishFulfilled) cardEl.classList.add('is-wish');
+          cardEl.querySelector('.lottery-card-back').style.display = 'none';
+          frontEl.style.display = 'flex';
+          renderResultFace(r);
+          i++;
+          // 停留一下讓使用者看清楚這一抽的結果，再進入下一輪洗牌
+          pendingTimer = setTimeout(step, 650);
+        }, 220);
+      }, 480);
+    };
+    step();
+  });
+}
 
 function _showTenPullResultModal(results) {
   const old = document.getElementById('tenPullResultOverlay');
@@ -665,12 +766,12 @@ function renderLottery() {
     exBtn.style.opacity = available >= 10 ? '1' : '0.5';
     exBtn.title = `目前可用碎片 ${available} 個，10 個碎片可兌換 1 張抽卡券`;
   }
-  // 十連抽按鈕：依持有券數決定透明度，並把目前數量放進 title 提示
+  // 十連抽按鈕：依目前可用抽卡券是否滿 10 張決定透明度與提示文字
   const tpBtn = document.getElementById('tenPullBtn');
   if (tpBtn) {
-    const cnt = lotteryState.tenPullTickets || 0;
-    tpBtn.style.opacity = cnt >= 1 ? '1' : '0.5';
-    tpBtn.title = `目前持有 ${cnt} 張十連抽券`;
+    const cnt = Math.max(0, availableFlips);
+    tpBtn.style.opacity = cnt >= 10 ? '1' : '0.5';
+    tpBtn.title = `目前可用抽卡券 ${cnt} 張，滿 10 張即可十連抽`;
   }
 
   // lotteryProgress 已移除，不顯示碎片於抽獎區

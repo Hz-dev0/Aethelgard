@@ -672,8 +672,11 @@ function runDailyReset() {
     if (!state.doneHistory.some(h => h.id === archiveKey)) {
       state.doneHistory.push({ id: archiveKey, taskId: t.id, name: t.name, goal: t.goal, energy: t.energy, completedAt: t.completedAt, recurring: t.recurring || false });
     }
-    if (t.recurring && t.recurMode !== 'interval') {
-      // Daily recurring: reset back to undone，清掉排程讓早晨對話框重新詢問
+    // 有「截止日」的重複任務，過了截止日（今天 > taskDate）就視為這個重複
+    // 系列已經結束，跟非重複任務一樣歸檔刪除，不再重置回「未完成」。
+    const recurExpired = t.recurring && t.taskDate && todayKey > t.taskDate;
+    if (t.recurring && t.recurMode !== 'interval' && !recurExpired) {
+      // Daily recurring（且還沒過截止日）: reset back to undone，清掉排程讓早晨對話框重新詢問
       if (state.done > 0) state.done--;
       t.done = false;
       t.postponed = 0;
@@ -682,7 +685,7 @@ function runDailyReset() {
       t.status = null;
       resetCount++;
     } else {
-      // Non-recurring done task or interval task → delete after reset
+      // Non-recurring done task、interval task、或已過截止日的重複任務 → delete after reset
       toDelete.push(t.id);
       if (state.done > 0) state.done--;
     }
@@ -2464,7 +2467,11 @@ function toggleTask(id) {
     }
     // If interval-recurring, schedule next occurrence BEFORE onTaskCompleted
     // so the 🌟 碎片 toast from onTaskCompleted is the last one shown (not overwritten by 🔁 toast)
-    if (t.recurring && t.recurMode === 'interval') {
+    // ★ 但如果這個任務綁了「截止日」、而且今天已經超過截止日（遲到才補做），
+    // 就不再建立下一次——這個重複系列在截止日就該結束，不應該因為遲交一次
+    // 而又生出一個新的未來任務。
+    const _pastDeadline = t.taskDate && localDateStr() > t.taskDate;
+    if (t.recurring && t.recurMode === 'interval' && !_pastDeadline) {
       const cloneId = scheduleIntervalTask(t);
       // Mark with clone id so undo can remove the future clone
       t._intervalCompleted = true;
@@ -2734,7 +2741,10 @@ function checkTaskDates() {
   state.tasks.forEach(t => {
     if (t.done) return;
     // Auto-mark by taskDate — 只在有效今日才排入，不在深夜提早觸發
-    if (t.taskDate && t.taskDate <= effectiveToday && !t.scheduledFor && t.status !== 'cancelled') {
+    // ★ 重複任務不在這裡自動排入：有日期的重複任務改成把日期當「重複到此為止」
+    // 的截止日，透過批次清單（_getRecurringTasksDueToday）每天詢問，而不是
+    // 直接默默排入今日、永遠跳過批次清單。非重複任務行為不變。
+    if (t.taskDate && t.taskDate <= effectiveToday && !t.scheduledFor && t.status !== 'cancelled' && !t.recurring) {
       t.scheduledFor = effectiveToday;
       t.status = 'active';
       t._scheduledByDate = true;

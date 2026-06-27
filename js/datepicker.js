@@ -47,14 +47,24 @@ function _getRecurringTasksDueToday() {
   state.tasks.forEach(t => {
     if (t.done) return;
     if (!t.recurring) return;
+    // 有「日期」的重複任務：把這個日期當成「重複到此為止」的截止日。
+    // 過了這天（today > taskDate）就不再出現在批次清單，視為這個重複系列已結束。
+    // 注意是 < 不是 <=：截止日當天仍要出現，讓使用者當天還能把它加入今日任務。
+    if (t.taskDate && t.taskDate < todayStr) return;
     // 已釘選今日（且未取消）的不列出
     if (t.scheduledFor === todayStr && t.status !== 'cancelled') return;
 
     if (t.recurMode === 'daily' || !t.recurMode) {
       result.push({ task: t, freq: '每天' });
     } else if (t.recurMode === 'interval') {
-      // Interval tasks — show only if scheduledFor is today (arrived)
-      if (t.scheduledFor && t.scheduledFor <= todayStr) {
+      // 一般情況：scheduledFor 已到（含逾期補上）才出現。
+      // 例外：這個任務綁了「截止日」、又還沒被排過（第一次出現，
+      // 還沒有任何 scheduledFor 紀錄）——這種情況改用日期本身判斷要不要
+      // 出現，否則一個全新、日期還沒到 scheduledFor 的「隔幾天重複＋
+      // 有截止日」任務會永遠卡住、兩邊都進不去。
+      const dueBySchedule = t.scheduledFor && t.scheduledFor <= todayStr;
+      const dueByDateFirstTime = t.taskDate && !t.scheduledFor && t.taskDate <= todayStr;
+      if (dueBySchedule || dueByDateFirstTime) {
         const days = t.recurInterval || 7;
         result.push({ task: t, freq: `每 ${days} 天` });
       }
@@ -118,11 +128,14 @@ function _recurMorningRowHTML(task, freq, goalIconMap, energyLabelMap) {
   const eLabel = energyLabelMap[task.energy] || '';
   const streak = _getTaskConsecutiveDays(task);
   const streakHint = streak >= 3 ? ` <span style="font-size:10px;color:var(--green);opacity:0.75">🔥${streak}天</span>` : '';
+  // 有截止日的重複任務：在這裡標出來，讓使用者知道這個重複是有期限的
+  // （到截止日當天還是會出現，過了那天才會從批次清單消失）
+  const deadlineHint = task.taskDate ? ` <span style="font-size:10px;color:var(--text-faint)">· 至 ${task.taskDate}</span>` : '';
   return `<div class="rm-task-row${checked ? ' rm-checked' : ''}" onclick="recurMorningToggleRow(${task.id})" data-id="${task.id}">
     <div class="rm-checkbox">${checked ? '✓' : ''}</div>
     <div class="rm-task-info">
       <div class="rm-task-name">${escHtml(task.name)}${streakHint}</div>
-      <div class="rm-task-meta">${gIcon} ${escHtml(goalLabel(task.goal))}${eLabel ? ' · ' + eLabel : ''}</div>
+      <div class="rm-task-meta">${gIcon} ${escHtml(goalLabel(task.goal))}${eLabel ? ' · ' + eLabel : ''}${deadlineHint}</div>
     </div>
     <div class="rm-freq-badge">${freq}</div>
   </div>`;
@@ -202,6 +215,19 @@ function maybeShowRecurMorningDialog() {
     if (items.length > 0) showRecurMorningDialog();
   }, 800);
 }
+
+// 手動開啟「批次清單」（生命樹頁「批次加入任務」按鈕用）。
+// 跟自動跳出的版本不同：不受「這個週期已經顯示過」的限制，隨時可以再打開；
+// 而且名單是空的時候會明確告知，不會讓使用者以為按鈕沒反應。
+function openBatchTaskList() {
+  const items = _getRecurringTasksDueToday();
+  if (items.length === 0) {
+    showToast('📋 目前沒有等待加入的重複任務');
+    return;
+  }
+  showRecurMorningDialog();
+}
+window.openBatchTaskList = openBatchTaskList;
 window.recurMorningToggleRow = recurMorningToggleRow;
 window.recurMorningToggleAll = recurMorningToggleAll;
 window.confirmRecurMorning = confirmRecurMorning;

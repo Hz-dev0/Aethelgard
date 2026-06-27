@@ -103,8 +103,9 @@
               <!-- Rendered by renderTree() -->
             </div>
             <div style="text-align:center;font-size:12px;color:var(--text-faint);margin-top:8px">點擊目標卡片，篩選相關任務並新增任務時自動帶入分類</div>
-            <div style="text-align:center;margin-top:12px">
+            <div style="text-align:center;margin-top:12px;display:flex;gap:10px;justify-content:center">
               <button onclick="showInstantWants()" class="btn-ghost-green-lg">妳現在想要…？</button>
+              <button onclick="openBatchTaskList()" class="btn-ghost-green-lg">📋 批次加入任務</button>
             </div>
           </div>
           <!-- Today Tasks Panel -->
@@ -250,7 +251,7 @@
               <button onclick="exchangeFragmentsForTicket()" id="exchangeFragmentBtn" class="btn-ghost-green" title="10 個願望碎片兌換 1 張抽卡券" style="font-size:12px;padding:6px 12px">
                 🌟 兌換
               </button>
-              <button onclick="drawTenPull()" id="tenPullBtn" class="btn-ghost-green" title="消耗 1 張十連抽券，連續抽 10 次" style="font-size:12px;padding:6px 12px;border-color:rgba(201,162,39,0.4);color:#C9A227">
+              <button onclick="drawTenPull()" id="tenPullBtn" class="btn-ghost-green" title="消耗 10 張抽卡券，連續抽 10 次" style="font-size:12px;padding:6px 12px;border-color:rgba(201,162,39,0.4);color:#C9A227">
                 🎉 十連抽
               </button>
             </div>
@@ -834,8 +835,8 @@
   <div id="recurMorningBox">
     <div class="rm-header">
       <div>
-        <div class="rm-title">☀ 今日重複任務</div>
-        <div class="rm-sub">勾選要加入今日任務清單的項目</div>
+        <div class="rm-title">📋 批次清單</div>
+        <div class="rm-sub">勾選要加入今日任務清單的重複任務</div>
       </div>
       <button class="rm-close-btn" onclick="skipRecurMorningDialog()">×</button>
     </div>
