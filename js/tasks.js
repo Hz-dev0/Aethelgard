@@ -894,14 +894,25 @@ async function init() {
   window._fbGuestReadyResolve = _earlyResolve;
 
   await new Promise((resolve) => {
-    if (window._fbUid || _initResolved) { resolve(); return; }
+    // ★ 修正：只能信任 _initResolved（由 _onFirebaseReadyCallback 正確設定，
+    //   且該 callback 會尊重 _fbGuestAccessPending 守門旗標）。
+    //   絕對不能用 window._fbUid 是否有值來提前 resolve —— submitGuestToken()
+    //   為了修另一個競態條件，會在 signInAnonymously() 完成、guest_access 文件
+    //   寫入 Firestore「之前」就先同步把 window._fbUid 設成 ownerUid。
+    //   若這裡拿 window._fbUid 當放行條件，會在 guest_access 文件還沒寫入時
+    //   就提前呼叫 loadFromCloud()，被 Firestore 安全規則擋下讀成 null，
+    //   這正是無痕模式下「驗證碼登入後看不到任務清單」的根因：無痕模式沒有
+    //   快取憑證，signInAnonymously() 必須完整跟伺服器來回一趟、耗時較長，
+    //   使 500ms 輪詢更容易搶在 guest_access 寫入完成前就看到 window._fbUid
+    //   已有值而提前 resolve；一般模式下常因為時間差小而僥倖沒事。
+    if (_initResolved) { resolve(); return; }
     _initResolveRef = resolve;
     // Safety net：每秒輪詢，涵蓋極端時序差的情況
     const _safetyTimer = setInterval(() => {
-      if (window._fbUid || _initResolved) { clearInterval(_safetyTimer); resolve(); }
+      if (_initResolved) { clearInterval(_safetyTimer); resolve(); }
     }, 500);
     // 30 秒後只有在已驗證的情況下才 resolve，否則繼續等待
-    setTimeout(() => { clearInterval(_safetyTimer); if (window._fbUid || _initResolved) resolve(); }, 30000);
+    setTimeout(() => { clearInterval(_safetyTimer); if (_initResolved) resolve(); }, 30000);
   });
 
   {
