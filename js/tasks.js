@@ -941,8 +941,18 @@ async function init() {
     }
 
     const ok = await loadFromCloud();
-    // ── initDone 在雲端資料回來後立刻設定，讓後續呼叫的 syncToCloud 能正常推送 ──
-    state._initDone = true;
+    // ★ 修正嚴重資料遺失風險：_initDone 絕對不能在這裡無條件設成 true。
+    //   _initDone 是 syncToCloud() / _doSyncToCloud() / _emergencySave() 用來擋
+    //   「雲端資料還沒真正載入完成前，不准把記憶體裡的空 state 寫回雲端」的唯一防線
+    //   （見 sync.js 裡 _emergencySave 的說明）。若無論 loadFromCloud() 成功與否都把它
+    //   設成 true，一旦讀取失敗（例如訪客登入競態導致的 permission-denied、或單純
+    //   網路抖動），state.tasks 這時仍是初始的空陣列，但 _initDone 已經是 true，
+    //   任何後續觸發的 syncToCloud()／切分頁／關分頁的 _emergencySave() 都會把這個
+    //   空 state 直接推回雲端唯一的 Aethelgard/data 文件，覆寫掉真實任務資料——
+    //   這正是資料被清空的成因。現在只有讀取成功時才在這裡設 true；讀取失敗的分支
+    //   已經各自正確處理（有本地備份就在那裡設 true，新裝置無備份則保持 false，
+    //   直到背景重試成功為止，避免在空窗期把空資料寫上雲端）。
+    if (ok) state._initDone = true;
     // ★ 載入完成後清除「使用者已編輯」旗標，避免下次 snapshot 到來時誤判本機版本比雲端新
     window._notesUserEdited = false;
     // ★ 重要：init 載入完成後立刻抑制 snapshot，避免舊版 snapshot 在 debounce 期間蓋掉剛載好的資料
@@ -1091,7 +1101,12 @@ async function init() {
   scheduleCheckTaskDates();
 
   // ── 本機模式（無雲端）的 _initDone 在這裡設定；有雲端的已在 loadFromCloud 後設定 ──
-  if (!state._initDone) state._initDone = true;
+  // ★ 修正：這裡原本沒有真的檢查「是否為無雲端模式」，導致就算目前是 Firebase 模式
+  //   且 loadFromCloud() 失敗（_initDone 仍應保持 false，等背景重試成功），這行還是
+  //   會在 init() 結尾把 _initDone 強制設回 true，等於把上面 ok/fail 分支辛苦做的
+  //   防呆整個繞過去，重新打開「空 state 被寫回雲端覆蓋真實資料」的破口。
+  //   現在只有真正沒有 Firebase UID（純本機、從未連上雲端）時才會落到這個 fallback。
+  if (!window._fbUid && !state._initDone) state._initDone = true;
 
   // ── 修復：確保 wishPoints 不低於已分配給願望的點數（防止可用碎片永遠顯示 0）──
   {
