@@ -2197,8 +2197,10 @@ function renderTodayPanel() {
   const todayStr = localDateStr();
   // 有效今日：重置時間決定，00:00~重置時間之間仍屬上個週期
   const effectiveTodayStr = localDateStr(new Date(getLastResetTimestamp()));
-  // ── Bug 2 fix：不再用 !t.done 過濾，讓今日已完成任務也顯示在面板 ──
-  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled');
+  // ★ 首頁（生命樹）今日任務面板：完成後即從清單消失，只保留未完成任務（任務頁不受影響）
+  // 先算出「今天原本有標記、但已完成」的數量，供 badge／空狀態文案判斷用
+  const doneTodayCount = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled' && t.done).length;
+  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled' && !t.done);
   const overdueTasks = state.tasks.filter(t =>
     t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled'
   );
@@ -2220,16 +2222,16 @@ function renderTodayPanel() {
     return oa - ob;
   });
 
-  // badge 只顯示未完成數量
+  // badge 只顯示未完成數量；未完成清空但今天曾標記過任務時顯示 ✓
   const undoneCount = allToday.filter(t => !t.done).length;
   if (countBadge) {
     const prevText = countBadge.textContent;
-    const newText = undoneCount > 0 ? String(undoneCount) : (allToday.length > 0 ? '✓' : '');
+    const newText = undoneCount > 0 ? String(undoneCount) : ((allToday.length > 0 || doneTodayCount > 0) ? '✓' : '');
     countBadge.classList.remove('badge-urgent', 'badge-done');
     void countBadge.offsetWidth;
     if (undoneCount > 0) {
       countBadge.classList.add('badge-urgent');
-    } else if (allToday.length > 0) {
+    } else if (allToday.length > 0 || doneTodayCount > 0) {
       countBadge.classList.add('badge-done');
     }
     if (prevText !== newText) {
@@ -2245,7 +2247,9 @@ function renderTodayPanel() {
   }
 
   if (allToday.length === 0) {
-    list.innerHTML = '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
+    list.innerHTML = doneTodayCount > 0
+      ? '<div class="today-panel-empty">🎉 今日任務都完成了！</div>'
+      : '<div class="today-panel-empty">今天還沒有標記任何任務。在任務旁點側邊藍線來安排今日。</div>';
     return;
   }
   const goalIconMap = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' };
@@ -2337,7 +2341,7 @@ function todayChipDrop(e, toIdx) {
   if (_todayDragIdx === null || _todayDragIdx === toIdx) return;
   // ── Bug 4 fix：與 renderTodayPanel 邏輯完全對齊，確保拖曳後排序正確 ──
   const todayStr = localDateStr();
-  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled');
+  const todayTasks = state.tasks.filter(t => t.scheduledFor === todayStr && t.status !== 'cancelled' && !t.done);
   const overdueTasks = state.tasks.filter(t => t.scheduledFor && t.scheduledFor < todayStr && !t.done && t.status !== 'cancelled');
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
   // ★ 跟 renderTodayPanel 的篩選邏輯保持一致，否則篩選中拖曳排序的索引會跟畫面顯示的不對應
