@@ -381,6 +381,13 @@ function closeApiModal() {
   document.getElementById('apiModal').classList.remove('open');
 }
 
+// ── 使用設定 Modal：左側圖示分頁切換 ──
+function switchApiTab(name, itemEl) {
+  document.querySelectorAll('.api-tab-item').forEach(el => el.classList.toggle('active', el === itemEl));
+  document.querySelectorAll('.api-tab-pane').forEach(el => el.classList.toggle('active', el.dataset.pane === name));
+}
+window.switchApiTab = switchApiTab;
+
 // ── 備份匯入（設定頁）──────────────────────────────────────────────────
 async function handleImportBackup(input) {
   const file = input.files[0];

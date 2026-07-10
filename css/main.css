@@ -1556,6 +1556,46 @@
     margin-right: auto;
   }
   .api-btn-clear:hover { background: rgba(192,86,90,0.06); }
+
+  /* ── 使用設定 Modal：左側圖示分頁版面 ── */
+  .api-modal-box-tabs { padding: 0; gap: 0; overflow: hidden; width: 480px; }
+  .api-modal-tabs-layout { display: flex; min-height: 300px; }
+  .api-tab-sidebar {
+    width: 78px; flex-shrink: 0;
+    background: var(--bg3);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 46px 8px 14px;
+    gap: 4px;
+  }
+  .api-tab-item {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 2px;
+    border-radius: 11px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.18s;
+    user-select: none;
+  }
+  .api-tab-item:hover { background: rgba(58,110,165,0.08); color: var(--text); }
+  .api-tab-item.active { background: var(--bg2); color: var(--green); box-shadow: 0 2px 10px rgba(58,110,165,0.16); }
+  .api-tab-icon { font-size: 18px; line-height: 1; }
+  .api-tab-label { font-size: 10px; letter-spacing: 0.02em; white-space: nowrap; }
+  .api-tab-content { flex: 1; min-width: 0; padding: 26px 24px 20px; overflow-y: auto; max-height: 62vh; }
+  .api-tab-pane { display: none; flex-direction: column; }
+  .api-tab-pane.active { display: flex; animation: modalIn 0.15s ease; }
+  .api-pane-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 15px; color: var(--green);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .api-modal-box-tabs .api-modal-actions { padding: 14px 24px; border-top: 1px solid var(--border); margin: 0; }
+  @media (max-width: 480px) {
+    .api-tab-sidebar { width: 62px; padding: 44px 4px 12px; }
+    .api-tab-label { font-size: 9px; }
+    .api-tab-content { padding: 20px 16px 16px; }
+  }
   /* ── Sync indicator ── */
   .sync-dot {
     width: 7px; height: 7px; border-radius: 50%;
