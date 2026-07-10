@@ -234,7 +234,6 @@ function saveEdit() {
   t.meaning = document.getElementById('editTaskMeaning').value.trim();
   t.goal = document.getElementById('editTaskGoal').value;
   t.energy = document.getElementById('editTaskEnergy').value;
-  t._quickAdded = false; // 使用者已手動確認過這筆任務，移除「未整理」提示
   const editRewardEl = document.getElementById('editTaskReward');
   const editReward = editRewardEl ? editRewardEl.value.trim() : '';
   t.reward = editReward || null;
