@@ -798,9 +798,9 @@
 
   /* logo 選單項目 */
   .logo-menu-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; border-radius: 9px;
-    font-size: 14px; color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 7px;
+    font-size: 13px; color: var(--text-dim); cursor: pointer;
     transition: all 0.15s;
   }
   .logo-menu-item:hover { background: var(--bg3); color: var(--text); }

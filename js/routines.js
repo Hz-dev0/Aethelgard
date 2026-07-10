@@ -265,7 +265,7 @@ function addRoutineItem() {
   }
   state.routines.push({ id: Date.now(), name, done: false, doneDate: null });
   input.value = '';
-  if (typeof syncToCloud === 'function') syncToCloud();
+  if (typeof _syncNow === 'function') _syncNow();
   renderRoutineList();
   input.focus();
 }
@@ -274,7 +274,7 @@ window.addRoutineItem = addRoutineItem;
 function deleteRoutineItem(id) {
   if (!Array.isArray(state.routines)) state.routines = [];
   state.routines = state.routines.filter(x => x.id !== id);
-  if (typeof syncToCloud === 'function') syncToCloud();
+  if (typeof _syncNow === 'function') _syncNow();
   renderRoutineList();
 }
 window.deleteRoutineItem = deleteRoutineItem;

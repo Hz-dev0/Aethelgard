@@ -1053,7 +1053,7 @@ function deletePastDoneTask(id) {
   renderTasks();
   renderTree();
   showToast('🗑 已從任務列表移除（熱力圖記錄保留）');
-  syncToCloud();
+  _syncNow();
 }
 
 function undoneTask(id) {
@@ -1106,6 +1106,6 @@ function deleteTaskFromStats(id) {
     renderRewards();
     showToast('🗑 任務已刪除');
     saveStateLocal();
-    syncToCloud();
+    _syncNow();
   }
 }

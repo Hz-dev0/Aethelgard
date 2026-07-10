@@ -715,6 +715,19 @@ function loadStateLocal() {
   } catch(e) { return false; }
 }
 
+// ── _syncNow：立即同步，跳過 debounce ──
+// 用於新增/刪除等一次性操作：確保雲端永遠保留「最新」狀態，
+// 不必等 5 秒/30 秒的 debounce 才推送，避免切換裝置時讀到尚未送出的舊資料。
+function _syncNow() {
+  saveStateLocal();
+  if (!state._initDone) return;
+  if (!_isFirebaseReady()) return;
+  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
+  _markSyncWrite(); // 立即抑制 snapshot，不等 _fbSave() 完成，避免自己剛推的資料被回聲覆蓋
+  _doSyncToCloud();
+}
+window._syncNow = _syncNow;
+
 // ── syncToCloud：對外入口，帶 debounce 防止短時間內連續呼叫造成閃爍 ──
 // ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
 function syncToCloud() {

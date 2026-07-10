@@ -484,14 +484,14 @@ function addCustomQuote() {
   state.customQuotes.unshift(val);
   input.value = '';
   renderQuotes();
-  syncToCloud();
+  _syncNow();
 }
 
 function removeCustomQuote(i) {
   if (!state.customQuotes) return;
   state.customQuotes.splice(i, 1);
   renderQuotes();
-  syncToCloud();
+  _syncNow();
 }
 
 function openAddWish() {
@@ -514,7 +514,7 @@ function addReward() {
   closeModal('addRewardModal');
   renderRewards();
   showToast('🌊 願望已投入許願池');
-  syncToCloud();
+  _syncNow();
 }
 
 function deleteReward(id) {
@@ -526,7 +526,7 @@ function deleteReward(id) {
   state.rewards = state.rewards.filter(r => r.id !== id);
   renderRewards();
   saveStateLocal();
-  syncToCloud();
+  _syncNow();
 }
 
 function openClaimReward(id) {
@@ -756,11 +756,11 @@ function runDailyReset() {
   saveStateLocal(); // 含 cancelled 解除/scheduledFor 修正等隱性變動
   if (resetCount > 0 || toDelete.length > 0) {
     showToast(`🔁 ${resetCount} 個重複任務已重置，新的一天開始！`);
-    syncToCloud();
+    _syncNow();
   } else {
     // ★ Fix：即使普通任務無重置，例行任務重置後仍需推送 routines 狀態和 routineResetDate 到雲端
     // 否則雲端保留舊的 done=true，下次從雲端讀取時例行任務看起來沒有重置
-    syncToCloud();
+    _syncNow();
   }
   // Always re-render so interval clones scheduled for today appear in today panel
   renderAll();
@@ -2351,7 +2351,7 @@ function deleteTodayTask(id) {
   renderTasks();
   renderTree();
   renderStats();
-  syncToCloud();
+  _syncNow();
   showToast('🗑 任務已刪除');
 }
 
@@ -2913,7 +2913,7 @@ function addTask() {
     renderTree();
   }
   showToast('🌱 任務已種下，再新增或按取消關閉');
-  syncToCloud();
+  _syncNow();
 }
 
 // ── Sandbox ──
@@ -2938,14 +2938,14 @@ function addSandbox() {
   state.sandbox.push(val);
   input.value = '';
   renderSandbox();
-  syncToCloud();
+  _syncNow();
 }
 
 function removeSandbox(i) {
   state.sandbox.splice(i, 1);
   renderSandbox();
   saveStateLocal();
-  syncToCloud();
+  _syncNow();
 }
 
 // ══════════════════════════════════════════════════════
