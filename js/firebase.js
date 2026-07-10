@@ -90,7 +90,21 @@ function _startRealtimeListener(uid) {
         id: t.id, done: !!t.done, name: t.name,
         completedAt: t.completedAt || null,
         scheduledFor: t.scheduledFor || null,
-        status: t.status || null
+        status: t.status || null,
+        // ★ Bug fix：原本只比對上面 6 個欄位，導致只改「分類/精力/心得/備忘/日期/重複設定」
+        // 等欄位時，兩端指紋看起來完全一致 → 即時監聽誤判「沒有變化」而直接跳過，
+        // 使得該次更新只能靠使用者手動重新整理（走 loadFromCloud）才會出現，
+        // 即時同步等於沒生效。這裡把所有會被使用者編輯的欄位都納入比對。
+        goal: t.goal || null,
+        energy: t.energy || null,
+        meaning: t.meaning || null,
+        note: t.note || null,
+        reward: t.reward || null,
+        taskDate: t.taskDate || null,
+        recurring: !!t.recurring,
+        recurMode: t.recurMode || null,
+        recurInterval: t.recurInterval || 0,
+        postponed: t.postponed || 0
       })));
     }
     const remoteFingerprint = _taskFingerprint(data.tasks);
@@ -112,7 +126,19 @@ function _startRealtimeListener(uid) {
     const remoteRoutinesStr = JSON.stringify((data.routines || []).map(r => ({ id: r.id, done: !!r.done, doneDate: r.doneDate || null })).sort((a,b) => a.id - b.id));
     const localRoutinesStr  = JSON.stringify((state.routines || []).map(r => ({ id: r.id, done: !!r.done, doneDate: r.doneDate || null })).sort((a,b) => a.id - b.id));
     const routinesUnchanged = remoteRoutinesStr === localRoutinesStr;
-    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints && notesUnchanged && routinesUnchanged) { console.log('[snapshot] ❌ 資料一致（含筆記＋例行任務），略過'); return; }
+    // ★ Bug fix：sandbox（靈感沙盒）/rewards（許願池）/customQuotes（自訂格言）原本完全沒被比對，
+    // 只改這幾項、但 tasks/done/wishPoints/notes/routines 剛好沒變時，即時監聽會誤判一致而跳過，
+    // 導致這幾項的變更要等重新整理（走 loadFromCloud）才會出現在其他裝置上。
+    const remoteSandboxStr = JSON.stringify(data.sandbox || []);
+    const localSandboxStr  = JSON.stringify(state.sandbox || []);
+    const sandboxUnchanged = remoteSandboxStr === localSandboxStr;
+    const remoteRewardsStr = JSON.stringify((data.rewards || []).map(r => ({ id: r.id, name: r.name, count: r.count, allocatedPoints: r.allocatedPoints || 0 })).sort((a,b) => a.id - b.id));
+    const localRewardsStr  = JSON.stringify((state.rewards || []).map(r => ({ id: r.id, name: r.name, count: r.count, allocatedPoints: r.allocatedPoints || 0 })).sort((a,b) => a.id - b.id));
+    const rewardsUnchanged = remoteRewardsStr === localRewardsStr;
+    const remoteQuotesStr = JSON.stringify(data.customQuotes || []);
+    const localQuotesStr  = JSON.stringify(state.customQuotes || []);
+    const quotesUnchanged = remoteQuotesStr === localQuotesStr;
+    if (remoteFingerprint === localFingerprint && data.done === state.done && data.wishPoints === state.wishPoints && notesUnchanged && routinesUnchanged && sandboxUnchanged && rewardsUnchanged && quotesUnchanged) { console.log('[snapshot] ❌ 資料一致（含筆記＋例行任務＋沙盒＋許願池＋格言），略過'); return; }
     if (!notesUnchanged) console.log('[snapshot] 筆記有更新 remote:', remoteNotesTs, 'local:', localNotesTs);
 
     console.log('[snapshot] ✅ 套用遠端資料');

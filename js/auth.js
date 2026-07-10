@@ -467,7 +467,7 @@ async function handleImportBackup(input) {
     }
 
     saveStateLocal();
-    await syncToCloud();
+    _syncNow();
     renderAll();
     initRoutines();
     checkTaskDates();
@@ -680,17 +680,6 @@ async function submitGuestToken() {
     if (typeof window._otpFlashError === 'function') window._otpFlashError();
   }
 }
-
-// ── Race condition fix：init() 用這個函式來設定 callback，而不是直接賦值 ──
-// 如果 onAuthStateChanged 比 init() 更早觸發（module 非同步載入造成），
-// _firebaseReadyPending 會是 true，這裡會立刻補呼叫，不會卡住。
-window._registerFirebaseReadyCallback = function(cb) {
-  window._onFirebaseReadyCallback = cb;
-  if (window._firebaseReadyPending) {
-    window._firebaseReadyPending = false;
-    cb();
-  }
-};
 
 // ── Race condition fix：init() 用這個函式來設定 callback，而不是直接賦值 ──
 // 如果 onAuthStateChanged 比 init() 更早觸發（module 非同步載入造成），

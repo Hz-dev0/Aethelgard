@@ -562,7 +562,7 @@ function claimReward() {
   closeModal('claimRewardModal');
   renderRewards();
   renderLottery();
-  syncToCloud();
+  _syncNow();
 }
 
 function checkRewardUnlocks() {
