@@ -1640,6 +1640,53 @@ function openAddTaskForToday() {
   state._addTaskForToday = true;
 }
 
+// ── 快速待辦（Quick Capture）──────────────────────────────
+// 給「急事、來不及開完整新增視窗」的情境用：只要打字 + Enter，
+// 直接用合理的預設值（目前篩選中的分類 or 第一個分類、輕鬆能量、
+// 排入今日）建立任務，不強迫使用者先選分類/日期。
+// 用 _quickAdded 標記「尚未整理」，之後在任務卡片上會顯示「⚡ 未整理」
+// 提示，點一下就能打開完整編輯視窗補分類/日期（見 taskHTML 與 saveEdit）。
+function quickAddTask(inputEl) {
+  const input = typeof inputEl === 'string' ? document.getElementById(inputEl) : inputEl;
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) return;
+
+  const todayStr = localDateStr();
+  const goals = (state.goals && state.goals.length) ? state.goals : [{ name: '技能' }, { name: '自我' }, { name: '日常' }];
+  const fallbackGoal = goals[0].name;
+  const goal = state.goalFilter || fallbackGoal;
+
+  const newTask = {
+    id: Date.now(),
+    name,
+    meaning: '',
+    goal,
+    energy: 'easy',
+    reward: null,
+    done: false,
+    postponed: 0,
+    recurring: false,
+    recurMode: null,
+    recurInterval: 0,
+    taskDate: null,
+    scheduledFor: todayStr,
+    status: 'active',
+    _quickAdded: true // 尚未整理分類/日期，卡片上會顯示提醒標籤
+  };
+  state.tasks.push(newTask);
+
+  input.value = '';
+  input.focus();
+
+  renderTasks();
+  renderTree();
+  renderTodayPanel();
+  showToast('⚡ 已加入今日待辦，之後可點卡片上的「未整理」補分類');
+  syncToCloud();
+}
+window.quickAddTask = quickAddTask;
+
 function clearGoalFilter() {
   state.goalFilter = null;
   state.taskTypeFilter = 'all';
@@ -2028,6 +2075,7 @@ function taskHTML(t, compact) {
 
   const tagsHTML = `
     <div class="task-meta">
+      ${t._quickAdded && !t.done ? `<span class="tag" title="快速加入，尚未確認分類/日期 — 點擊補齊" style="border-color:rgba(58,110,165,0.4);color:var(--sky);background:rgba(58,110,165,0.08);cursor:pointer" onclick="event.stopPropagation();openEditTask(state.tasks.find(x=>x.id===${t.id}))"><span class="tag-icon">⚡</span><span class="tag-label"> 未整理</span></span>` : ''}
       <span class="tag tag-energy" title="能量：${eLabel}"><span class="tag-icon">${eIcon}</span><span class="tag-label"> ${eLabel}</span></span>
       ${t.postponed >= 3 ? '<span class="tag" title="已多次延期" style="border-color:rgba(200,120,120,0.4);color:var(--rose);background:rgba(200,120,120,0.06)"><span class="tag-icon">⚠</span><span class="tag-label"> 已多次延期</span></span>' : ''}
       ${t.recurring && t.recurMode === 'interval' ? `<span class="tag" title="每${t.recurInterval || '?'}天重複" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)"><span class="tag-icon">🔁</span><span class="tag-label"> 每${t.recurInterval || '?'}天</span></span>` : t.recurring ? '<span class="tag" title="重複任務" style="border-color:rgba(110,174,224,0.4);color:var(--sky);background:rgba(110,174,224,0.07)"><span class="tag-icon">🔁</span><span class="tag-label"> 重複</span></span>' : ''}

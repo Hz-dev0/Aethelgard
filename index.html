@@ -121,6 +121,10 @@
               </div>
               <button onclick="openAddTaskForToday()" class="btn-today-add" id="todayAddBtn" title="新增今日任務" style="white-space:nowrap;flex-shrink:0">＋<span class="btn-today-add-label"> 新增</span></button>
             </div>
+            <div class="quick-add-row">
+              <input id="quickAddInputTree" class="quick-add-input" placeholder="⚡ 急事來不及設定？先丟進來，一鍵加入今日待辦…" onkeydown="if(event.key==='Enter')quickAddTask(this)">
+              <button class="quick-add-btn" onclick="quickAddTask(document.getElementById('quickAddInputTree'))">⚡ 加入</button>
+            </div>
             <div id="todayPanelList"></div>
           </div>
           <div id="allClearBanner">
@@ -195,6 +199,10 @@
               <div id="filterExpand" style="display:none"><div id="filterSubChips"></div></div>
 
             </div>
+          </div>
+          <div class="quick-add-row">
+            <input id="quickAddInputTasks" class="quick-add-input" placeholder="⚡ 急事來不及設定分類？先丟進來，之後再補…" onkeydown="if(event.key==='Enter')quickAddTask(this)">
+            <button class="quick-add-btn" onclick="quickAddTask(document.getElementById('quickAddInputTasks'))">⚡ 加入</button>
           </div>
           <div class="task-list" id="taskList"></div>
         </div>
