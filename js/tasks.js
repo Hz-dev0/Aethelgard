@@ -97,7 +97,7 @@ const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' }
 // 「任意分類」以前固定用 🌈，多數願望其實都是這個分類，導致清單裡一片彩虹很單調。
 // 改成：新增願望時可自選圖示（存在 r.icon），沒選就用 id 做穩定 hash 從圖示池挑一個，
 // 同一個願望每次重新渲染都拿到一樣的圖示，但不同願望彼此不同、也不會全部長一樣。
-const WISH_ICON_POOL = ['🔮','🗝️','⚜️','🎐','🌙','🍀','💠','🧿','🪄','🕯️','🏺','✨'];
+const WISH_ICON_POOL = ['❤️','❤️‍🔥','💕','💖','⭐','🌟','✨'];
 function _hashToIndex(str, mod) {
   let h = 0;
   for (let i = 0; i < String(str).length; i++) { h = (h * 31 + String(str).charCodeAt(i)) | 0; }
