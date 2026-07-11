@@ -236,7 +236,8 @@
 
         <!-- Wish Pool pane -->
         <div id="wishPoolPane">
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:6px 4px;display:flex;align-items:center;gap:6px">
+          <!-- 桌面版右上角 header 已經有碎片數量了，這裡重複顯示很多餘，只在手機版留著（手機版 header 沒有碎片顯示） -->
+          <div class="wish-frag-mobile-only" style="font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:6px 4px;display:flex;align-items:center;gap:6px">
             🌟 可用碎片：<strong id="wishFragmentCount" style="color:var(--green)">0</strong>
             <span style="color:var(--text-faint);font-size:11px;margin-left:2px">（完成任務後可分配給願望）</span>
           </div>
@@ -801,6 +802,8 @@
         <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="需完成任務數（0表示無條件解鎖）">
       </div>
     </div>
+    <label>圖示（不選就隨機配一個，不會每個都是彩虹）</label>
+    <div id="wishIconPicker" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('addRewardModal')">取消</button>
       <button class="btn-confirm" onclick="addReward()">許願 🌊</button>
@@ -841,6 +844,8 @@
         <input id="editWishCount" type="number" min="1" max="100" placeholder="需完成任務數">
       </div>
     </div>
+    <label>圖示</label>
+    <div id="editWishIconPicker" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('editWishModal')">取消</button>
       <button class="btn-confirm" onclick="saveWishEdit()">儲存</button>

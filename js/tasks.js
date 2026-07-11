@@ -93,6 +93,52 @@ function renderTree() {
 // ── Wish Pool (許願池) ──
 const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' };
 
+// ★ 願望圖示：分類明確的（技能/自我/日常）維持原本有意義的圖示；
+// 「任意分類」以前固定用 🌈，多數願望其實都是這個分類，導致清單裡一片彩虹很單調。
+// 改成：新增願望時可自選圖示（存在 r.icon），沒選就用 id 做穩定 hash 從圖示池挑一個，
+// 同一個願望每次重新渲染都拿到一樣的圖示，但不同願望彼此不同、也不會全部長一樣。
+const WISH_ICON_POOL = ['🔮','🗝️','⚜️','🎐','🌙','🍀','💠','🧿','🪄','🕯️','🏺','✨'];
+function _hashToIndex(str, mod) {
+  let h = 0;
+  for (let i = 0; i < String(str).length; i++) { h = (h * 31 + String(str).charCodeAt(i)) | 0; }
+  return Math.abs(h) % mod;
+}
+function getWishIcon(r) {
+  if (r.icon) return r.icon;
+  if (r.goal && r.goal !== '任意') return goalIcons[r.goal] || '🎯';
+  return WISH_ICON_POOL[_hashToIndex(r.id, WISH_ICON_POOL.length)];
+}
+
+// ── 圖示挑選器（新增／編輯願望共用）──
+function renderIconPickerInto(containerId, selectedIcon, selectFnName) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  wrap.innerHTML = WISH_ICON_POOL.map(ic => `
+    <button type="button" onclick="${selectFnName}('${ic}')"
+      style="width:34px;height:34px;border-radius:9px;font-size:16px;cursor:pointer;font-family:inherit;
+             display:flex;align-items:center;justify-content:center;
+             border:1.5px solid ${selectedIcon === ic ? 'var(--green)' : 'var(--border)'};
+             background:${selectedIcon === ic ? 'rgba(58,110,165,0.14)' : 'transparent'};
+             transition:all 0.15s">${ic}</button>
+  `).join('');
+}
+
+// 新增願望 Modal
+let _newWishIcon = null;
+function renderWishIconPicker() { renderIconPickerInto('wishIconPicker', _newWishIcon, 'selectWishIcon'); }
+function selectWishIcon(icon) {
+  _newWishIcon = (_newWishIcon === icon) ? null : icon; // 再點一次＝取消，改回自動隨機
+  renderWishIconPicker();
+}
+
+// 編輯願望 Modal
+let _editWishIcon = null;
+function renderEditWishIconPicker() { renderIconPickerInto('editWishIconPicker', _editWishIcon, 'selectEditWishIcon'); }
+function selectEditWishIcon(icon) {
+  _editWishIcon = (_editWishIcon === icon) ? null : icon; // 再點一次＝取消，改回自動配色
+  renderEditWishIconPicker();
+}
+
 
 
 let wishTab = 'wish'; // 'wish' or 'lottery'
@@ -244,7 +290,7 @@ function renderRewards() {
       const unlocked = current >= r.count;
       const pct = r.count === 0 ? 100 : Math.min(100, Math.round(current / r.count * 100));
       const remaining = Math.max(0, r.count - current);
-      const icon = goalIcons[r.goal] || '🎯';
+      const icon = getWishIcon(r);
       const accent = goalAccent[r.goal] || '#3A6EA5';
       const canAdd = available > 0 && !unlocked;
       // ★ 快解鎖了：進度 ≥70% 時給更強的視覺提示，製造「快到了」的動力
@@ -465,6 +511,8 @@ function openEditWish(id) {
   document.getElementById('editWishName').value = r.name;
   document.getElementById('editWishGoal').value = r.goal;
   document.getElementById('editWishCount').value = r.count;
+  _editWishIcon = r.icon || null;
+  renderEditWishIconPicker();
   document.getElementById('editWishModal').classList.add('open');
   setTimeout(() => document.getElementById('editWishName').focus(), 50);
 }
@@ -475,6 +523,7 @@ function saveWishEdit() {
   if (!r) return;
   r.name = name;
   r.goal = document.getElementById('editWishGoal').value;
+  r.icon = _editWishIcon; // null 就交給 getWishIcon() 用 id 自動配一個穩定圖示
   const newCount = parseInt(document.getElementById('editWishCount').value) || 3;
   if (newCount < 1) return;
   // count 改變就重置通知旗標（不論升降）
@@ -530,6 +579,8 @@ function removeCustomQuote(i) {
 function openAddWish() {
   document.getElementById('newRewardName').value = '';
   document.getElementById('newRewardCount').value = '3';
+  _newWishIcon = null; // 預設不指定，交給穩定 hash 自動配一個
+  renderWishIconPicker();
   document.getElementById('addRewardModal').classList.add('open');
   setTimeout(() => document.getElementById('newRewardName').focus(), 50);
 }
@@ -543,7 +594,8 @@ function addReward() {
   const count = countVal === '' ? 0 : Math.max(0, parseInt(countVal) || 0);
   if (!state.rewards) state.rewards = [];
   const startCount = getGoalCount(goal);
-  state.rewards.push({ id: Date.now(), name, goal, count, startCount, claimed: false, allocatedPoints: 0 });
+  const id = Date.now();
+  state.rewards.push({ id, name, goal, count, startCount, claimed: false, allocatedPoints: 0, icon: _newWishIcon || WISH_ICON_POOL[_hashToIndex(id, WISH_ICON_POOL.length)] });
   closeModal('addRewardModal');
   renderRewards();
   showToast('🌊 願望已投入許願池');
