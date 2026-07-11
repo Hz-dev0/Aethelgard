@@ -109,34 +109,17 @@ function getWishIcon(r) {
   return WISH_ICON_POOL[_hashToIndex(r.id, WISH_ICON_POOL.length)];
 }
 
-// ── 圖示挑選器（新增／編輯願望共用）──
-function renderIconPickerInto(containerId, selectedIcon, selectFnName) {
-  const wrap = document.getElementById(containerId);
-  if (!wrap) return;
-  wrap.innerHTML = WISH_ICON_POOL.map(ic => `
-    <button type="button" onclick="${selectFnName}('${ic}')"
-      style="width:34px;height:34px;border-radius:9px;font-size:16px;cursor:pointer;font-family:inherit;
-             display:flex;align-items:center;justify-content:center;
-             border:1.5px solid ${selectedIcon === ic ? 'var(--green)' : 'var(--border)'};
-             background:${selectedIcon === ic ? 'rgba(58,110,165,0.14)' : 'transparent'};
-             transition:all 0.15s">${ic}</button>
-  `).join('');
-}
-
-// 新增願望 Modal
+// ── 新增願望 Modal：單一方框，點一下換下一個圖示 ──
 let _newWishIcon = null;
-function renderWishIconPicker() { renderIconPickerInto('wishIconPicker', _newWishIcon, 'selectWishIcon'); }
-function selectWishIcon(icon) {
-  _newWishIcon = (_newWishIcon === icon) ? null : icon; // 再點一次＝取消，改回自動隨機
-  renderWishIconPicker();
+function renderWishIconPicker() {
+  const btn = document.getElementById('wishIconPicker');
+  if (!btn) return;
+  btn.textContent = _newWishIcon || WISH_ICON_POOL[0];
 }
-
-// 編輯願望 Modal
-let _editWishIcon = null;
-function renderEditWishIconPicker() { renderIconPickerInto('editWishIconPicker', _editWishIcon, 'selectEditWishIcon'); }
-function selectEditWishIcon(icon) {
-  _editWishIcon = (_editWishIcon === icon) ? null : icon; // 再點一次＝取消，改回自動配色
-  renderEditWishIconPicker();
+function cycleNewWishIcon() {
+  const idx = WISH_ICON_POOL.indexOf(_newWishIcon);
+  _newWishIcon = WISH_ICON_POOL[(idx + 1) % WISH_ICON_POOL.length];
+  renderWishIconPicker();
 }
 
 
@@ -511,8 +494,6 @@ function openEditWish(id) {
   document.getElementById('editWishName').value = r.name;
   document.getElementById('editWishGoal').value = r.goal;
   document.getElementById('editWishCount').value = r.count;
-  _editWishIcon = r.icon || null;
-  renderEditWishIconPicker();
   document.getElementById('editWishModal').classList.add('open');
   setTimeout(() => document.getElementById('editWishName').focus(), 50);
 }
@@ -523,7 +504,6 @@ function saveWishEdit() {
   if (!r) return;
   r.name = name;
   r.goal = document.getElementById('editWishGoal').value;
-  r.icon = _editWishIcon; // null 就交給 getWishIcon() 用 id 自動配一個穩定圖示
   const newCount = parseInt(document.getElementById('editWishCount').value) || 3;
   if (newCount < 1) return;
   // count 改變就重置通知旗標（不論升降）
@@ -579,7 +559,7 @@ function removeCustomQuote(i) {
 function openAddWish() {
   document.getElementById('newRewardName').value = '';
   document.getElementById('newRewardCount').value = '3';
-  _newWishIcon = null; // 預設不指定，交給穩定 hash 自動配一個
+  _newWishIcon = WISH_ICON_POOL[Math.floor(Math.random() * WISH_ICON_POOL.length)]; // 每次開視窗隨機起始，不點也不會每次都一樣
   renderWishIconPicker();
   document.getElementById('addRewardModal').classList.add('open');
   setTimeout(() => document.getElementById('newRewardName').focus(), 50);
