@@ -1446,10 +1446,25 @@ function initMoodTrack() {
 // ── 頁面標題：不再固定佔用頁面頂端空間，改成切換頁面時於右下角
 //   短暫浮現、幾秒後自動淡出（見 css .section-title / .section-title.show）。
 let _pageTitleFadeTimer = null;
+const PAGE_TITLE_SEEN_KEY = 'aethelgard_page_title_seen';
 function _flashPageTitle(id) {
   document.querySelectorAll('.page .section-title').forEach(el => el.classList.remove('show'));
   const title = document.querySelector('#page-' + id + ' .section-title');
   if (!title) return;
+
+  // ★ 同一個「重置週期」內，同一頁只閃現一次；過了每日重置時間才會再次出現。
+  // 用 getLastResetTimestamp() 當作週期識別碼，記在 localStorage（純 UI 偏好，不需同步到雲端）。
+  // 例外：許願池的標題裡藏著「規則說明 ⓘ」可點擊按鈕，平常只有標題閃現/hover 時才摸得到，
+  // 如果也套用「一天只出現一次」，之後就完全點不到規則說明了，所以許願池維持每次都閃現。
+  if (id !== 'wishzone') {
+    const cycleTs = getLastResetTimestamp();
+    let seen = {};
+    try { seen = JSON.parse(localStorage.getItem(PAGE_TITLE_SEEN_KEY) || '{}'); } catch(e) { seen = {}; }
+    if (seen[id] === cycleTs) return; // 這個週期已經看過這頁的標題了，不再閃現
+    seen[id] = cycleTs;
+    try { localStorage.setItem(PAGE_TITLE_SEEN_KEY, JSON.stringify(seen)); } catch(e) {}
+  }
+
   // 用雙重 rAF 確保「先移除再加回」class 的動畫每次都會重新觸發，
   // 即使使用者連續快速切換到同一頁也一樣會淡入一次。
   requestAnimationFrame(() => {

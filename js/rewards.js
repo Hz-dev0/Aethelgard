@@ -493,11 +493,13 @@ function toggleWishzoneRules(e) {
   if (existing) { existing.remove(); return; }
 
   const trigger = (e && e.currentTarget) || document.getElementById('wishzoneRulesTrigger');
-  const rect = trigger ? trigger.getBoundingClientRect() : { bottom: 60, left: 16 };
+  const rect = trigger ? trigger.getBoundingClientRect() : { bottom: 60, top: 40, left: 16 };
 
   const pop = document.createElement('div');
   pop.id = 'wishzoneRulesPopover';
-  pop.style.cssText = `position:fixed;top:${rect.bottom + 8}px;left:${Math.max(12, Math.min(rect.left, window.innerWidth - 300))}px;max-width:280px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.85;color:var(--text-dim);box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999`;
+  // ★ Bug fix：先不設定 top，且 visibility:hidden，等量完實際高度後再決定要往上或往下展開，
+  // 避免內容被推到畫面下緣（或上緣）以外完全看不到。
+  pop.style.cssText = `position:fixed;left:${Math.max(12, Math.min(rect.left, window.innerWidth - 300))}px;max-width:280px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.85;color:var(--text-dim);box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;visibility:hidden`;
   pop.innerHTML = `
     <div style="font-weight:600;color:var(--text);margin-bottom:8px;font-size:13px">規則說明</div>
     <div>🎫 核心任務完成 → 抽卡券</div>
@@ -508,6 +510,26 @@ function toggleWishzoneRules(e) {
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">🌟 10 個碎片可在抽獎區兌換 1 張抽卡券</div>
   `;
   document.body.appendChild(pop);
+
+  // ★ Bug fix：原本只限制左右，上下沒限制，觸發文字位置偏下時彈窗會超出畫面下緣、
+  // 完全看不到也滑不到。這裡優先往下展開；下面空間不夠就往上展開；
+  // 上下都不夠就貼齊畫面上緣，並限制最大高度＋允許內部捲動，確保一定完整可見。
+  const popH = pop.offsetHeight;
+  const spaceBelow = window.innerHeight - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  let top;
+  if (popH <= spaceBelow) {
+    top = rect.bottom + 8;
+  } else if (popH <= spaceAbove) {
+    top = rect.top - popH - 8;
+  } else {
+    top = 12;
+    pop.style.maxHeight = (window.innerHeight - 24) + 'px';
+    pop.style.overflowY = 'auto';
+  }
+  pop.style.top = top + 'px';
+  pop.style.visibility = 'visible';
+
   pop.onclick = (ev) => ev.stopPropagation();
   setTimeout(() => {
     document.addEventListener('click', _closeWishzoneRulesOnce, { once: true });
