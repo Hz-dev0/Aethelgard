@@ -95,24 +95,20 @@ const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' }
 
 
 
-let wishTab = 'wish'; // 'wish' or 'quote'
+let wishTab = 'wish'; // 'wish' or 'lottery'
 
 function switchWishZoneTab(tab) {
   const wishPane    = document.getElementById('wishPoolPane');
   const lotteryPane = document.getElementById('lotteryPane');
-  const quotePane   = document.getElementById('quotePane');
   const addBtn      = document.getElementById('wishAddBtn');
   const tabWish    = document.getElementById('tabWishZone');
   const tabLottery = document.getElementById('tabLotteryZone');
-  const tabQuote   = document.getElementById('tabQuoteZone');
-  [tabWish, tabLottery, tabQuote].forEach(t => t && t.classList.remove('active'));
+  [tabWish, tabLottery].forEach(t => t && t.classList.remove('active'));
   if (wishPane)    wishPane.style.display    = 'none';
   if (lotteryPane) lotteryPane.style.display = 'none';
-  if (quotePane)   quotePane.style.display   = 'none';
   if (addBtn) addBtn.style.display = 'none';
   if (tab === 'wish')    { if(tabWish) tabWish.classList.add('active');       if(wishPane) wishPane.style.display = 'block';       if (addBtn) addBtn.style.display = 'inline-flex'; }
   if (tab === 'lottery') { if(tabLottery) tabLottery.classList.add('active'); if(lotteryPane) lotteryPane.style.display = 'block'; renderLottery(); }
-  if (tab === 'quote')   { if(tabQuote) tabQuote.classList.add('active');     if(quotePane) quotePane.style.display = 'block';     renderQuotes(); }
 }
 
 

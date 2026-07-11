@@ -228,15 +228,14 @@
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
           <div class="toggle-tabs">
-            <button class="toggle-tab active" id="tabLotteryZone" onclick="switchWishZoneTab('lottery')">🎴 抽獎區</button>
-            <button class="toggle-tab" id="tabQuoteZone" onclick="switchWishZoneTab('quote')">✦ 格言庫</button>
-            <button class="toggle-tab" id="tabWishZone" onclick="switchWishZoneTab('wish')">🌊 許願池</button>
+            <button class="toggle-tab active" id="tabWishZone" onclick="switchWishZoneTab('wish')">🌊 許願池</button>
+            <button class="toggle-tab" id="tabLotteryZone" onclick="switchWishZoneTab('lottery')">🎴 抽獎區</button>
           </div>
-          <button class="add-btn" id="wishAddBtn" onclick="openAddWish()" style="margin:0;padding:5px 14px;font-size:12px;display:none">＋ 許個願</button>
+          <button class="add-btn" id="wishAddBtn" onclick="openAddWish()" style="margin:0;padding:5px 14px;font-size:12px">＋ 許個願</button>
         </div>
 
         <!-- Wish Pool pane -->
-        <div id="wishPoolPane" style="display:none">
+        <div id="wishPoolPane">
           <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:6px 4px;display:flex;align-items:center;gap:6px">
             🌟 可用碎片：<strong id="wishFragmentCount" style="color:var(--green)">0</strong>
             <span style="color:var(--text-faint);font-size:11px;margin-left:2px">（完成任務後可分配給願望）</span>
@@ -246,7 +245,7 @@
         </div>
 
         <!-- Lottery pane -->
-        <div id="lotteryPane">
+        <div id="lotteryPane" style="display:none">
           <div class="lottery-info" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <div class="lottery-ticket">🎫 抽卡券 <strong id="lotteryTickets">0</strong> 張</div>
             <span id="todayDone" style="display:none">0</span>
@@ -260,16 +259,6 @@
             </div>
           </div>
           <div class="lottery-grid" id="lotteryGrid"></div>
-        </div>
-
-        <!-- Quote pane -->
-        <div id="quotePane" style="display:none">
-          <div style="display:flex;gap:10px;margin-bottom:14px">
-            <input id="quoteInput" placeholder="新增一句讓你有力量的話…" class="input-green" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit;transition:border-color 0.2s" onkeydown="if(event.key==='Enter')addCustomQuote()">
-            <button class="btn-confirm" onclick="addCustomQuote()">加入</button>
-          </div>
-          <div style="font-size:12px;color:var(--text-faint);margin-bottom:12px">這些格言會混入抽獎牌中。你也可以新增自己的。</div>
-          <div id="quoteList" style="display:flex;flex-direction:column;gap:8px"></div>
         </div>
       </div>
     </div>
