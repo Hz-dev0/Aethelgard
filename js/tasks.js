@@ -163,13 +163,33 @@ function allocateWishPoint(id) {
   const r = state.rewards.find(x => x.id === id);
   if (!r) return;
   if (getAvailableWishPoints() <= 0) { showToast('❌ 沒有可用的願望碎片，完成任務來獲得！'); return; }
+  // 先抓按鈕位置，等等拿來定位飄浮的 +1／解鎖動畫（renderRewards 之後元素會被整個換掉）
+  const btn = document.getElementById('wishAllocBtn-' + id);
+  const btnRect = btn ? btn.getBoundingClientRect() : null;
   if (!r.allocatedPoints) r.allocatedPoints = 0;
   r.allocatedPoints++;
+  const justUnlocked = r.count > 0 && r.allocatedPoints >= r.count;
   checkRewardUnlocks();
   renderRewards();
   _markSyncWrite();
   syncToCloud();
+  _flyWishPoint(btnRect, justUnlocked);
 }
+
+// ★ 配點的即時回饋：一般點擊飄出「+1」，解鎖那一下改成更醒目的慶祝文字，
+// 讓每次配點都有一點小小的正向回饋，累積起來更想繼續換獎品。
+function _flyWishPoint(rect, celebrate) {
+  if (!rect) return;
+  const fly = document.createElement('div');
+  fly.textContent = celebrate ? '🎉 解鎖了！' : '+1';
+  fly.style.cssText = `position:fixed;left:${rect.left + rect.width / 2}px;top:${rect.top}px;
+    transform:translate(-50%,0);font-size:${celebrate ? '13px' : '15px'};font-weight:700;
+    color:${celebrate ? '#b8922a' : 'var(--green)'};pointer-events:none;z-index:99999;
+    white-space:nowrap;animation:wishPointFly 0.9s ease-out forwards`;
+  document.body.appendChild(fly);
+  setTimeout(() => fly.remove(), 950);
+}
+window._flyWishPoint = _flyWishPoint;
 
 function deallocateWishPoint(id) {
   const r = state.rewards.find(x => x.id === id);
@@ -201,13 +221,16 @@ function renderRewards() {
   if (oldBar) oldBar.remove();
 
   const available = getAvailableWishPoints();
-  // Sort: unlocked wishes first, then locked
+  // Sort：已解鎖排最前；未解鎖的依「進度百分比」由高到低排，讓快完成的願望浮上來，維持動力
   const wishes = (state.rewards || []).slice().sort((a, b) => {
-    const ua = getWishProgress(a) >= a.count;
-    const ub = getWishProgress(b) >= b.count;
+    const pa = getWishProgress(a), pb = getWishProgress(b);
+    const ua = pa >= a.count, ub = pb >= b.count;
     if (ua && !ub) return -1;
     if (!ua && ub) return 1;
-    return 0;
+    if (ua && ub) return 0;
+    const ra = a.count === 0 ? 1 : pa / a.count;
+    const rb = b.count === 0 ? 1 : pb / b.count;
+    return rb - ra;
   });
 
   if (wishes.length === 0) {
@@ -215,38 +238,52 @@ function renderRewards() {
     if (wishEmpty) wishEmpty.style.display = 'block';
   } else {
     if (wishEmpty) wishEmpty.style.display = 'none';
+    const goalAccent = { 技能: '#3A6EA5', 自我: '#c0565a', 日常: '#829AB1', 任意: '#829AB1' };
     wishList.innerHTML = wishes.map(r => {
       const current = getWishProgress(r);
       const unlocked = current >= r.count;
       const pct = r.count === 0 ? 100 : Math.min(100, Math.round(current / r.count * 100));
+      const remaining = Math.max(0, r.count - current);
       const icon = goalIcons[r.goal] || '🎯';
+      const accent = goalAccent[r.goal] || '#3A6EA5';
       const canAdd = available > 0 && !unlocked;
-      // Progress bar segments (RPG-style)
-      // Progress bar: smooth single bar, blue unfilled → light gold when unlocked
-      const barColor = unlocked ? 'rgba(201,162,39,0.55)' : 'rgba(58,110,165,0.75)';
+      // ★ 快解鎖了：進度 ≥70% 時給更強的視覺提示，製造「快到了」的動力
+      const nearDone = !unlocked && pct >= 70;
+      // Progress bar：漸層填色，快解鎖時加上一點光暈
+      const barColor = unlocked
+        ? 'linear-gradient(90deg, rgba(201,162,39,0.55), rgba(201,162,39,0.75))'
+        : nearDone
+          ? 'linear-gradient(90deg, rgba(58,110,165,0.7), rgba(201,162,39,0.75))'
+          : 'linear-gradient(90deg, rgba(58,110,165,0.55), rgba(58,110,165,0.8))';
       const barBg    = unlocked ? 'rgba(201,162,39,0.12)' : 'rgba(58,110,165,0.1)';
       const itemOpacity = unlocked ? '0.6' : '1';
-      const itemBorder  = unlocked ? 'rgba(201,162,39,0.3)' : 'var(--border)';
-      return `<div class="sandbox-item wish-item" id="wish-${r.id}"
+      const itemBorder  = unlocked ? 'rgba(201,162,39,0.3)' : nearDone ? 'rgba(201,162,39,0.45)' : 'var(--border)';
+      return `<div class="sandbox-item wish-item${nearDone ? ' wish-near' : ''}" id="wish-${r.id}"
         style="cursor:default;justify-content:space-between;gap:8px;flex-direction:column;
                padding:12px 14px;user-select:none;position:relative;
                opacity:${itemOpacity};
                border-color:${itemBorder};
-               background:${unlocked ? 'rgba(201,162,39,0.04)' : 'rgba(255,255,255,0.02)'};
+               background:${unlocked ? 'rgba(201,162,39,0.04)' : nearDone ? 'rgba(201,162,39,0.03)' : 'rgba(255,255,255,0.02)'};
                transition:opacity 0.4s,border-color 0.4s,background 0.4s"
         data-wish-id="${r.id}">
-        <div style="display:flex;align-items:center;gap:10px;width:100%">
+        <div style="display:flex;align-items:center;gap:12px;width:100%">
+          <!-- 分類圖示徽章：加大存在感 -->
+          <div style="flex-shrink:0;width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+                      font-size:18px;background:${unlocked ? 'rgba(201,162,39,0.14)' : `${accent}1f`};
+                      transition:background 0.4s">${icon}</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:13px;color:${unlocked ? 'rgba(201,162,39,0.85)' : 'var(--text)'};font-weight:500;transition:color 0.4s">${escHtml(r.name)}</span>
+              <span style="font-size:14px;color:${unlocked ? 'rgba(201,162,39,0.85)' : 'var(--text)'};font-weight:600;transition:color 0.4s">${escHtml(r.name)}</span>
               ${unlocked
                 ? `<span style="font-size:10px;color:rgba(201,162,39,0.8);white-space:nowrap;font-weight:600;letter-spacing:0.04em">✓ 已解鎖</span>`
-                : `<span style="font-size:10px;color:var(--text-faint);white-space:nowrap">${current} / ${r.count}</span>`}
+                : nearDone
+                  ? `<span style="font-size:10px;color:#b8922a;white-space:nowrap;font-weight:700;letter-spacing:0.02em">🔥 還差 ${remaining} 點就解鎖！</span>`
+                  : `<span style="font-size:10px;color:var(--text-faint);white-space:nowrap">${current} / ${r.count}（還差 ${remaining}）</span>`}
             </div>
-            <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${icon} ${escHtml(r.goal)}<span class="hint-longpress"> · 長按可編輯／刪除</span></div>
-            <!-- Smooth progress bar -->
-            <div style="margin-top:8px;height:5px;border-radius:3px;background:${barBg};overflow:hidden;transition:background 0.4s">
-              <div style="height:100%;width:${pct}%;border-radius:3px;background:${barColor};transition:width 0.5s ease,background 0.4s"></div>
+            <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${escHtml(r.goal)}<span class="hint-longpress"> · 長按可編輯／刪除</span></div>
+            <!-- Progress bar -->
+            <div style="margin-top:8px;height:6px;border-radius:3px;background:${barBg};overflow:hidden;transition:background 0.4s">
+              <div style="height:100%;width:${pct}%;border-radius:3px;background:${barColor};transition:width 0.5s ease,background 0.4s${nearDone ? ';box-shadow:0 0 6px rgba(201,162,39,0.5)' : ''}"></div>
             </div>
           </div>
           <!-- Allocate point button -->
