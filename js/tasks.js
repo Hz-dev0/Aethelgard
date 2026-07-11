@@ -97,7 +97,7 @@ const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' }
 // 「任意分類」以前固定用 🌈，多數願望其實都是這個分類，導致清單裡一片彩虹很單調。
 // 改成：新增願望時可自選圖示（存在 r.icon），沒選就用 id 做穩定 hash 從圖示池挑一個，
 // 同一個願望每次重新渲染都拿到一樣的圖示，但不同願望彼此不同、也不會全部長一樣。
-const WISH_ICON_POOL = ['❤️','❤️‍🔥','💕','💖','⭐','🌟','✨'];
+const WISH_ICON_POOL = ['❤️','💕','💖'];
 function _hashToIndex(str, mod) {
   let h = 0;
   for (let i = 0; i < String(str).length; i++) { h = (h * 31 + String(str).charCodeAt(i)) | 0; }
@@ -309,7 +309,7 @@ function renderRewards() {
                   ? `<span style="font-size:10px;color:#b8922a;white-space:nowrap;font-weight:700;letter-spacing:0.02em">🔥 還差 ${remaining} 點就解鎖！</span>`
                   : `<span style="font-size:10px;color:var(--text-faint);white-space:nowrap">${current} / ${r.count}（還差 ${remaining}）</span>`}
             </div>
-            <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${escHtml(r.goal)}<span class="hint-longpress"> · 長按可編輯／刪除</span></div>
+            <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${escHtml(r.goal)}</div>
             <!-- Progress bar -->
             <div style="margin-top:8px;height:6px;border-radius:3px;background:${barBg};overflow:hidden;transition:background 0.4s">
               <div style="height:100%;width:${pct}%;border-radius:3px;background:${barColor};transition:width 0.5s ease,background 0.4s${nearDone ? ';box-shadow:0 0 6px rgba(201,162,39,0.5)' : ''}"></div>
@@ -559,7 +559,7 @@ function removeCustomQuote(i) {
 function openAddWish() {
   document.getElementById('newRewardName').value = '';
   document.getElementById('newRewardCount').value = '3';
-  _newWishIcon = WISH_ICON_POOL[Math.floor(Math.random() * WISH_ICON_POOL.length)]; // 每次開視窗隨機起始，不點也不會每次都一樣
+  _newWishIcon = WISH_ICON_POOL[0]; // 預設固定第一個，點方框才換下一個
   renderWishIconPicker();
   document.getElementById('addRewardModal').classList.add('open');
   setTimeout(() => document.getElementById('newRewardName').focus(), 50);

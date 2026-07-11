@@ -1,4 +1,4 @@
-const _swBuild = '202606270000'; // ← 每次部署手動改這個數字（或交由 CI 自動注入）
+const _swBuild = '202607111835'; // ← 推新版前跑 `node scripts/bump-sw-version.js` 自動更新，不用手動改
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [

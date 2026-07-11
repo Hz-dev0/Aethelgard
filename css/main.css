@@ -832,7 +832,7 @@
   }
 
   /* 長按提示：觸控裝置（手機）隱藏，桌機才顯示 */
-  @media (pointer: coarse) { .hint-longpress { display: none; } }
+
 
   /* 刪除按鈕（× 或 🗑），hover 變紅 */
   .btn-del-icon {
