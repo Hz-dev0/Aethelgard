@@ -302,6 +302,7 @@ function renderAll() {
     renderRewards();
     renderLottery();
     renderRoutineList();
+    if (document.getElementById('page-matrix')) renderQuadrant();
   }, 0);
 }
 

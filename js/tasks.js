@@ -229,6 +229,105 @@ function deallocateWishPoint(id) {
   syncToCloud();
 }
 
+// ── 象限分類（Priority Matrix / Eisenhower Matrix）──────────────────────
+// 純顯示用的分類：task.quadrant 只影響這個頁面怎麼分組顯示，
+// 不影響 goal / energy 等任務原本的分類，也不影響任務總覽等其他頁面。
+const MATRIX_QUADS = [
+  { key: 'iu',   label: '重要＋緊急',     sub: '立刻做' },
+  { key: 'inu',  label: '重要＋不緊急',   sub: '安排時間' },
+  { key: 'niu',  label: '不重要＋緊急',   sub: '委派／快速處理' },
+  { key: 'ninu', label: '不重要＋不緊急', sub: '之後再說' },
+];
+
+function _matrixCardHtml(t) {
+  const icon = goalIcons[t.goal] || '🎯';
+  return `<div class="matrix-card" data-task-id="${t.id}" title="${escHtml(t.name)}">
+    <span>${icon}</span><span class="matrix-card-name">${escHtml(t.name)}</span>
+  </div>`;
+}
+
+function renderQuadrant() {
+  const tasks = (state.tasks || []).filter(t => !t.done);
+
+  const unsorted = tasks.filter(t => !t.quadrant);
+  const unsortedListEl = document.getElementById('matrixUnsortedList');
+  const unsortedLabelEl = document.querySelector('#matrixUnsorted .matrix-tray-label');
+  if (unsortedLabelEl) unsortedLabelEl.textContent = unsorted.length ? `待分類（${unsorted.length}）` : '待分類 — 都分類完了 🎉';
+  if (unsortedListEl) {
+    unsortedListEl.innerHTML = unsorted.length
+      ? unsorted.map(_matrixCardHtml).join('')
+      : '';
+  }
+
+  MATRIX_QUADS.forEach(q => {
+    const list = tasks.filter(t => t.quadrant === q.key);
+    const listEl = document.getElementById('matrixList-' + q.key);
+    if (!listEl) return;
+    listEl.innerHTML = list.length
+      ? list.map(_matrixCardHtml).join('')
+      : `<div class="matrix-empty">拖曳任務到這裡</div>`;
+  });
+
+  document.querySelectorAll('#page-matrix .matrix-card').forEach(el => {
+    _attachMatrixDrag(el, Number(el.dataset.taskId));
+  });
+}
+
+function setTaskQuadrant(taskId, quad) {
+  const t = (state.tasks || []).find(x => x.id === taskId);
+  if (!t) return;
+  const changed = t.quadrant !== quad;
+  t.quadrant = quad || undefined;
+  if (!changed) return;
+  renderQuadrant();
+  _markSyncWrite();
+  syncToCloud();
+}
+
+// 用 Pointer Events 實作拖曳（滑鼠／觸控都適用，不需要額外套件）
+function _attachMatrixDrag(el, taskId) {
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return; // 只認滑鼠左鍵／觸控
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+
+    const ghost = el.cloneNode(true);
+    ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;
+      pointer-events:none;z-index:99999;opacity:0.92;box-shadow:0 8px 20px rgba(0,0,0,0.18);transform:scale(1.04)`;
+    document.body.appendChild(ghost);
+    el.style.opacity = '0.3';
+
+    let currentZone = null;
+
+    function onMove(ev) {
+      ghost.style.left = (ev.clientX - offsetX) + 'px';
+      ghost.style.top = (ev.clientY - offsetY) + 'px';
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const zone = under && under.closest('[data-drop-zone]');
+      if (zone !== currentZone) {
+        if (currentZone) currentZone.classList.remove('matrix-drop-hover');
+        if (zone) zone.classList.add('matrix-drop-hover');
+        currentZone = zone;
+      }
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      ghost.remove();
+      el.style.opacity = '';
+      if (currentZone) {
+        currentZone.classList.remove('matrix-drop-hover');
+        const zoneKey = currentZone.dataset.dropZone;
+        setTaskQuadrant(taskId, zoneKey === 'unsorted' ? null : zoneKey);
+      }
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp, { once: true });
+  });
+}
+
 function renderRewards() {
   // ★ 頭部碎片顯示（桌面版專用，手機版該元素 display:none，更新無副作用）
   // 放在 wishList 的早退判斷之前，確保不論目前在哪個頁面都會更新數字
@@ -1577,6 +1676,7 @@ function showPage(id, skipRender) {
       renderStats();
     }
     if (id === 'wishzone') { renderRewards(); renderLottery(); }
+    if (id === 'matrix') { renderQuadrant(); }
   }
 }
 
