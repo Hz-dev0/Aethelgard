@@ -36,7 +36,15 @@ if ('serviceWorker' in navigator) {
 
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!refreshing) { refreshing = true; location.reload(); }
+      if (!refreshing) {
+        refreshing = true;
+        // ★ SW 偵測到新版時也會走這裡重整，跟 notes.js 裡「離開 15 秒回來重整」
+        //   是兩條完全獨立的路徑，這裡沒存檔的話一樣會被丟回生命樹頁。
+        //   用 typeof 檢查是因為理論上這個事件有極小機率在 notes.js 載入完成前就觸發，
+        //   保守起見加個防呆，避免噴錯擋掉重整本身。
+        if (typeof window._saveReloadRestoreState === 'function') window._saveReloadRestoreState();
+        location.reload();
+      }
     });
   });
 }
