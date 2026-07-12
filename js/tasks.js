@@ -239,6 +239,28 @@ const MATRIX_QUADS = [
   { key: 'ninu', label: '不重要＋不緊急', sub: '之後再說' },
 ];
 
+// 手機版預設收合每個象限，只看數量，點標題才展開清單（桌面版 CSS 會忽略這個狀態，永遠展開）
+let _matrixExpanded = { iu: false, inu: false, niu: false, ninu: false };
+function toggleMatrixQuad(key) {
+  _matrixExpanded[key] = !_matrixExpanded[key];
+  const el = document.getElementById('matrixQuad-' + key);
+  if (el) el.classList.toggle('expanded', _matrixExpanded[key]);
+}
+
+// 重複任務預設不出現在象限頁（每天都在、混在裡面太擠），要手動切換才顯示；記在 localStorage 讓下次開啟維持選擇
+let _matrixShowRecurring = localStorage.getItem('aeg_matrixShowRecurring') === '1';
+function toggleMatrixRecurring() {
+  _matrixShowRecurring = !_matrixShowRecurring;
+  localStorage.setItem('aeg_matrixShowRecurring', _matrixShowRecurring ? '1' : '0');
+  renderQuadrant();
+}
+function _updateMatrixRecurToggleUI(hiddenCount) {
+  const btn = document.getElementById('matrixRecurToggle');
+  if (btn) btn.classList.toggle('active', _matrixShowRecurring);
+  const hint = document.getElementById('matrixRecurHint');
+  if (hint) hint.textContent = (!_matrixShowRecurring && hiddenCount > 0) ? `（${hiddenCount} 個重複任務已隱藏）` : '';
+}
+
 // 從象限頁跳轉到任務：桌面版 navigateToTask 預期呼叫時已經在生命樹頁，
 // 這裡先切過去，手機版 navigateToTask 內部自己會切到任務頁，不用額外處理。
 function matrixJumpToTask(id) {
@@ -255,7 +277,10 @@ function _matrixCardHtml(t) {
 }
 
 function renderQuadrant() {
-  const tasks = (state.tasks || []).filter(t => !t.done);
+  const allActive = (state.tasks || []).filter(t => !t.done);
+  const hiddenRecurringCount = allActive.filter(t => t.recurring).length;
+  const tasks = _matrixShowRecurring ? allActive : allActive.filter(t => !t.recurring);
+  _updateMatrixRecurToggleUI(hiddenRecurringCount);
 
   const unsorted = tasks.filter(t => !t.quadrant);
   const unsortedListEl = document.getElementById('matrixUnsortedList');
@@ -270,6 +295,10 @@ function renderQuadrant() {
   MATRIX_QUADS.forEach(q => {
     const list = tasks.filter(t => t.quadrant === q.key);
     const listEl = document.getElementById('matrixList-' + q.key);
+    const countEl = document.getElementById('matrixCount-' + q.key);
+    const quadEl = document.getElementById('matrixQuad-' + q.key);
+    if (countEl) countEl.textContent = list.length;
+    if (quadEl) quadEl.classList.toggle('expanded', _matrixExpanded[q.key]);
     if (!listEl) return;
     listEl.innerHTML = list.length
       ? list.map(_matrixCardHtml).join('')

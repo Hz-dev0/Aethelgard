@@ -3671,7 +3671,7 @@
   font-weight: 600;
   color: var(--text);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
@@ -3722,8 +3722,66 @@
   background: rgba(58,110,165,0.12) !important;
   border-color: var(--green) !important;
 }
+.matrix-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.matrix-recur-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.matrix-recur-toggle.active {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(58,110,165,0.08);
+}
+.matrix-recur-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.matrix-quad-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.matrix-quad-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 999px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+.matrix-quad-chevron {
+  display: none; /* 桌面版不需要收合，箭頭只在手機版顯示 */
+  font-size: 12px;
+  color: var(--text-faint);
+  transition: transform 0.2s;
+}
 @media (max-width: 680px) {
   .matrix-grid { gap: 8px; }
-  .matrix-quad { padding: 8px; min-height: 110px; }
+  .matrix-quad { padding: 8px; min-height: unset; }
   .matrix-card-name { max-width: 110px; }
+  .matrix-quad-label { cursor: pointer; }
+  .matrix-quad-chevron { display: inline-block; }
+  .matrix-quad.expanded .matrix-quad-chevron { transform: rotate(180deg); }
+  /* 預設收合：只留標題列，清單隱藏，展開後才顯示 */
+  .matrix-quad-list { display: none; margin-top: 0; }
+  .matrix-quad.expanded .matrix-quad-list { display: flex; margin-top: 8px; }
 }
