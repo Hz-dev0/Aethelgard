@@ -442,30 +442,85 @@ function _lsSafeSet(key, value) {
   try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
 }
 // ── 選出應採用的 notes 版本（雲端 vs 本地），無論 localStorage 是否可用 ──
+// ★ 改版：原本是「整份筆記比一個時間戳，新的整份採用」，代表只要兩台裝置
+//   在同步空窗期各自編輯了「不同分頁」，其中一份就會被整份蓋掉、憑空消失。
+//   現在改成「以分頁為單位」合併：每個分頁各自比較自己的更新時間，
+//   只有兩邊真的動到「同一個分頁」才會取新的那份，其餘分頁互不影響。
+//   分頁刪除則用 tombstone（deletedTabIds）標記，避免舊裝置手上留著的
+//   已刪除分頁被合併邏輯當成「新分頁」而復活（跟例行任務的邏輯一致）。
 function _pickNotes(cloudNotes) {
   if (!cloudNotes || !cloudNotes.tabs) return null;
   try {
     const cloudTs = cloudNotes.updatedAt || 0;
     // ★ Bug 3 fix：只有使用者在本 session 真正編輯過（_notesUserEdited=true）才採信記憶體時間戳
-    // 否則頁面剛開啟時 _notesMemUpdatedAt 也可能 > cloudTs，導致永遠拒絕雲端更新
+    let localNotes = null;
     const memPayload = window._notesGetSyncPayload && window._notesGetSyncPayload();
     if (memPayload && window._notesUserEdited) {
-      const memTs = window._notesMemUpdatedAt || 0;
-      if (memTs > cloudTs) {
-        _dbg('[_pickNotes] 採用記憶體版本（使用者已編輯）memTs:', memTs, 'cloudTs:', cloudTs);
-        return memPayload;
-      }
+      localNotes = memPayload;
+    } else {
+      const localRaw = localStorage.getItem('aethelgard_notes_v1');
+      localNotes = localRaw ? JSON.parse(localRaw) : null;
     }
-    const localRaw = localStorage.getItem('aethelgard_notes_v1');
-    if (!localRaw) return cloudNotes; // 本地無資料 → 用雲端
-    const localNotes = JSON.parse(localRaw);
+    if (!localNotes || !Array.isArray(localNotes.tabs) || localNotes.tabs.length === 0) return cloudNotes; // 本地無資料 → 用雲端
+
     const localTs = localNotes.updatedAt || 0;
-    const localIsEmpty = !localNotes.tabs || localNotes.tabs.every(tab =>
+    const localIsEmpty = localNotes.tabs.every(tab =>
       !tab.pages || tab.pages.every(pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim())
     );
-    const chosen = (cloudTs > localTs || localIsEmpty) ? cloudNotes : localNotes;
-    _dbg('[_pickNotes] cloudTs:', cloudTs, 'localTs:', localTs, '→ 採用:', cloudTs > localTs ? 'cloud' : 'local');
-    return chosen;
+    if (localIsEmpty) return cloudNotes;
+
+    // ── 合併分頁刪除標記 ──
+    const cloudDeleted = Array.isArray(cloudNotes.deletedTabIds) ? cloudNotes.deletedTabIds : [];
+    const localDeleted = Array.isArray(localNotes.deletedTabIds) ? localNotes.deletedTabIds : [];
+    const mergedDeleted = _notesMergeDeletedLogs(cloudDeleted, localDeleted);
+    const deletedIds = new Set(mergedDeleted.map(e => e.id));
+
+    // 分頁比對 key：優先用 id；舊資料若還沒有 id，退而用名稱比對
+    const _key = t => t.id || ('name:' + (t.name || '').trim());
+
+    const cloudMap = {}; cloudNotes.tabs.forEach(t => { cloudMap[_key(t)] = t; });
+    const localMap = {}; localNotes.tabs.forEach(t => { localMap[_key(t)] = t; });
+
+    function pickTab(key) {
+      const c = cloudMap[key], l = localMap[key];
+      if (c && !l) return c;
+      if (l && !c) return l;
+      if (!c && !l) return null;
+      // 兩邊都有這個分頁：比各自分頁的 updatedAt（沒有的話退而比整份時間戳）
+      const ct = c.updatedAt || cloudTs || 0;
+      const lt = l.updatedAt || localTs || 0;
+      return lt > ct ? l : c;
+    }
+
+    // 排序基準：用整體時間戳較新的那一份的分頁順序當基準，另一份的分頁補在後面
+    const baseIsCloud = cloudTs >= localTs;
+    const baseTabs  = baseIsCloud ? cloudNotes.tabs : localNotes.tabs;
+    const otherTabs = baseIsCloud ? localNotes.tabs : cloudNotes.tabs;
+
+    const seen = new Set();
+    const mergedTabs = [];
+    [...baseTabs, ...otherTabs].forEach(t => {
+      const key = _key(t);
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (t.id && deletedIds.has(t.id)) return; // 已被任一裝置刪除 → 不放回去
+      const picked = pickTab(key);
+      if (picked) mergedTabs.push(picked);
+    });
+
+    if (mergedTabs.length === 0) return cloudNotes; // 保險：合併結果不該是空的，退回雲端版本
+
+    const base = baseIsCloud ? cloudNotes : localNotes;
+    const merged = {
+      tabs: mergedTabs,
+      lastTab: base.lastTab || 0,
+      lastViewedTab: typeof base.lastViewedTab === 'number' ? base.lastViewedTab : (base.lastTab || 0),
+      lastViewedPage: base.lastViewedPage || 0,
+      updatedAt: Math.max(cloudTs, localTs),
+      deletedTabIds: mergedDeleted
+    };
+    _dbg('[_pickNotes] 以分頁為單位合併完成，共', mergedTabs.length, '個分頁，cloudTs:', cloudTs, 'localTs:', localTs);
+    return merged;
   } catch(e) { return cloudNotes; } // 解析失敗 → 用雲端
 }
 // ── Notes cloud sync helper — debounced 5s to avoid pushing on every keystroke ──

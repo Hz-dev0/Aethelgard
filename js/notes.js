@@ -1,5 +1,25 @@
 const NOTES_STORAGE_KEY = 'aethelgard_notes_v1';
 
+// ── 分頁唯一 id 產生器（用來讓「同一個分頁」跨裝置時可以被正確辨識）──
+function _notesGenId() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+// ── 分頁刪除標記（tombstone）：[{id, deletedAt}]
+// 目的：避免「筆記分頁在一台裝置刪除、另一台裝置離線很久才回來同步」時，
+// 舊裝置手上還留著的那個分頁被合併邏輯誤判為「新增的分頁」而復活。
+window._notesDeletedTabIds = window._notesDeletedTabIds || [];
+function _notesTrimDeletedLog() {
+  const cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+  window._notesDeletedTabIds = (window._notesDeletedTabIds || []).filter(e => e.deletedAt >= cutoff);
+}
+function _notesMergeDeletedLogs(a, b) {
+  const map = {};
+  [...(a || []), ...(b || [])].forEach(e => {
+    if (!e || e.id === undefined) return;
+    if (!map[e.id] || e.deletedAt > map[e.id].deletedAt) map[e.id] = e;
+  });
+  return Object.values(map);
+}
+
 // ── State ──────────────────────────────────────────────
 let notesFolderData   = [];
 let notesTabIndex     = 0;
@@ -21,7 +41,8 @@ window._notesGetSyncPayload = function() {
     lastTab: typeof notesTabIndex === 'number' ? notesTabIndex : 0,
     lastViewedTab:  notesTabIndex,
     lastViewedPage: notesFolderData[notesTabIndex]?.currentPage ?? 0,
-    updatedAt: window._notesMemUpdatedAt || 0
+    updatedAt: window._notesMemUpdatedAt || 0,
+    deletedTabIds: window._notesDeletedTabIds || []
   };
 };
 
@@ -78,6 +99,13 @@ window._notesDlg = _notesDlg;
 function notesSave() {
   try { notesFlush(); } catch(e) {}
   const _saveTs = Date.now();
+  // ★ 幫目前正在編輯的分頁蓋上自己的更新時間戳，讓合併邏輯可以「以分頁為單位」
+  // 判斷新舊，而不是整份筆記比一個時間戳（見 _pickNotes）。
+  const _curTab = notesFolderData[notesTabIndex];
+  if (_curTab) {
+    if (!_curTab.id) _curTab.id = _notesGenId();
+    _curTab.updatedAt = _saveTs;
+  }
   try {
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
       tabs: notesFolderData,
@@ -85,7 +113,8 @@ function notesSave() {
       // ★ 直接存當下位置，確保重整後也能回到正確的 tab/page
       lastViewedTab:  notesTabIndex,
       lastViewedPage: notesFolderData[notesTabIndex]?.currentPage ?? 0,
-      updatedAt: _saveTs
+      updatedAt: _saveTs,
+      deletedTabIds: window._notesDeletedTabIds || []
     }));
   } catch(e) {}
   // ★ fix：確保 _notesMemUpdatedAt 與 localStorage updatedAt 一致
@@ -125,6 +154,7 @@ function notesLoad() {
       if (_restoredTab && typeof d.lastViewedPage === 'number') {
         _restoredTab.currentPage = Math.min(d.lastViewedPage, (_restoredTab.pages?.length || 1) - 1);
       }
+      window._notesDeletedTabIds = _notesMergeDeletedLogs(window._notesDeletedTabIds, d.deletedTabIds);
       _notesLoaded = true;
     }
   } catch(e) {
@@ -145,6 +175,7 @@ window.notesReloadFromStorage = notesReloadFromStorage;
 // ── 直接從雲端 notes 物件載入到記憶體，繞過 localStorage（無痕模式 fallback）──
 function notesLoadFromData(notes) {
   if (!notes || !Array.isArray(notes.tabs) || notes.tabs.length === 0) return;
+  window._notesDeletedTabIds = _notesMergeDeletedLogs(window._notesDeletedTabIds, notes.deletedTabIds);
 
   // ── 保護使用者正在操作的頁面位置 ──
   // 若筆記頁正在顯示（使用者可能正在翻頁），保留記憶體中的 currentPage，
@@ -217,6 +248,7 @@ function notesEnsureDefaults() {
   notesFolderData.forEach(tab => {
     if (!tab.pages) tab.pages = [{ titleA:'', a:'', titleB:'', b:'' }];
     if (typeof tab.currentPage !== 'number') tab.currentPage = 0;
+    if (!tab.id) tab.id = _notesGenId(); // 舊資料補上唯一 id，供跨裝置合併辨識用
   });
 }
 
@@ -556,7 +588,7 @@ function notesRenderTabs() {
 async function notesPromptAddTab() {
   const name = await _notesDlg.prompt('新標籤名稱', '');
   if (!name?.trim()) return;
-  notesFolderData.push({ name: name.trim(), pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 });
+  notesFolderData.push({ id: _notesGenId(), name: name.trim(), pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0, updatedAt: Date.now() });
   notesTabIndex = notesFolderData.length - 1;
   notesRenderTabs();
   notesSave();
@@ -567,6 +599,12 @@ async function notesDeleteTab(idx) {
   if (notesFolderData.length <= 1) { await _notesDlg.confirm('至少需要保留一個標籤'); return; }
   const confirmed = await _notesDlg.confirm('確定刪除標籤「' + notesFolderData[idx].name + '」嗎？');
   if (!confirmed) return;
+  const _deletedTab = notesFolderData[idx];
+  if (_deletedTab && _deletedTab.id) {
+    window._notesDeletedTabIds = window._notesDeletedTabIds || [];
+    window._notesDeletedTabIds.push({ id: _deletedTab.id, deletedAt: Date.now() });
+    _notesTrimDeletedLog();
+  }
   notesFolderData.splice(idx, 1);
   if (notesTabIndex >= notesFolderData.length) notesTabIndex = notesFolderData.length - 1;
   notesRenderTabs();
@@ -1357,34 +1395,32 @@ window.addEventListener('load', () => {
 });
 
 // 頁面隱藏（切分頁、關閉）時，若有待推的筆記變更，立刻觸發同步
-// 頁面重新顯示時，從雲端拉最新資料（解決多裝置不自動更新問題）
-document.addEventListener('visibilitychange', async () => {
+// 頁面重新顯示時，若離開夠久，直接整頁重新整理（解決多裝置不自動更新問題）
+// ★ Bug fix：原本這裡多判斷了一個 getApiUrl()，但 Firebase 模式下 getApiUrl()
+//   固定回傳空字串（舊版 API URL 模式的殘留邏輯，Firebase 模式用不到），
+//   導致這整段「回到前景就重新拉雲端資料」的保護從來沒有執行過。
+//   後果：手機切到背景一段時間（連線可能已斷開/被瀏覽器凍結）期間，
+//   若其他裝置修改並推送了新資料，手機回到前景後仍然抱著舊的 state，
+//   只要之後在手機上有任何操作觸發同步，就會用這份舊資料把其他裝置的新資料蓋掉。
+// ★ 這裡選擇「整頁重整」而不是在原地手動更新 state：
+//   手動更新需要自己想清楚每一個變數、每一個 UI 元件要不要重設，很容易漏掉；
+//   整頁重整則是直接重跑一次完整、已經測過的 init() 流程，結果一定是乾淨、正確的，
+//   代價只是重新整理那一兩秒的畫面閃爍，換來的可靠度划算很多。
+let _lastHiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
+    _lastHiddenAt = Date.now();
     // 隱藏：推送待同步的筆記變更
     if (_notesSyncTimer !== null) {
       clearTimeout(_notesSyncTimer);
       _notesSyncTimer = null;
     }
     if (typeof syncToCloud === 'function') syncToCloud();
-  } else if (document.visibilityState === 'visible' && state._initDone && typeof getApiUrl === 'function' && getApiUrl()) {
-    // 重新顯示：拉雲端最新資料並重新渲染
-    // 先記錄本週期本地已重置的任務 id，避免 loadFromCloud 把 done=true 蓋回來
-    const _localResetIds = new Set(
-      state.tasks.filter(t => t.recurring && t.recurMode !== 'interval' && !t.done).map(t => t.id)
-    );
-    const ok = await loadFromCloud();
-    if (ok) {
-      _localResetIds.forEach(id => {
-        const t = state.tasks.find(x => x.id === id);
-        if (t && t.done) { t.done = false; t.scheduledFor = null; t.scheduledAt = null; t.status = null; }
-      });
-      checkMissedReset();
-      renderEnergyDots();
-      renderSandbox();
-      renderAll();
-      checkTaskDates();
-      initRoutines();
-      maybeShowRecurMorningDialog();
-    }
+  } else if (document.visibilityState === 'visible' && state._initDone) {
+    // 只有「離開超過一段時間」才重整，避免每次短暫切分頁/切 App 都閃一下畫面。
+    // 15 秒是「快速切出去看一下又回來」跟「真的放到背景一陣子」的分界，可依實際使用調整。
+    const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
+    if (_hiddenDuration < 15000) return;
+    location.reload();
   }
 });
