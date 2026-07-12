@@ -57,7 +57,22 @@ async function _fbSave(payload) {
     // ★ 使用 merge:true，避免任務同步時意外覆蓋掉 notes 等其他欄位
     await window._fbSetDoc(ref, _stripUndefined(payload), { merge: true });
     return true;
-  } catch(e) { console.warn('Firebase 寫入失敗', e); return false; }
+  } catch(e) {
+    console.warn('Firebase 寫入失敗', e);
+    // ★ 體檢報表：如果是「文件大小超過上限」造成的失敗，把每個欄位各佔多少
+    // bytes 印出來，方便一眼找出是哪個欄位把文件撐爆的（而不用用猜的）。
+    if (String(e && e.message || e).includes('exceeds the maximum allowed size')) {
+      try {
+        const _sizeOf = v => new Blob([JSON.stringify(v ?? null)]).size;
+        const _rows = Object.keys(payload).map(k => ({ 欄位: k, 大小_bytes: _sizeOf(payload[k]) }))
+          .sort((a, b) => b.大小_bytes - a.大小_bytes);
+        console.warn('📋 [同步體檢] 文件已超過 Firestore 1MB 上限，各欄位大小明細（由大到小）：');
+        console.table(_rows);
+        console.warn('📋 [同步體檢] 加總：', _rows.reduce((s, r) => s + r.大小_bytes, 0), 'bytes（1MB = 1,048,576 bytes）');
+      } catch(e2) { console.warn('[同步體檢] 計算失敗', e2); }
+    }
+    return false;
+  }
 }
 
 // ── 即時監聽（onSnapshot）：其他裝置修改後自動更新本裝置 ──

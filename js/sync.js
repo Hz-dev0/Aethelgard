@@ -832,12 +832,18 @@ function _buildSyncPayload() {
     rewards: state.rewards || [],
     customQuotes: state.customQuotes || [],
     energy: state.energy || 0,
-    doneHistory: (state.doneHistory || []).filter(h => {
-      if (!h.completedAt) return true;
+    doneHistory: (function() {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
-    }),
+      const _cutoffStr = oneYearAgo.toISOString().slice(0, 10);
+      const _filtered = (state.doneHistory || []).filter(h => !h.completedAt || h.completedAt >= _cutoffStr);
+      // ★ 緊急止血：近一年篩選在使用量大時仍可能無上限增長，導致整份文件
+      // 超過 Firestore 1MB 硬上限、所有同步全面失敗。這裡再加一道「最多保留
+      // 最近 800 筆」的安全上限（doneHistory 只影響「軌跡」頁的歷史紀錄顯示，
+      // 不影響目前任務/例行任務等核心功能）。
+      const _MAX = 800;
+      return _filtered.length > _MAX ? _filtered.slice(-_MAX) : _filtered;
+    })(),
     todayOrder: state.todayOrder || [],
     lotteryState: lotteryState,
     wishPoints: state.wishPoints || 0,
