@@ -239,9 +239,17 @@ const MATRIX_QUADS = [
   { key: 'ninu', label: '不重要＋不緊急', sub: '之後再說' },
 ];
 
+// 從象限頁跳轉到任務：桌面版 navigateToTask 預期呼叫時已經在生命樹頁，
+// 這裡先切過去，手機版 navigateToTask 內部自己會切到任務頁，不用額外處理。
+function matrixJumpToTask(id) {
+  if (_isDesktopTaskLayout()) showPage('tree', true);
+  navigateToTask(id);
+}
+
 function _matrixCardHtml(t) {
   const icon = goalIcons[t.goal] || '🎯';
-  return `<div class="matrix-card" data-task-id="${t.id}" title="${escHtml(t.name)}">
+  return `<div class="matrix-card" data-task-id="${t.id}" title="${escHtml(t.name)}" ondblclick="matrixJumpToTask(${t.id})">
+    <div class="matrix-check" onpointerdown="event.stopPropagation()" ondblclick="event.stopPropagation()" onclick="event.stopPropagation(); toggleTask(${t.id})"></div>
     <span>${icon}</span><span class="matrix-card-name">${escHtml(t.name)}</span>
   </div>`;
 }
@@ -2756,6 +2764,7 @@ function toggleTask(id) {
   renderStats();
   renderTree();
   renderTodayPanel();
+  if (document.getElementById('page-matrix')) renderQuadrant();
   saveStateLocal(); // 確保 wishPoints 等狀態在 cloud sync 前已寫入本地
   // ── Bug fix：先標記忽略視窗，再推送，避免 snapshot 在 _fbSave() await 期間用舊資料覆蓋 ──
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }

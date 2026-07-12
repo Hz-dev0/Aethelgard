@@ -3628,7 +3628,7 @@
 
 /* ── 象限分類（Priority Matrix）── */
 .matrix-tray {
-  margin-bottom: 16px;
+  margin-top: 16px;
   padding: 10px 12px;
   border: 1px dashed var(--border);
   border-radius: 10px;
@@ -3657,7 +3657,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
-  background: var(--bg3);
+  background: var(--bg2);
   min-height: 140px;
   transition: background 0.15s, border-color 0.15s;
   border-left: 3px solid var(--border);
@@ -3702,6 +3702,16 @@
   max-width: 100%;
 }
 .matrix-card:active { cursor: grabbing; }
+.matrix-check {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.matrix-check:hover { border-color: var(--green); background: rgba(58,110,165,0.10); }
 .matrix-card-name {
   white-space: nowrap;
   overflow: hidden;
