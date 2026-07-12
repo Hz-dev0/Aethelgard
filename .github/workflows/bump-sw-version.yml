@@ -1,0 +1,38 @@
+name: Auto bump SW version
+
+# 每次 push 到 main（且不是「只有這個 workflow 自己 commit 回去的那次」）都會跑，
+# 自動幫你執行 scripts/bump-sw-version.js，不用再記得手動跑。
+on:
+  push:
+    branches: [main]
+
+# 避免這個 workflow 自己 commit 的那次又被別的 workflow（如果之後有部署流程）搶跑，
+# 同一個 ref 只保留最新一次執行。
+concurrency:
+  group: bump-sw-version-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # 用預設 GITHUB_TOKEN commit 回去「不會」再觸發新的一輪 workflow，
+    # 所以這裡不用擔心無限迴圈，不需要額外的 [skip ci] 判斷。
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 執行 bump-sw-version.js
+        run: node scripts/bump-sw-version.js
+
+      - name: 若 sw.js 有變更就自動 commit 回去
+        run: |
+          if git diff --quiet -- sw.js; then
+            echo "sw.js 內容沒變（版號沒動過），略過 commit。"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add sw.js
+            git commit -m "chore: auto bump sw.js version"
+            git push
+          fi
