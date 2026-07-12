@@ -1433,31 +1433,37 @@ document.addEventListener('visibilitychange', () => {
     // 15 秒是「快速切出去看一下又回來」跟「真的放到背景一陣子」的分界，可依實際使用調整。
     const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
     if (_hiddenDuration < 15000) return;
-    // ★ 僅 Owner 登入時：重整前先記住目前停留的畫面（筆記頁另外記標籤/頁碼），
-    //   重整後由 tasks.js 的 init() 結尾讀回並還原，避免每次都被丟回生命樹頁。
-    //   訪客模式不做這件事，維持原本固定回到生命樹頁的行為。
-    if (window._fbIsOwner === true) {
-      try {
-        // ★ fix：page-notes 這個容器沒有 .page class，querySelector('.page.active')
-        //   永遠抓不到它，且切進筆記頁時前一頁的 .active 不會被移除，
-        //   會誤把「切進筆記頁之前那一頁」當成目前頁面。改用 _notesIsVisible 直接判斷。
-        let _pageId;
-        if (_notesIsVisible) {
-          _pageId = 'notes';
-        } else {
-          const _activePage = document.querySelector('.page.active');
-          _pageId = _activePage ? _activePage.id.replace(/^page-/, '') : null;
-        }
-        if (_pageId) {
-          const _restoreData = { page: _pageId };
-          if (_pageId === 'notes' && Array.isArray(notesFolderData) && notesFolderData[notesTabIndex]) {
-            _restoreData.notesTab = notesTabIndex;
-            _restoreData.notesPage = notesFolderData[notesTabIndex].currentPage ?? 0;
-          }
-          sessionStorage.setItem('aethelgard_reload_restore', JSON.stringify(_restoreData));
-        }
-      } catch(e) {}
-    }
+    window._saveReloadRestoreState();
     location.reload();
   }
 });
+
+// ★ 僅 Owner 登入時：重整前先記住目前停留的畫面（筆記頁另外記標籤/頁碼），
+//   重整後由 tasks.js 的 init() 結尾讀回並還原，避免每次都被丟回生命樹頁。
+//   訪客模式不做這件事，維持原本固定回到生命樹頁的行為。
+//   ★ 抽成共用函式，因為重整不是只有這裡會觸發——pwa.js 偵測到 SW 更新時
+//   的 controllerchange 也會直接 location.reload()，同樣需要先存檔，
+//   否則那條路徑重整完一樣會被丟回生命樹頁（跟這裡的 15 秒判斷是兩件事、互不相干）。
+window._saveReloadRestoreState = function() {
+  if (window._fbIsOwner !== true) return;
+  try {
+    // ★ fix：page-notes 這個容器沒有 .page class，querySelector('.page.active')
+    //   永遠抓不到它，且切進筆記頁時前一頁的 .active 不會被移除，
+    //   會誤把「切進筆記頁之前那一頁」當成目前頁面。改用 _notesIsVisible 直接判斷。
+    let _pageId;
+    if (_notesIsVisible) {
+      _pageId = 'notes';
+    } else {
+      const _activePage = document.querySelector('.page.active');
+      _pageId = _activePage ? _activePage.id.replace(/^page-/, '') : null;
+    }
+    if (_pageId) {
+      const _restoreData = { page: _pageId };
+      if (_pageId === 'notes' && Array.isArray(notesFolderData) && notesFolderData[notesTabIndex]) {
+        _restoreData.notesTab = notesTabIndex;
+        _restoreData.notesPage = notesFolderData[notesTabIndex].currentPage ?? 0;
+      }
+      sessionStorage.setItem('aethelgard_reload_restore', JSON.stringify(_restoreData));
+    }
+  } catch(e) {}
+};
