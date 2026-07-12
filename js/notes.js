@@ -46,7 +46,38 @@ window._notesGetSyncPayload = function() {
   };
 };
 
-// ── Custom dialog ──────────────────────────────────────
+// ── 除錯用：列出每個分頁/頁面各佔多少大小，找出是哪裡把 notes 撐爆的 ──
+// 在瀏覽器 Console 輸入 _debugNotesSize() 執行
+window._debugNotesSize = function() {
+  const _sizeOf = v => new Blob([JSON.stringify(v ?? null)]).size;
+  const _looksLikeBase64Image = s => typeof s === 'string' && (s.startsWith('data:image') || (s.length > 2000 && !/\s/.test(s.slice(0, 2000))));
+  console.warn('📋 [筆記體檢] 各分頁大小明細（由大到小）：');
+  const tabRows = notesFolderData.map((tab, ti) => ({
+    分頁: tab.name || ('(未命名 #' + ti + ')'),
+    大小_bytes: _sizeOf(tab),
+    頁數: (tab.pages || []).length
+  })).sort((a, b) => b.大小_bytes - a.大小_bytes);
+  console.table(tabRows);
+
+  console.warn('📋 [筆記體檢] 各分頁裡，每一頁的大小明細（由大到小，只列前 20 筆）：');
+  const pageRows = [];
+  notesFolderData.forEach((tab, ti) => {
+    (tab.pages || []).forEach((pg, pi) => {
+      const size = _sizeOf(pg);
+      const suspect = _looksLikeBase64Image(pg.a) || _looksLikeBase64Image(pg.b);
+      pageRows.push({
+        分頁: tab.name || ('#' + ti),
+        頁碼: pi + 1,
+        大小_bytes: size,
+        疑似貼入圖片: suspect ? '⚠️ 是' : '',
+        內容預覽: ((pg.titleA || '') + ' ' + (pg.a || '')).slice(0, 40).replace(/\n/g, ' ')
+      });
+    });
+  });
+  pageRows.sort((a, b) => b.大小_bytes - a.大小_bytes);
+  console.table(pageRows.slice(0, 20));
+  console.warn('📋 [筆記體檢] notes 總大小：', _sizeOf({ tabs: notesFolderData }), 'bytes');
+};
 const _notesDlg = (() => {
   let _res = null;
   const ov  = () => document.getElementById('notes-dlg-overlay');
