@@ -331,15 +331,34 @@ async function loadFromCloud() {
       state.morningDialogShownDate = data.morningDialogShownDate || state.morningDialogShownDate || null;
       state.routineResetDate = data.routineResetDate || state.routineResetDate || null;
       // ── 例行任務 merge
+      // ★ 修正「刪除後又復活」bug：原本的聯集合併分不出「本機新增、雲端還沒收到」
+      //   跟「雲端已刪除、本機還留著舊快取」——兩者都是「雲端沒有、本機有」，
+      //   原邏輯一律當成前者補回去，導致已刪除的例行任務在下次讀取雲端資料時復活，
+      //   而且還會被自動 syncToCloud() 反推回雲端，讓刪除紀錄永久失效。
+      //   解法：用 tombstone（刪除標記）清單記住「這個 id 曾經被刪除過」，
+      //   合併雲端/本機兩份 tombstone 後，任何在 tombstone 裡的 id 一律不補回 routines。
       {
         const cloudRoutines = Array.isArray(data.routines) ? data.routines : [];
         const localRoutines = Array.isArray(state.routines) ? state.routines : [];
+        const cloudDeletedLog = Array.isArray(data.routinesDeletedLog) ? data.routinesDeletedLog : [];
+        const localDeletedLog = Array.isArray(state.routinesDeletedLog) ? state.routinesDeletedLog : [];
+
+        // 合併 tombstone：同一個 id 取最新的刪除時間
+        const deletedMap = {};
+        [...cloudDeletedLog, ...localDeletedLog].forEach(e => {
+          if (!e || e.id === undefined) return;
+          if (!deletedMap[e.id] || e.deletedAt > deletedMap[e.id].deletedAt) deletedMap[e.id] = e;
+        });
+        const mergedDeletedLog = Object.values(deletedMap);
+        const deletedIds = new Set(mergedDeletedLog.map(e => e.id));
+
         if (cloudRoutines.length === 0 && localRoutines.length > 0) {
-          state.routines = localRoutines;
+          state.routines = localRoutines.filter(r => !deletedIds.has(r.id));
         } else {
           const merged = {};
           cloudRoutines.forEach(r => { merged[r.id] = { ...r }; });
           localRoutines.forEach(r => {
+            if (deletedIds.has(r.id) && !merged[r.id]) return; // 已被刪除，且雲端也沒有 → 不要復活
             if (merged[r.id]) {
               merged[r.id].done = merged[r.id].done || r.done;
               merged[r.id].doneDate = merged[r.id].done ? (merged[r.id].doneDate || r.doneDate) : null;
@@ -350,6 +369,8 @@ async function loadFromCloud() {
               merged[r.id] = { ...r };
             }
           });
+          // 保險：即使雲端裡還留著已標記刪除的項目（例如推送順序競態），一併濾除
+          deletedIds.forEach(id => { delete merged[id]; });
           state.routines = Object.values(merged);
           const nameMap = {};
           state.routines.forEach(r => {
@@ -365,6 +386,9 @@ async function loadFromCloud() {
           });
           state.routines = Object.values(nameMap);
         }
+        // 只保留 180 天內的刪除紀錄，避免無限增長
+        const _cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+        state.routinesDeletedLog = mergedDeletedLog.filter(e => e.deletedAt >= _cutoff);
       }
       // ── Goal/Energy migration
       const _goalMigMap = { '成長':'技能','技能':'技能','探索':'技能','創作':'自我','關係':'自我','貢獻':'自我','健康':'自我','日常':'日常' };
@@ -686,6 +710,7 @@ function saveStateLocal() {
       morningDialogShownDate: state.morningDialogShownDate || null,
       routines: state.routines || [],
       routineResetDate: state.routineResetDate || null,
+      routinesDeletedLog: state.routinesDeletedLog || [],
       savedAt: Date.now()
     };
     localStorage.setItem('aethelgard_state_local', JSON.stringify(snapshot));
@@ -711,6 +736,7 @@ function loadStateLocal() {
     state.morningDialogShownDate = data.morningDialogShownDate || null;
     state.routines     = Array.isArray(data.routines) ? data.routines : [];
     state.routineResetDate = data.routineResetDate || null;
+    state.routinesDeletedLog = Array.isArray(data.routinesDeletedLog) ? data.routinesDeletedLog : [];
     return true;
   } catch(e) { return false; }
 }
@@ -763,6 +789,7 @@ function _buildSyncPayload() {
     morningDialogShownDate: state.morningDialogShownDate || null,
     routines: state.routines || [],
     routineResetDate: state.routineResetDate || null,
+    routinesDeletedLog: state.routinesDeletedLog || [],
     settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' }
   };
   // 帶上 notes

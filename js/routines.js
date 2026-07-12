@@ -274,6 +274,13 @@ window.addRoutineItem = addRoutineItem;
 function deleteRoutineItem(id) {
   if (!Array.isArray(state.routines)) state.routines = [];
   state.routines = state.routines.filter(x => x.id !== id);
+  // ★ 記錄刪除標記（tombstone）：避免其他裝置若還留著刪除前的舊快取，
+  // 之後合併雲端資料時把這筆已刪除的例行任務誤判為「本機新增的項目」而復活。
+  if (!Array.isArray(state.routinesDeletedLog)) state.routinesDeletedLog = [];
+  state.routinesDeletedLog.push({ id, deletedAt: Date.now() });
+  // 只保留 180 天內的刪除紀錄，避免無限增長
+  const _cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000;
+  state.routinesDeletedLog = state.routinesDeletedLog.filter(e => e.deletedAt >= _cutoff);
   if (typeof _syncNow === 'function') _syncNow();
   renderRoutineList();
 }

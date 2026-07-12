@@ -207,6 +207,16 @@ async function syncDotClicked() {
   const url = getApiUrl();
   // Firebase 模式下沒有 API URL，直接手動同步；無任何連線才開設定
   if (!url && !window._fbUid) { openApiModal(); return; }
+  // ★ 防呆：雲端初始資料還沒完整載入完成前，絕對不能手動推送。
+  //   原因：state._initDone 是「state.tasks/routines 已確定是完整雲端資料」的唯一標記；
+  //   若在這之前手動按同步，_buildSyncPayload() 組出來的可能是不完整/空的 state，
+  //   一旦推送就會覆蓋雲端唯一的共用文件，害其他裝置的資料被清空
+  //   （無痕模式下這個「還沒載完」的空窗期特別長，最容易踩到）。
+  //   這裡明確告知使用者，而不是靜靜地什麼都不做或冒險推送。
+  if (typeof state === 'undefined' || !state._initDone) {
+    if (typeof showToast === 'function') showToast('⏳ 資料尚未載入完成，請稍候再試一次');
+    return;
+  }
   // 清除所有 pending timer，強制立即同步
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   if (_syncRetryTimer !== null) { clearTimeout(_syncRetryTimer); _syncRetryTimer = null; }
@@ -275,6 +285,7 @@ let state = {
   morningDialogShownDate: null, // YYYY-MM-DD：當天已顯示過早晨重複任務視窗
   routines: [],        // 例行任務清單 [{ id, name, done, doneDate }]
   routineResetDate: null, // YYYY-MM-DD：最後一次重置例行任務的日期（跨裝置同步）
+  routinesDeletedLog: [], // 例行任務刪除紀錄（tombstone）[{ id, deletedAt }]，避免合併時被復活
 };
 
 // ── Local-timezone date helper ──

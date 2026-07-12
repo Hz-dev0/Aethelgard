@@ -157,6 +157,19 @@ function _startRealtimeListener(uid) {
     state.wishPoints   = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
     state.routines     = Array.isArray(data.routines) ? data.routines : state.routines;
     state.routineResetDate = data.routineResetDate || state.routineResetDate || null;
+    // ★ 即時監聽也要更新 tombstone（刪除標記）清單，跟本機的合併，
+    //   確保之後 loadFromCloud() 做合併判斷時，用的是最新的刪除紀錄，
+    //   不會誤把別的裝置剛刪除的例行任務又復活。
+    {
+      const _cloudLog = Array.isArray(data.routinesDeletedLog) ? data.routinesDeletedLog : [];
+      const _localLog = Array.isArray(state.routinesDeletedLog) ? state.routinesDeletedLog : [];
+      const _map = {};
+      [..._cloudLog, ..._localLog].forEach(e => {
+        if (!e || e.id === undefined) return;
+        if (!_map[e.id] || e.deletedAt > _map[e.id].deletedAt) _map[e.id] = e;
+      });
+      state.routinesDeletedLog = Object.values(_map);
+    }
     if (data.lotteryState && typeof data.lotteryState === 'object') {
       lotteryState = { ...lotteryState, ...data.lotteryState };
       localStorage.setItem('aethelgard_lottery', JSON.stringify(lotteryState));
@@ -186,6 +199,7 @@ function _startRealtimeListener(uid) {
       wishPoints: state.wishPoints || 0,
       morningDialogShownDate: state.morningDialogShownDate || null,
       routines: state.routines || [], routineResetDate: state.routineResetDate || null,
+      routinesDeletedLog: state.routinesDeletedLog || [],
       settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' }
     });
 
