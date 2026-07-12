@@ -276,11 +276,24 @@ function notesEnsureDefaults() {
   if (notesFolderData.length === 0) {
     notesFolderData = [{ name: '筆記', pages: [{ titleA:'', a:'', titleB:'', b:'' }], currentPage: 0 }];
   }
+  let _idBackfilled = false;
   notesFolderData.forEach(tab => {
     if (!tab.pages) tab.pages = [{ titleA:'', a:'', titleB:'', b:'' }];
     if (typeof tab.currentPage !== 'number') tab.currentPage = 0;
-    if (!tab.id) tab.id = _notesGenId(); // 舊資料補上唯一 id，供跨裝置合併辨識用
+    if (!tab.id) { tab.id = _notesGenId(); _idBackfilled = true; } // 舊資料補上唯一 id，供跨裝置合併辨識用
   });
+  // ★ fix：id 一旦補上就立刻寫回 localStorage，避免下次載入時又重新產生「不一樣」的 id，
+  // 導致 _pickNotes 用 id 比對時把同一個分頁誤判成兩個不同分頁而複製。
+  if (_idBackfilled) {
+    try {
+      const raw = localStorage.getItem(NOTES_STORAGE_KEY);
+      const d = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
+        ...d,
+        tabs: notesFolderData,
+      }));
+    } catch(e) {}
+  }
 }
 
 // ── Auto-save ──────────────────────────────────────────
