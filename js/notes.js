@@ -1438,8 +1438,16 @@ document.addEventListener('visibilitychange', () => {
     //   訪客模式不做這件事，維持原本固定回到生命樹頁的行為。
     if (window._fbIsOwner === true) {
       try {
-        const _activePage = document.querySelector('.page.active');
-        const _pageId = _activePage ? _activePage.id.replace(/^page-/, '') : null;
+        // ★ fix：page-notes 這個容器沒有 .page class，querySelector('.page.active')
+        //   永遠抓不到它，且切進筆記頁時前一頁的 .active 不會被移除，
+        //   會誤把「切進筆記頁之前那一頁」當成目前頁面。改用 _notesIsVisible 直接判斷。
+        let _pageId;
+        if (_notesIsVisible) {
+          _pageId = 'notes';
+        } else {
+          const _activePage = document.querySelector('.page.active');
+          _pageId = _activePage ? _activePage.id.replace(/^page-/, '') : null;
+        }
         if (_pageId) {
           const _restoreData = { page: _pageId };
           if (_pageId === 'notes' && Array.isArray(notesFolderData) && notesFolderData[notesTabIndex]) {
