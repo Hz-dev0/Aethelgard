@@ -80,9 +80,6 @@
       <span class="nav-icon">🐾</span> <span class="nav-label">成長軌跡</span>
     </div>
     <div class="sidebar-section" style="margin-top:8px"><span class="nav-label">工具</span></div>
-    <div class="nav-item" onclick="showPage('matrix')" id="nav-matrix" title="象限分類">
-      <span class="nav-icon">🎯</span> <span class="nav-label">象限分類</span>
-    </div>
     <div class="nav-item" onclick="showPage('notes')" id="nav-notes" title="筆記頁">
       <span class="nav-icon">📝</span> <span class="nav-label">筆記頁</span>
     </div>
@@ -281,57 +278,6 @@
       </div>
     </div>
 
-    <!-- Page: Priority Matrix (象限分類) -->
-    <div class="page" id="page-matrix">
-      <div class="section-title">象限分類 <span class="sub">拖動任務改變象限，只影響這裡的分類顯示，不影響任務本身</span></div>
-      <div class="card">
-        <div class="matrix-toolbar">
-          <button class="matrix-recur-toggle" id="matrixRecurToggle" onclick="toggleMatrixRecurring()">🔁 顯示重複任務</button>
-          <span class="matrix-recur-hint" id="matrixRecurHint"></span>
-        </div>
-        <div class="matrix-tabs" id="matrixTabs">
-          <button class="matrix-tab active" data-quad="iu" style="--tab-color:var(--rose)" onclick="matrixScrollTo('iu')"></button>
-          <button class="matrix-tab" data-quad="inu" style="--tab-color:var(--green)" onclick="matrixScrollTo('inu')"></button>
-          <button class="matrix-tab" data-quad="niu" style="--tab-color:#C9A227" onclick="matrixScrollTo('niu')"></button>
-          <button class="matrix-tab" data-quad="ninu" style="--tab-color:var(--text-faint)" onclick="matrixScrollTo('ninu')"></button>
-        </div>
-        <div class="matrix-grid" id="matrixGrid">
-          <div class="matrix-quad" data-quad="iu" data-drop-zone="iu" id="matrixQuad-iu">
-            <div class="matrix-quad-label">
-              <span>重要＋緊急 <span class="matrix-quad-sub">立刻做</span></span>
-              <span class="matrix-quad-head-right"><span class="matrix-quad-count" id="matrixCount-iu">0</span></span>
-            </div>
-            <div class="matrix-quad-list" id="matrixList-iu"></div>
-          </div>
-          <div class="matrix-quad" data-quad="inu" data-drop-zone="inu" id="matrixQuad-inu">
-            <div class="matrix-quad-label">
-              <span>重要＋不緊急 <span class="matrix-quad-sub">安排時間</span></span>
-              <span class="matrix-quad-head-right"><span class="matrix-quad-count" id="matrixCount-inu">0</span></span>
-            </div>
-            <div class="matrix-quad-list" id="matrixList-inu"></div>
-          </div>
-          <div class="matrix-quad" data-quad="niu" data-drop-zone="niu" id="matrixQuad-niu">
-            <div class="matrix-quad-label">
-              <span>不重要＋緊急 <span class="matrix-quad-sub">委派／快速處理</span></span>
-              <span class="matrix-quad-head-right"><span class="matrix-quad-count" id="matrixCount-niu">0</span></span>
-            </div>
-            <div class="matrix-quad-list" id="matrixList-niu"></div>
-          </div>
-          <div class="matrix-quad" data-quad="ninu" data-drop-zone="ninu" id="matrixQuad-ninu">
-            <div class="matrix-quad-label">
-              <span>不重要＋不緊急 <span class="matrix-quad-sub">之後再說</span></span>
-              <span class="matrix-quad-head-right"><span class="matrix-quad-count" id="matrixCount-ninu">0</span></span>
-            </div>
-            <div class="matrix-quad-list" id="matrixList-ninu"></div>
-          </div>
-        </div>
-        <div class="matrix-tray" id="matrixUnsorted" data-drop-zone="unsorted">
-          <div class="matrix-tray-label">待分類</div>
-          <div class="matrix-tray-list" id="matrixUnsortedList"></div>
-        </div>
-      </div>
-    </div>
-
   </main>
 </div>
 
@@ -425,9 +371,6 @@
     </button>
     <button class="mob-nav-item" id="mob-stats" onclick="showPage('stats')">
       <span class="mob-nav-icon">🐾</span>軌跡
-    </button>
-    <button class="mob-nav-item" id="mob-matrix" onclick="showPage('matrix')">
-      <span class="mob-nav-icon">🎯</span>象限
     </button>
     <button class="mob-nav-item" id="mob-notes" onclick="showPage('notes')">
       <span class="mob-nav-icon">📝</span>筆記

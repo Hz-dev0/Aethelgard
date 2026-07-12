@@ -122,6 +122,22 @@ function cycleNewWishIcon() {
   renderWishIconPicker();
 }
 
+// ── 既有願望項目：點擊左側圖示徽章切換下一個圖示 ──
+// ★ Bug fix：許願池列表裡每個願望的圖示徽章原本完全沒有綁定點擊事件，
+// 點了沒反應。這裡補上 cycleWishIcon()，邏輯跟新增願望時的圖示選擇器一致：
+// 依序在 WISH_ICON_POOL 裡循環，並把選到的圖示存進 r.icon（之後 getWishIcon 就會優先採用）。
+function cycleWishIcon(id) {
+  const r = (state.rewards || []).find(x => x.id === id);
+  if (!r) return;
+  const cur = getWishIcon(r);
+  const idx = WISH_ICON_POOL.indexOf(cur); // 若目前顯示的是分類預設圖示（不在池子裡），idx 會是 -1 → 從池子第一個開始
+  r.icon = WISH_ICON_POOL[(idx + 1) % WISH_ICON_POOL.length];
+  renderRewards();
+  _markSyncWrite();
+  syncToCloud();
+}
+window.cycleWishIcon = cycleWishIcon;
+
 
 
 let wishTab = 'wish'; // 'wish' or 'lottery'
@@ -229,170 +245,6 @@ function deallocateWishPoint(id) {
   syncToCloud();
 }
 
-// ── 象限分類（Priority Matrix / Eisenhower Matrix）──────────────────────
-// 純顯示用的分類：task.quadrant 只影響這個頁面怎麼分組顯示，
-// 不影響 goal / energy 等任務原本的分類，也不影響任務總覽等其他頁面。
-const MATRIX_QUADS = [
-  { key: 'iu',   label: '重要＋緊急',     sub: '立刻做' },
-  { key: 'inu',  label: '重要＋不緊急',   sub: '安排時間' },
-  { key: 'niu',  label: '不重要＋緊急',   sub: '委派／快速處理' },
-  { key: 'ninu', label: '不重要＋不緊急', sub: '之後再說' },
-];
-
-// 手機版：象限改成左右滑動切換，一次一個象限滿版顯示；最上面用象限色的小圓點當導覽／頁籤
-function matrixScrollTo(key) {
-  const el = document.getElementById('matrixQuad-' + key);
-  if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
-}
-function _matrixUpdateActiveTab() {
-  const grid = document.getElementById('matrixGrid');
-  if (!grid) return;
-  const gridRect = grid.getBoundingClientRect();
-  const centerX = gridRect.left + gridRect.width / 2;
-  let closestKey = null, closestDist = Infinity;
-  MATRIX_QUADS.forEach(q => {
-    const el = document.getElementById('matrixQuad-' + q.key);
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const dist = Math.abs((r.left + r.width / 2) - centerX);
-    if (dist < closestDist) { closestDist = dist; closestKey = q.key; }
-  });
-  document.querySelectorAll('#matrixTabs .matrix-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.quad === closestKey);
-  });
-}
-let _matrixScrollListenerAttached = false;
-function _matrixAttachScrollListener() {
-  if (_matrixScrollListenerAttached) return;
-  const grid = document.getElementById('matrixGrid');
-  if (!grid) return;
-  let ticking = false;
-  grid.addEventListener('scroll', () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => { _matrixUpdateActiveTab(); ticking = false; });
-  }, { passive: true });
-  _matrixScrollListenerAttached = true;
-}
-
-// 重複任務預設不出現在象限頁（每天都在、混在裡面太擠），要手動切換才顯示；記在 localStorage 讓下次開啟維持選擇
-let _matrixShowRecurring = localStorage.getItem('aeg_matrixShowRecurring') === '1';
-function toggleMatrixRecurring() {
-  _matrixShowRecurring = !_matrixShowRecurring;
-  localStorage.setItem('aeg_matrixShowRecurring', _matrixShowRecurring ? '1' : '0');
-  renderQuadrant();
-}
-function _updateMatrixRecurToggleUI(hiddenCount) {
-  const btn = document.getElementById('matrixRecurToggle');
-  if (btn) btn.classList.toggle('active', _matrixShowRecurring);
-  const hint = document.getElementById('matrixRecurHint');
-  if (hint) hint.textContent = (!_matrixShowRecurring && hiddenCount > 0) ? `（${hiddenCount} 個重複任務已隱藏）` : '';
-}
-
-// 從象限頁跳轉到任務：桌面版 navigateToTask 預期呼叫時已經在生命樹頁，
-// 這裡先切過去，手機版 navigateToTask 內部自己會切到任務頁，不用額外處理。
-function matrixJumpToTask(id) {
-  if (_isDesktopTaskLayout()) showPage('tree', true);
-  navigateToTask(id);
-}
-
-function _matrixCardHtml(t) {
-  const icon = goalIcons[t.goal] || '🎯';
-  return `<div class="matrix-card" data-task-id="${t.id}" title="${escHtml(t.name)}" ondblclick="matrixJumpToTask(${t.id})">
-    <div class="matrix-check" onpointerdown="event.stopPropagation()" ondblclick="event.stopPropagation()" onclick="event.stopPropagation(); toggleTask(${t.id})"></div>
-    <span>${icon}</span><span class="matrix-card-name">${escHtml(t.name)}</span>
-  </div>`;
-}
-
-function renderQuadrant() {
-  _matrixAttachScrollListener();
-  const allActive = (state.tasks || []).filter(t => !t.done);
-  const hiddenRecurringCount = allActive.filter(t => t.recurring).length;
-  const tasks = _matrixShowRecurring ? allActive : allActive.filter(t => !t.recurring);
-  _updateMatrixRecurToggleUI(hiddenRecurringCount);
-
-  const unsorted = tasks.filter(t => !t.quadrant);
-  const unsortedListEl = document.getElementById('matrixUnsortedList');
-  const unsortedLabelEl = document.querySelector('#matrixUnsorted .matrix-tray-label');
-  if (unsortedLabelEl) unsortedLabelEl.textContent = unsorted.length ? `待分類（${unsorted.length}）` : '待分類 — 都分類完了 🎉';
-  if (unsortedListEl) {
-    unsortedListEl.innerHTML = unsorted.length
-      ? unsorted.map(_matrixCardHtml).join('')
-      : '';
-  }
-
-  MATRIX_QUADS.forEach(q => {
-    const list = tasks.filter(t => t.quadrant === q.key);
-    const listEl = document.getElementById('matrixList-' + q.key);
-    const countEl = document.getElementById('matrixCount-' + q.key);
-    if (countEl) countEl.textContent = list.length;
-    if (!listEl) return;
-    listEl.innerHTML = list.length
-      ? list.map(_matrixCardHtml).join('')
-      : `<div class="matrix-empty">拖曳任務到這裡</div>`;
-  });
-
-  document.querySelectorAll('#page-matrix .matrix-card').forEach(el => {
-    _attachMatrixDrag(el, Number(el.dataset.taskId));
-  });
-  setTimeout(_matrixUpdateActiveTab, 0);
-}
-
-function setTaskQuadrant(taskId, quad) {
-  const t = (state.tasks || []).find(x => x.id === taskId);
-  if (!t) return;
-  const changed = t.quadrant !== quad;
-  t.quadrant = quad || undefined;
-  if (!changed) return;
-  renderQuadrant();
-  _markSyncWrite();
-  syncToCloud();
-}
-
-// 用 Pointer Events 實作拖曳（滑鼠／觸控都適用，不需要額外套件）
-function _attachMatrixDrag(el, taskId) {
-  el.addEventListener('pointerdown', (e) => {
-    if (e.button !== undefined && e.button !== 0) return; // 只認滑鼠左鍵／觸控
-    e.preventDefault();
-    const rect = el.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-
-    const ghost = el.cloneNode(true);
-    ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;
-      pointer-events:none;z-index:99999;opacity:0.92;box-shadow:0 8px 20px rgba(0,0,0,0.18);transform:scale(1.04)`;
-    document.body.appendChild(ghost);
-    el.style.opacity = '0.3';
-
-    let currentZone = null;
-
-    function onMove(ev) {
-      ghost.style.left = (ev.clientX - offsetX) + 'px';
-      ghost.style.top = (ev.clientY - offsetY) + 'px';
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
-      const zone = under && under.closest('[data-drop-zone]');
-      if (zone !== currentZone) {
-        if (currentZone) currentZone.classList.remove('matrix-drop-hover');
-        if (zone) zone.classList.add('matrix-drop-hover');
-        currentZone = zone;
-      }
-    }
-    function onUp() {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      ghost.remove();
-      el.style.opacity = '';
-      if (currentZone) {
-        currentZone.classList.remove('matrix-drop-hover');
-        const zoneKey = currentZone.dataset.dropZone;
-        setTaskQuadrant(taskId, zoneKey === 'unsorted' ? null : zoneKey);
-      }
-    }
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp, { once: true });
-  });
-}
-
 function renderRewards() {
   // ★ 頭部碎片顯示（桌面版專用，手機版該元素 display:none，更新無副作用）
   // 放在 wishList 的早退判斷之前，確保不論目前在哪個頁面都會更新數字
@@ -460,10 +312,11 @@ function renderRewards() {
                transition:opacity 0.4s,border-color 0.4s,background 0.4s"
         data-wish-id="${r.id}">
         <div style="display:flex;align-items:center;gap:12px;width:100%">
-          <!-- 分類圖示徽章：加大存在感 -->
-          <div style="flex-shrink:0;width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+          <!-- 分類圖示徽章：加大存在感，點擊可切換下一個圖示 -->
+          <div onclick="event.stopPropagation();cycleWishIcon(${r.id})" title="點擊切換圖示"
+               style="flex-shrink:0;width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
                       font-size:18px;background:${unlocked ? 'rgba(201,162,39,0.14)' : `${accent}1f`};
-                      transition:background 0.4s">${icon}</div>
+                      cursor:pointer;transition:background 0.4s">${icon}</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span style="font-size:14px;color:${unlocked ? 'rgba(201,162,39,0.85)' : 'var(--text)'};font-weight:600;transition:color 0.4s">${escHtml(r.name)}</span>
@@ -1741,7 +1594,6 @@ function showPage(id, skipRender) {
       renderStats();
     }
     if (id === 'wishzone') { renderRewards(); renderLottery(); }
-    if (id === 'matrix') { renderQuadrant(); }
   }
 }
 
@@ -2821,7 +2673,6 @@ function toggleTask(id) {
   renderStats();
   renderTree();
   renderTodayPanel();
-  if (document.getElementById('page-matrix')) renderQuadrant();
   saveStateLocal(); // 確保 wishPoints 等狀態在 cloud sync 前已寫入本地
   // ── Bug fix：先標記忽略視窗，再推送，避免 snapshot 在 _fbSave() await 期間用舊資料覆蓋 ──
   if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
