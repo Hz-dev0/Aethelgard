@@ -3768,20 +3768,43 @@
   justify-content: center;
   padding: 0 5px;
 }
-.matrix-quad-chevron {
-  display: none; /* 桌面版不需要收合，箭頭只在手機版顯示 */
-  font-size: 12px;
-  color: var(--text-faint);
-  transition: transform 0.2s;
+.matrix-tabs {
+  display: none; /* 桌面版不需要，只有手機版滑動切換象限時才用來當導覽點 */
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 10px;
 }
+.matrix-tab {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tab-color);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s;
+}
+.matrix-tab.active { background: var(--tab-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tab-color) 20%, transparent); }
+
 @media (max-width: 680px) {
-  .matrix-grid { gap: 8px; }
-  .matrix-quad { padding: 8px; min-height: unset; }
-  .matrix-card-name { max-width: 110px; }
-  .matrix-quad-label { cursor: pointer; }
-  .matrix-quad-chevron { display: inline-block; }
-  .matrix-quad.expanded .matrix-quad-chevron { transform: rotate(180deg); }
-  /* 預設收合：只留標題列，清單隱藏，展開後才顯示 */
-  .matrix-quad-list { display: none; margin-top: 0; }
-  .matrix-quad.expanded .matrix-quad-list { display: flex; margin-top: 8px; }
+  .matrix-tabs { display: flex; }
+  .matrix-card-name { max-width: 200px; }
+  /* 手機版：象限改成左右滑動切換，一次只看一個象限，滿版顯示不再擁擠 */
+  .matrix-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+    scrollbar-width: none;
+    margin: 0 -20px;
+    padding: 0 20px;
+  }
+  .matrix-grid::-webkit-scrollbar { display: none; }
+  .matrix-quad {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    min-height: unset;
+  }
 }
+

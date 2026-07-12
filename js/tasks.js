@@ -239,12 +239,40 @@ const MATRIX_QUADS = [
   { key: 'ninu', label: '不重要＋不緊急', sub: '之後再說' },
 ];
 
-// 手機版預設收合每個象限，只看數量，點標題才展開清單（桌面版 CSS 會忽略這個狀態，永遠展開）
-let _matrixExpanded = { iu: false, inu: false, niu: false, ninu: false };
-function toggleMatrixQuad(key) {
-  _matrixExpanded[key] = !_matrixExpanded[key];
+// 手機版：象限改成左右滑動切換，一次一個象限滿版顯示；最上面用象限色的小圓點當導覽／頁籤
+function matrixScrollTo(key) {
   const el = document.getElementById('matrixQuad-' + key);
-  if (el) el.classList.toggle('expanded', _matrixExpanded[key]);
+  if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+}
+function _matrixUpdateActiveTab() {
+  const grid = document.getElementById('matrixGrid');
+  if (!grid) return;
+  const gridRect = grid.getBoundingClientRect();
+  const centerX = gridRect.left + gridRect.width / 2;
+  let closestKey = null, closestDist = Infinity;
+  MATRIX_QUADS.forEach(q => {
+    const el = document.getElementById('matrixQuad-' + q.key);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const dist = Math.abs((r.left + r.width / 2) - centerX);
+    if (dist < closestDist) { closestDist = dist; closestKey = q.key; }
+  });
+  document.querySelectorAll('#matrixTabs .matrix-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.quad === closestKey);
+  });
+}
+let _matrixScrollListenerAttached = false;
+function _matrixAttachScrollListener() {
+  if (_matrixScrollListenerAttached) return;
+  const grid = document.getElementById('matrixGrid');
+  if (!grid) return;
+  let ticking = false;
+  grid.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { _matrixUpdateActiveTab(); ticking = false; });
+  }, { passive: true });
+  _matrixScrollListenerAttached = true;
 }
 
 // 重複任務預設不出現在象限頁（每天都在、混在裡面太擠），要手動切換才顯示；記在 localStorage 讓下次開啟維持選擇
@@ -277,6 +305,7 @@ function _matrixCardHtml(t) {
 }
 
 function renderQuadrant() {
+  _matrixAttachScrollListener();
   const allActive = (state.tasks || []).filter(t => !t.done);
   const hiddenRecurringCount = allActive.filter(t => t.recurring).length;
   const tasks = _matrixShowRecurring ? allActive : allActive.filter(t => !t.recurring);
@@ -296,9 +325,7 @@ function renderQuadrant() {
     const list = tasks.filter(t => t.quadrant === q.key);
     const listEl = document.getElementById('matrixList-' + q.key);
     const countEl = document.getElementById('matrixCount-' + q.key);
-    const quadEl = document.getElementById('matrixQuad-' + q.key);
     if (countEl) countEl.textContent = list.length;
-    if (quadEl) quadEl.classList.toggle('expanded', _matrixExpanded[q.key]);
     if (!listEl) return;
     listEl.innerHTML = list.length
       ? list.map(_matrixCardHtml).join('')
@@ -308,6 +335,7 @@ function renderQuadrant() {
   document.querySelectorAll('#page-matrix .matrix-card').forEach(el => {
     _attachMatrixDrag(el, Number(el.dataset.taskId));
   });
+  setTimeout(_matrixUpdateActiveTab, 0);
 }
 
 function setTaskQuadrant(taskId, quad) {
