@@ -1203,6 +1203,29 @@ async function init() {
 
   // ── 歷史封存：將一年前的 doneHistory 封存到獨立的 localStorage key ──
   archiveOldHistory();
+
+  // ★ Owner 專用：若這次重整是「離開回來後自動重整」保留下來的畫面狀態，
+  //   還原回重整前停留的那一頁（筆記頁的話連標籤/頁碼一起還原）。
+  //   訪客模式不還原，維持原本固定回到生命樹頁的行為（見 notes.js visibilitychange）。
+  if (window._fbIsOwner === true) {
+    try {
+      const _raw = sessionStorage.getItem('aethelgard_reload_restore');
+      if (_raw) {
+        sessionStorage.removeItem('aethelgard_reload_restore');
+        const _restoreData = JSON.parse(_raw);
+        if (_restoreData && _restoreData.page) {
+          if (_restoreData.page === 'notes' && typeof notesFolderData !== 'undefined'
+              && typeof _restoreData.notesTab === 'number' && notesFolderData[_restoreData.notesTab]) {
+            notesTabIndex = _restoreData.notesTab;
+            if (typeof _restoreData.notesPage === 'number') {
+              notesFolderData[notesTabIndex].currentPage = _restoreData.notesPage;
+            }
+          }
+          if (typeof showPage === 'function') showPage(_restoreData.page);
+        }
+      }
+    } catch(e) {}
+  }
 }
 
 // ── Mood Buttons ──

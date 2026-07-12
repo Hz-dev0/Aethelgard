@@ -1433,6 +1433,23 @@ document.addEventListener('visibilitychange', () => {
     // 15 秒是「快速切出去看一下又回來」跟「真的放到背景一陣子」的分界，可依實際使用調整。
     const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
     if (_hiddenDuration < 15000) return;
+    // ★ 僅 Owner 登入時：重整前先記住目前停留的畫面（筆記頁另外記標籤/頁碼），
+    //   重整後由 tasks.js 的 init() 結尾讀回並還原，避免每次都被丟回生命樹頁。
+    //   訪客模式不做這件事，維持原本固定回到生命樹頁的行為。
+    if (window._fbIsOwner === true) {
+      try {
+        const _activePage = document.querySelector('.page.active');
+        const _pageId = _activePage ? _activePage.id.replace(/^page-/, '') : null;
+        if (_pageId) {
+          const _restoreData = { page: _pageId };
+          if (_pageId === 'notes' && Array.isArray(notesFolderData) && notesFolderData[notesTabIndex]) {
+            _restoreData.notesTab = notesTabIndex;
+            _restoreData.notesPage = notesFolderData[notesTabIndex].currentPage ?? 0;
+          }
+          sessionStorage.setItem('aethelgard_reload_restore', JSON.stringify(_restoreData));
+        }
+      } catch(e) {}
+    }
     location.reload();
   }
 });
