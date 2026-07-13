@@ -279,6 +279,7 @@ function _applyDateChange(t, newDate) {
   // ★ Fix：日期變更後呼叫 checkTaskDates，確保設為今天（或已到期）的任務立即排入今日面板
   checkTaskDates();
   renderTasks(); renderStats();
+  if (typeof _renderTreeRightPanel === 'function') _renderTreeRightPanel();
   showToast(newDate ? `📅 日期已更新為 ${newDate}` : '📅 日期已清除');
   syncToCloud();
 }

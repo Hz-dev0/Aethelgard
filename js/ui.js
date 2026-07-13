@@ -1,5 +1,16 @@
 // ── Task Breakdown (拆解流程) ──
 
+// ★ Bug fix：renderTasks() 只會重畫「任務頁」的 #taskList，
+//   但桌面版「生命樹」頁的右欄任務卡片是另一個容器（#treeRightCol，
+//   由 _renderTreeRightPanel() 負責畫）。拆解流程相關操作之前只呼叫
+//   renderTasks()，如果使用者是在生命樹右欄操作，資料其實有變，
+//   畫面卻沒有跟著更新，看起來就像「按了沒反應」。
+//   這裡統一補上 _renderTreeRightPanel()，兩邊容器都刷新。
+function _renderTaskListsEverywhere() {
+  renderTasks();
+  if (typeof _renderTreeRightPanel === 'function') _renderTreeRightPanel();
+}
+
 function openBreakdown(t) {
   if (!t.steps) t.steps = [];
   if (t.steps.length === 0) {
@@ -7,7 +18,7 @@ function openBreakdown(t) {
     syncToCloud();
   }
   t._breakdownOpen = true;
-  renderTasks();
+  _renderTaskListsEverywhere();
   // Scroll to the breakdown panel
   setTimeout(() => {
     const el = document.getElementById('breakdown-' + t.id);
@@ -32,7 +43,7 @@ function addStep(e, id) {
   if (!t) return;
   if (!t.steps) t.steps = [];
   t.steps.push({ name: '新步驟', done: false });
-  renderTasks();
+  _renderTaskListsEverywhere();
   // Focus the new input
   setTimeout(() => {
     const inputs = document.querySelectorAll(`#bsteps-${id} .step-name`);
@@ -54,7 +65,7 @@ function deleteStep(e, id, idx) {
     t._breakdownOpen = false;
     delete t.steps;
   }
-  renderTasks();
+  _renderTaskListsEverywhere();
   syncToCloud();
 }
 
@@ -133,7 +144,7 @@ function stepDrop(e, id, idx) {
   const moved = t.steps.splice(_dragStepIdx, 1)[0];
   t.steps.splice(idx, 0, moved);
   _dragStepIdx = null;
-  renderTasks();
+  _renderTaskListsEverywhere();
   syncToCloud();
 }
 
