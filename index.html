@@ -322,6 +322,11 @@
       </div>
     </div>
 
+    <!-- 最小行動：只在𖦏專注時顯示，給沒力氣時的保底版本 -->
+    <div id="newMinimalActionWrap" style="display:none;margin-bottom:12px">
+      <textarea id="newTaskMinimalAction" rows="2" placeholder="🪫 沒力氣時，至少做這件事…（選填）" style="margin-bottom:0"></textarea>
+    </div>
+
     <div class="modal-actions" style="margin-top:4px">
       <button class="btn-cancel" onclick="closeModal('addModal')">取消</button>
       <button class="btn-confirm" onclick="addTask()">種下這顆種子 🌱</button>
@@ -525,6 +530,11 @@
       <div style="display:flex;gap:8px">
         <input id="editTaskReward" placeholder="完成後可以…（自由填寫）" style="flex:1;margin-bottom:0">
       </div>
+    </div>
+
+    <!-- 最小行動：只在𖦏專注時顯示，給沒力氣時的保底版本 -->
+    <div id="editMinimalActionWrap" style="display:none;margin-bottom:12px">
+      <textarea id="editTaskMinimalAction" rows="2" placeholder="🪫 沒力氣時，至少做這件事…（選填）" style="margin-bottom:0"></textarea>
     </div>
 
     <div class="modal-actions" style="margin-top:4px">

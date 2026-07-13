@@ -41,6 +41,9 @@ function cycleEnergy() {
   // Show/hide reward field
   const wrap = document.getElementById('newRewardWrap');
   if (wrap) wrap.style.display = next.key === 'charge' ? 'block' : 'none';
+  // Show/hide minimal-action field（只在專注任務才需要保底版本）
+  const maWrap = document.getElementById('newMinimalActionWrap');
+  if (maWrap) maWrap.style.display = next.key === 'focus' ? 'block' : 'none';
 }
 
 function _setGoalBtn(key) {
@@ -59,6 +62,8 @@ function _setEnergyBtn(key) {
   if (lbl) lbl.textContent = e.label;
   const wrap = document.getElementById('newRewardWrap');
   if (wrap) wrap.style.display = e.key === 'charge' ? 'block' : 'none';
+  const maWrap = document.getElementById('newMinimalActionWrap');
+  if (maWrap) maWrap.style.display = e.key === 'focus' ? 'block' : 'none';
 }
 function cycleEditGoal() {
   const cur = document.getElementById('editTaskGoal').value;
@@ -77,6 +82,9 @@ function cycleEditEnergy() {
   // Show/hide reward field
   const wrap = document.getElementById('editRewardWrap');
   if (wrap) wrap.style.display = next.key === 'charge' ? 'block' : 'none';
+  // Show/hide minimal-action field
+  const maWrap = document.getElementById('editMinimalActionWrap');
+  if (maWrap) maWrap.style.display = next.key === 'focus' ? 'block' : 'none';
 }
 
 function _setEditGoalBtn(key) {
@@ -95,6 +103,8 @@ function _setEditEnergyBtn(key) {
   if (lbl) lbl.textContent = e.label;
   const wrap = document.getElementById('editRewardWrap');
   if (wrap) wrap.style.display = e.key === 'charge' ? 'block' : 'none';
+  const maWrap = document.getElementById('editMinimalActionWrap');
+  if (maWrap) maWrap.style.display = e.key === 'focus' ? 'block' : 'none';
 }
 
 // ── 目標 / 能量循環切換結束 ─────────────────────────────────

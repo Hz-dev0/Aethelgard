@@ -1668,9 +1668,11 @@ function _renderTreeRightPanel() {
   let activeTasks = state.tasks.filter(t => !t.done && t.goal === state.goalFilter && !_isFutureIntervalTask(t, todayStrFilter));
   let doneTasks   = state.tasks.filter(t =>  t.done && t.goal === state.goalFilter);
   // ★ 套用頂部精力切換器篩選，讓「全/⚡/🍃/𖦏」在生命樹右欄也真的有效果
+  // ★ 例外：切到⚡充電（低精力）時，有填「最小行動」的𖦏專注任務不隱藏——
+  //   改用保底版本露出，而不是整個消失，避免重複任務因為沒力氣而被永遠跳過。
   if (state.energyFilter && state.energyFilter !== 'all') {
-    activeTasks = activeTasks.filter(t => t.energy === state.energyFilter);
-    doneTasks   = doneTasks.filter(t => t.energy === state.energyFilter);
+    activeTasks = activeTasks.filter(t => _matchesEnergyFilter(t, state.energyFilter));
+    doneTasks   = doneTasks.filter(t => _matchesEnergyFilter(t, state.energyFilter));
   }
   const listHtml = _buildTaskListHTML(activeTasks, doneTasks, true);
 
@@ -1806,6 +1808,15 @@ function clearGoalFilter() {
   if (typeof _syncFlatPills === 'function') _syncFlatPills();
   renderTasks();
   renderTree();
+}
+
+// Helper: 任務是否符合目前的精力篩選（charge/easy/focus）。
+// 例外：篩選為 charge（⚡低精力）時，有填「最小行動」的 focus 任務不隱藏，
+// 讓沒力氣的當下還是能看到保底版本，而不是整個消失、隔天堆積。
+function _matchesEnergyFilter(t, filterKey) {
+  if (t.energy === filterKey) return true;
+  if (filterKey === 'charge' && t.energy === 'focus' && t.minimalAction) return true;
+  return false;
 }
 
 // Helper: is this an interval-recurring clone scheduled for a future date?
@@ -2214,6 +2225,7 @@ function taskHTML(t, compact) {
         </div>
         ${t.meaning ? `<div class="task-meaning">${escHtml(t.meaning)}</div>` : ''}
         ${t.note ? `<div class="task-note-preview" style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
+        ${t.minimalAction ? `<div class="task-minimal-action-preview" style="font-size:12px;color:var(--sky);margin-top:4px;padding:4px 8px;background:${state.energyFilter === 'charge' ? 'rgba(110,174,224,0.14)' : 'rgba(110,174,224,0.07)'};border-radius:6px;border-left:2px solid var(--sky);line-height:1.5;${state.energyFilter === 'charge' ? 'font-weight:600' : ''}">🪫 沒力氣時：${escHtml(t.minimalAction)}</div>` : ''}
         ${compact ? '' : tagsHTML}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
@@ -2362,8 +2374,9 @@ function renderTodayPanel() {
   let allToday = [...todayTasks, ...overdueTasks.filter(t => !todayTasks.find(x => x.id === t.id))];
 
   // ★ 套用頂部精力切換器篩選，讓「全/⚡/🍃/𖦏」在生命樹頁的今日任務面板也真的有效果
+  // ★ 例外：低精力（charge）時，有最小行動的專注任務改用保底版本露出，不整個隱藏
   if (state.energyFilter && state.energyFilter !== 'all') {
-    allToday = allToday.filter(t => t.energy === state.energyFilter);
+    allToday = allToday.filter(t => _matchesEnergyFilter(t, state.energyFilter));
   }
 
   // Apply saved order: undone first (by saved order), done sinks to bottom
@@ -2410,6 +2423,11 @@ function renderTodayPanel() {
   const goalIconMap = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' };
   list.innerHTML = allToday.map((t, idx) => {
     const gIcon = goalIconMap[t.goal] || '●';
+    // ★ 低精力模式下，有最小行動的專注任務：顯示保底版本文字，並加上 🪫 標記，
+    //   滑鼠移上去（或手機長按）仍看得到原本的任務全名，不會混淆。
+    const isSoftened = state.energyFilter === 'charge' && t.energy === 'focus' && !!t.minimalAction;
+    const chipDisplayName = isSoftened ? t.minimalAction : t.name;
+    const chipNameTitle = isSoftened ? `原任務：${t.name}（低精力保底版本）` : (t.done ? '已完成 — 雙擊跳轉任務' : '雙擊跳轉到此任務（可拖曳排序）');
     const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;
     const isPreSched = isPreScheduled(t) && !t.done;
     const overdueStyle = isOverdue ? 'border-color:rgba(192,86,90,0.3);background:rgba(192,86,90,0.04);' : '';
@@ -2424,12 +2442,13 @@ function renderTodayPanel() {
       ondragover="${!t.done ? `todayChipDragOver(event,${idx})` : ''}"
       ondrop="${!t.done ? `todayChipDrop(event,${idx})` : ''}"
       ondragend="${!t.done ? 'todayChipDragEnd(event)' : ''}"
-      title="${t.done ? '已完成 — 雙擊跳轉任務' : '雙擊跳轉到此任務（可拖曳排序）'}">
+      title="${chipNameTitle}">
       ${!t.done ? `<div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${stripeColor};border-radius:3px 0 0 3px;opacity:0.85;cursor:pointer;transition:width 0.15s,opacity 0.15s;flex-shrink:0" title="${stripeTitle}" onclick="event.stopPropagation();setTaskStatus(${t.id},'none')" ></div>` : ''}
       <span class="today-chip-drag-handle" onclick="event.stopPropagation()" title="拖曳排序" style="${t.done ? 'visibility:hidden' : ''}">⠿</span>
       <div class="today-chip-check${t.done ? ' checked' : ''}" onclick="event.stopPropagation();toggleTask(${t.id})">${t.done ? '✓' : ''}</div>
       <span class="today-chip-goal">${gIcon}</span>
-      <span class="today-chip-name" style="${isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(t.name)}</span>
+      ${isSoftened ? '<span title="低精力保底版本" style="flex-shrink:0">🪫</span>' : ''}
+      <span class="today-chip-name" style="${isSoftened ? 'color:var(--sky);font-style:italic' : isOverdue ? 'color:var(--rose)' : isPreSched ? 'color:var(--text-dim)' : ''}">${escHtml(chipDisplayName)}</span>
       ${t.taskDate && !t.done && !isOverdue ? (() => {
         const diff = Math.round((new Date(t.taskDate) - new Date(todayStr)) / 86400000);
         if (diff < 0 || diff > 7) return '';
@@ -2970,6 +2989,8 @@ function addTask() {
   const taskDate = document.getElementById('newTaskDate').value || null;
   const rewardInput = document.getElementById('newTaskReward');
   const reward = rewardInput ? rewardInput.value.trim() : '';
+  const minimalActionInput = document.getElementById('newTaskMinimalAction');
+  const minimalAction = minimalActionInput ? minimalActionInput.value.trim() : '';
   // Remove sandbox item if it was picked for reward
   if (reward && window._pendingSandboxRemove && window._pendingSandboxRemove['new'] !== undefined) {
     state.sandbox.splice(window._pendingSandboxRemove['new'], 1);
@@ -2993,7 +3014,8 @@ function addTask() {
     recurring: recurring || false,
     recurMode: recurring ? recurMode : null,
     recurInterval: recurring && recurMode === 'interval' ? recurInterval : 0,
-    taskDate: taskDate || null
+    taskDate: taskDate || null,
+    minimalAction: (energy === 'focus' && minimalAction) ? minimalAction : null
   };
   // If the task date is today, auto-mark as today's task
   // 注意：這裡刻意用 localDateStr()（時鐘日期）而非 effectiveToday，
@@ -3012,6 +3034,7 @@ function addTask() {
   document.getElementById('newTaskName').value = '';
   document.getElementById('newTaskMeaning').value = '';
   document.getElementById('newTaskDate').value = '';
+  if (minimalActionInput) minimalActionInput.value = '';
   _recurState['new'] = 'off';
   _applyRecurUI('new', 'off');
   const rewardField = document.getElementById('newTaskReward');

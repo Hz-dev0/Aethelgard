@@ -221,6 +221,8 @@ function openEditTask(t) {
   }
   const editRewardField = document.getElementById('editTaskReward');
   if (editRewardField) editRewardField.value = t.reward || '';
+  const editMinimalActionField = document.getElementById('editTaskMinimalAction');
+  if (editMinimalActionField) editMinimalActionField.value = t.minimalAction || '';
   document.getElementById('editModal').classList.add('open');
   setTimeout(() => document.getElementById('editTaskName').focus(), 50);
 }
@@ -237,6 +239,9 @@ function saveEdit() {
   const editRewardEl = document.getElementById('editTaskReward');
   const editReward = editRewardEl ? editRewardEl.value.trim() : '';
   t.reward = editReward || null;
+  const editMinimalActionEl = document.getElementById('editTaskMinimalAction');
+  const editMinimalAction = editMinimalActionEl ? editMinimalActionEl.value.trim() : '';
+  t.minimalAction = (t.energy === 'focus' && editMinimalAction) ? editMinimalAction : null;
   if (editReward && window._pendingSandboxRemove && window._pendingSandboxRemove['edit'] !== undefined) {
     state.sandbox.splice(window._pendingSandboxRemove['edit'], 1);
     delete window._pendingSandboxRemove['edit'];
