@@ -1811,11 +1811,11 @@ function clearGoalFilter() {
 }
 
 // Helper: 任務是否符合目前的精力篩選（charge/easy/focus）。
-// 例外：篩選為 charge（⚡低精力）時，有填「最小行動」的 focus 任務不隱藏，
+// 例外：篩選為 charge（⚡低精力）時，有填「最小行動」的重複任務不隱藏，
 // 讓沒力氣的當下還是能看到保底版本，而不是整個消失、隔天堆積。
 function _matchesEnergyFilter(t, filterKey) {
   if (t.energy === filterKey) return true;
-  if (filterKey === 'charge' && t.energy === 'focus' && t.minimalAction) return true;
+  if (filterKey === 'charge' && t.recurring && t.minimalAction) return true;
   return false;
 }
 
@@ -2425,7 +2425,7 @@ function renderTodayPanel() {
     const gIcon = goalIconMap[t.goal] || '●';
     // ★ 低精力模式下，有最小行動的專注任務：顯示保底版本文字，並加上 🪫 標記，
     //   滑鼠移上去（或手機長按）仍看得到原本的任務全名，不會混淆。
-    const isSoftened = state.energyFilter === 'charge' && t.energy === 'focus' && !!t.minimalAction;
+    const isSoftened = state.energyFilter === 'charge' && t.recurring && !!t.minimalAction && t.energy !== 'charge';
     const chipDisplayName = isSoftened ? t.minimalAction : t.name;
     const chipNameTitle = isSoftened ? `原任務：${t.name}（低精力保底版本）` : (t.done ? '已完成 — 雙擊跳轉任務' : '雙擊跳轉到此任務（可拖曳排序）');
     const isOverdue = t.scheduledFor < effectiveTodayStr && !isPreScheduled(t) && !t.done;
@@ -2889,6 +2889,10 @@ function _applyRecurUI(prefix, state) {
   const wrap = document.getElementById(prefix + 'IntervalWrap');
   const hiddenRecur = document.getElementById(prefix + 'TaskRecurring');
   const hiddenMode = document.getElementById(prefix + 'RecurModeHidden');
+  // 最小行動欄位：只在「重複任務」時顯示（不論能量等級），
+  // 因為保底版本主要是為了讓重複任務不會因為沒力氣而被永遠跳過。
+  const maWrap = document.getElementById(prefix + 'MinimalActionWrap');
+  if (maWrap) maWrap.style.display = state === 'off' ? 'none' : 'block';
   if (state === 'off') {
     if (btn) { btn.style.borderColor = ''; btn.style.color = ''; }
     if (label) label.textContent = '不重複';
@@ -3015,7 +3019,7 @@ function addTask() {
     recurMode: recurring ? recurMode : null,
     recurInterval: recurring && recurMode === 'interval' ? recurInterval : 0,
     taskDate: taskDate || null,
-    minimalAction: (energy === 'focus' && minimalAction) ? minimalAction : null
+    minimalAction: (recurring && minimalAction) ? minimalAction : null
   };
   // If the task date is today, auto-mark as today's task
   // 注意：這裡刻意用 localDateStr()（時鐘日期）而非 effectiveToday，

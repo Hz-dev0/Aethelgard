@@ -241,7 +241,6 @@ function saveEdit() {
   t.reward = editReward || null;
   const editMinimalActionEl = document.getElementById('editTaskMinimalAction');
   const editMinimalAction = editMinimalActionEl ? editMinimalActionEl.value.trim() : '';
-  t.minimalAction = (t.energy === 'focus' && editMinimalAction) ? editMinimalAction : null;
   if (editReward && window._pendingSandboxRemove && window._pendingSandboxRemove['edit'] !== undefined) {
     state.sandbox.splice(window._pendingSandboxRemove['edit'], 1);
     delete window._pendingSandboxRemove['edit'];
@@ -264,6 +263,7 @@ function saveEdit() {
   }
   const isRecurring = document.getElementById('editTaskRecurring').value === 'true';
   t.recurring = isRecurring;
+  t.minimalAction = (isRecurring && editMinimalAction) ? editMinimalAction : null;
   if (isRecurring) {
     const modeHidden = document.getElementById('editRecurModeHidden');
     const mode = modeHidden ? modeHidden.value : 'daily';
