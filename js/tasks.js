@@ -2225,7 +2225,7 @@ function taskHTML(t, compact) {
         </div>
         ${t.meaning ? `<div class="task-meaning">${escHtml(t.meaning)}</div>` : ''}
         ${t.note ? `<div class="task-note-preview" style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
-        ${t.minimalAction ? `<div class="task-minimal-action-preview" style="font-size:12px;color:var(--sky);margin-top:4px;padding:4px 8px;background:${state.energyFilter === 'charge' ? 'rgba(110,174,224,0.14)' : 'rgba(110,174,224,0.07)'};border-radius:6px;border-left:2px solid var(--sky);line-height:1.5;${state.energyFilter === 'charge' ? 'font-weight:600' : ''}">🪫 沒力氣時：${escHtml(t.minimalAction)}</div>` : ''}
+        ${t.minimalAction ? `<div class="task-minimal-action-preview" style="font-size:12px;color:var(--sky);margin-top:4px;padding:4px 8px;background:${state.energyFilter === 'charge' ? 'rgba(110,174,224,0.14)' : 'rgba(110,174,224,0.07)'};border-radius:6px;border-left:2px solid var(--sky);line-height:1.5;${state.energyFilter === 'charge' ? 'font-weight:600' : ''}">🪫 ${escHtml(t.minimalAction)}</div>` : ''}
         ${compact ? '' : tagsHTML}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
