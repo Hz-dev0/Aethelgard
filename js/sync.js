@@ -290,6 +290,14 @@ async function loadFromCloud() {
       })();
       const localHasTasks = localBackup && Array.isArray(localBackup.tasks) && localBackup.tasks.length > 0;
       const isOwnUid = !window._fbAuthUid || window._fbAuthUid === window._fbUid;
+      // ★ Bug fix：分配願望碎片／完成任務拿到碎片後，syncToCloud() 有 debounce（手機 5 秒／
+      //   PC 30 秒）才會真的推上雲端。若使用者在這段空窗期重新整理頁面，雲端文件裡的 rewards／
+      //   wishPoints 還是舊的，這裡原本會直接無條件用雲端資料覆蓋，導致「分配完重整又變回原樣」。
+      //   解法：比較本機快照的 savedAt 跟雲端文件的 updatedAt，本機較新時（代表這台裝置有
+      //   還沒推上雲端的變動）優先採用本機的 rewards／wishPoints，避免被舊的雲端資料蓋掉。
+      const cloudUpdatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
+      const localSavedAt = localBackup && typeof localBackup.savedAt === 'number' ? localBackup.savedAt : 0;
+      const localIsNewer = isOwnUid && localSavedAt > cloudUpdatedAt;
       if (!hasCloudData && localHasTasks && isOwnUid) {
         console.warn('Firebase 無資料但本地有，保留本地並重新推送');
         state.tasks        = localBackup.tasks;
@@ -322,12 +330,14 @@ async function loadFromCloud() {
       }
       state.sandbox = data.sandbox || [];
       state.done    = data.done    || 0;
-      state.rewards = data.rewards || [];
+      state.rewards = (localIsNewer && Array.isArray(localBackup.rewards)) ? localBackup.rewards : (data.rewards || []);
       state.customQuotes = data.customQuotes || [];
       state.energy  = data.energy  || 0;
       state.doneHistory = data.doneHistory || [];
       state.todayOrder  = data.todayOrder  || [];
-      state.wishPoints  = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
+      state.wishPoints  = (localIsNewer && typeof localBackup.wishPoints === 'number')
+        ? localBackup.wishPoints
+        : (typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0));
       state.morningDialogShownDate = data.morningDialogShownDate || state.morningDialogShownDate || null;
       state.routineResetDate = data.routineResetDate || state.routineResetDate || null;
       // ── 例行任務 merge
@@ -411,8 +421,21 @@ async function loadFromCloud() {
         }
       }
       // ── Restore lotteryState
+      // ★ Bug fix：翻牌／十連抽也是先寫本地（saveLottery）、debounce 過後才真的推上雲端，
+      //   跟 rewards／wishPoints 是同一種競態：這段空窗期重新整理，舊的雲端 lotteryState
+      //   會把剛才的 todayFlipped／cards／tickets 蓋回去，等於同一批翻牌機會可以再翻一次。
+      //   同樣用 savedAt 比對，本機較新時保留本機的 lotteryState，不被舊雲端資料覆蓋。
       if (data.lotteryState && typeof data.lotteryState === 'object') {
-        lotteryState = { ...lotteryState, ...data.lotteryState };
+        const localLottery = (function() {
+          try { return JSON.parse(localStorage.getItem('aethelgard_lottery') || 'null'); } catch(e) { return null; }
+        })();
+        const localLotterySavedAt = localLottery && typeof localLottery.savedAt === 'number' ? localLottery.savedAt : 0;
+        const cloudLotteryUpdatedAt = typeof data.lotteryState.savedAt === 'number' ? data.lotteryState.savedAt : cloudUpdatedAt;
+        if (isOwnUid && localLottery && localLotterySavedAt > cloudLotteryUpdatedAt) {
+          lotteryState = { ...lotteryState, ...localLottery };
+        } else {
+          lotteryState = { ...lotteryState, ...data.lotteryState };
+        }
         localStorage.setItem('aethelgard_lottery', JSON.stringify(lotteryState));
       }
       // ── 還原設定
@@ -851,7 +874,8 @@ function _buildSyncPayload() {
     routines: state.routines || [],
     routineResetDate: state.routineResetDate || null,
     routinesDeletedLog: state.routinesDeletedLog || [],
-    settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' }
+    settings: { resetTime: localStorage.getItem('aethelgard_reset_time') || '04:00', neglectDays: localStorage.getItem('aethelgard_neglect_days') || '7' },
+    updatedAt: Date.now()
   };
   // 帶上 notes
   const _notesPayload = (function(){

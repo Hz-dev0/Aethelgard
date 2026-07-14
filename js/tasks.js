@@ -95,8 +95,9 @@ const goalIcons = { 技能:'🚩', 自我:'💎', 日常:'🧭', 任意:'🌈' }
 
 // ★ 願望圖示：分類明確的（技能/自我/日常）維持原本有意義的圖示；
 // 「任意分類」以前固定用 🌈，多數願望其實都是這個分類，導致清單裡一片彩虹很單調。
-// 改成：新增願望時可自選圖示（存在 r.icon），沒選就用 id 做穩定 hash 從圖示池挑一個，
-// 同一個願望每次重新渲染都拿到一樣的圖示，但不同願望彼此不同、也不會全部長一樣。
+// 改成：預設用 id 做穩定 hash 從圖示池挑一個（同一個願望每次重新渲染都拿到一樣的
+// 圖示，但不同願望彼此不同、也不會全部長一樣），使用者事後可在清單裡點擊圖示徽章
+// 循環切換（存進 r.icon，之後 getWishIcon 就會優先採用）。
 const WISH_ICON_POOL = ['❤️','💕','💖'];
 function _hashToIndex(str, mod) {
   let h = 0;
@@ -107,19 +108,6 @@ function getWishIcon(r) {
   if (r.icon) return r.icon;
   if (r.goal && r.goal !== '任意') return goalIcons[r.goal] || '🎯';
   return WISH_ICON_POOL[_hashToIndex(r.id, WISH_ICON_POOL.length)];
-}
-
-// ── 新增願望 Modal：單一方框，點一下換下一個圖示 ──
-let _newWishIcon = null;
-function renderWishIconPicker() {
-  const btn = document.getElementById('wishIconPicker');
-  if (!btn) return;
-  btn.textContent = _newWishIcon || WISH_ICON_POOL[0];
-}
-function cycleNewWishIcon() {
-  const idx = WISH_ICON_POOL.indexOf(_newWishIcon);
-  _newWishIcon = WISH_ICON_POOL[(idx + 1) % WISH_ICON_POOL.length];
-  renderWishIconPicker();
 }
 
 // ── 既有願望項目：點擊左側圖示徽章切換下一個圖示 ──
@@ -576,8 +564,6 @@ function removeCustomQuote(i) {
 function openAddWish() {
   document.getElementById('newRewardName').value = '';
   document.getElementById('newRewardCount').value = '3';
-  _newWishIcon = WISH_ICON_POOL[0]; // 預設固定第一個，點方框才換下一個
-  renderWishIconPicker();
   document.getElementById('addRewardModal').classList.add('open');
   setTimeout(() => document.getElementById('newRewardName').focus(), 50);
 }
@@ -592,7 +578,7 @@ function addReward() {
   if (!state.rewards) state.rewards = [];
   const startCount = getGoalCount(goal);
   const id = Date.now();
-  state.rewards.push({ id, name, goal, count, startCount, claimed: false, allocatedPoints: 0, icon: _newWishIcon || WISH_ICON_POOL[_hashToIndex(id, WISH_ICON_POOL.length)] });
+  state.rewards.push({ id, name, goal, count, startCount, claimed: false, allocatedPoints: 0 });
   closeModal('addRewardModal');
   renderRewards();
   showToast('🌊 願望已投入許願池');

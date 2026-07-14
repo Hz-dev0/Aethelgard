@@ -57,6 +57,7 @@ function initLottery() {
 }
 
 function saveLottery() {
+  lotteryState.savedAt = Date.now();
   try { localStorage.setItem('aethelgard_lottery', JSON.stringify(lotteryState)); } catch(e) {}
 }
 
