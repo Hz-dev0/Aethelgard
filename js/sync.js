@@ -594,8 +594,10 @@ function syncNotesToCloud() {
 
     try {
       const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
-      const { updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      await updateDoc(ref, { notes: notesPayload });
+      // ★ 改用已經載入好的 setDoc（merge:true），效果等同 updateDoc 但不用再動態
+      //   import 一次 firebase-firestore.js —— 無痕模式下這個 import 要重新走網路，
+      //   常常還沒抓完頁面就被 reload/關閉打斷，是筆記遺失的主因之一。
+      await window._fbSetDoc(ref, { notes: notesPayload }, { merge: true });
       _notesDirty = false;
       _dbg('[notes] 直接寫入 Firestore 成功');
       const dot = document.getElementById('syncDot');
@@ -614,109 +616,83 @@ function syncNotesToCloud() {
   }, /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
 }
 
-// ★ 頁面即將隱藏/關閉時，強制立即推送筆記，不等 debounce timer
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    // ★ 緊急推送：繞過 isSyncing 鎖，直接推送最新狀態（防止切 tab/重整時資料遺失）
-    if (typeof _emergencySave === 'function') {
-      if (typeof _syncDebounceTimer !== 'undefined' && _syncDebounceTimer !== null) {
-        clearTimeout(_syncDebounceTimer);
-        _syncDebounceTimer = null;
-      }
-      _emergencySave();
+// ── 取得目前筆記的同步 payload（供緊急推送共用）──
+function _getNotesPayloadForEmergency() {
+  try {
+    const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
+    if (p) return p;
+  } catch(e) {}
+  try {
+    const raw = localStorage.getItem('aethelgard_notes_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
     }
+  } catch(e) {}
+  return null;
+}
+
+// ── 緊急推送筆記（頁面即將隱藏/關閉時共用）──
+// ★ 用已載入的 setDoc(merge:true)，不再動態 import firebase-firestore.js。
+//   動態 import 是無痕模式下筆記常常遺失的主因之一：無痕分頁沒有模組快取，
+//   這個 import 要重新走一次網路，常常還沒抓完就被瀏覽器判定頁面已卸載而中斷，
+//   後面的 setDoc 根本沒機會送出。改用已經在記憶體裡的 setDoc，少一次網路來回。
+function _pushNotesEmergency(label) {
+  if (!_notesDirty) return;
+  if (!window._fbUid || !window._fbDb) return;
+  clearTimeout(_notesSyncTimer);
+  const notesPayload = _getNotesPayloadForEmergency();
+  if (!notesPayload) return;
+  try {
+    const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
+    window._fbSetDoc(ref, { notes: notesPayload }, { merge: true })
+      .then(() => { _notesDirty = false; _dbg('[notes] ' + label + ' 緊急推送成功'); })
+      .catch(e => console.warn('[notes] ' + label + ' 推送失敗', e));
+  } catch(e) {
+    console.warn('[notes] ' + label + ' 例外', e);
   }
-  if (document.visibilityState === 'hidden' && _notesDirty) {
-    clearTimeout(_notesSyncTimer);
-    const notesPayload = (function() {
-      try {
-        const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
-        if (p) return p;
-      } catch(e) {}
-      try {
-        const raw = localStorage.getItem('aethelgard_notes_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
-        }
-      } catch(e) {}
-      return null;
-    })();
-    if (notesPayload && window._fbUid && window._fbDb) {
-      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
-        .then(({ updateDoc }) => {
-          const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
-          return updateDoc(ref, { notes: notesPayload });
-        })
-        .then(() => { _notesDirty = false; _dbg('[notes] visibilitychange 緊急推送成功'); })
-        .catch(e => console.warn('[notes] visibilitychange 推送失敗', e));
+}
+
+// ── 緊急推送任務/獎勵等其他狀態（頁面即將隱藏/關閉時共用）──
+function _pushStateEmergency() {
+  if (window._fbUid && window._fbDb && typeof state !== 'undefined' && state._initDone
+      && typeof _emergencySave === 'function') {
+    if (typeof _syncDebounceTimer !== 'undefined' && _syncDebounceTimer !== null) {
+      clearTimeout(_syncDebounceTimer);
+      _syncDebounceTimer = null;
     }
+    _emergencySave();
   }
-});
+}
 
 // ★★★ 重要：無痕模式防資料遺失
 // 問題背景：
 //   - 無痕模式下 localStorage 在分頁關閉後全部清空
-//   - visibilitychange 在某些瀏覽器（手機 Chrome、Firefox）關閉分頁時不一定觸發
-//   - 原本沒有 beforeunload，導致筆記在關閉無痕分頁前來不及推送到 Firebase
+//   - visibilitychange / beforeunload 在某些瀏覽器（手機 Chrome、Safari、Firefox）
+//     關閉分頁或切到背景時不一定會觸發，或觸發了也不保證裡面的非同步請求跑得完
+//   - 原本的 updateDoc 還要動態 import 模組檔案，又多一層不保證完成的網路請求
 //
-// 解法：
-//   1. beforeunload → 觸發同步 sendBeacon 推送（最後防線，瀏覽器保證在關頁前執行）
-//   2. 每次筆記修改後 1 秒內已直接寫 Firestore（syncNotesToCloud 的 debounce）
-//   3. visibilitychange hidden → 緊急推送（切 tab、鎖螢幕時觸發）
-//   → 三層保護，確保無痕模式編輯的筆記一定推上雲端
-//
-// 注意：beforeunload 的 async/await 不保證執行完畢，
-// 但只要 Firebase SDK 已載入且 connection 還活著，同步觸發 updateDoc 仍可送出
-// 這是第三層保護，前兩層（500ms debounce + visibilitychange）已涵蓋大部分情況
+// 解法（四層，任何一層命中都能保住資料）：
+//   1. 每次修改後幾秒內已直接寫 Firestore（syncNotesToCloud 的 debounce，任務是立即寫）
+//   2. visibilitychange → hidden 時緊急推送（切 tab、鎖螢幕時觸發）
+//   3. beforeunload → 緊急推送（多數桌面瀏覽器會保證關頁前執行到這裡）
+//   4. pagehide → 緊急推送（手機 Safari / Chrome 對 beforeunload 支援不穩定，
+//      但 pagehide 幾乎都會觸發，包含被放進 bfcache 的情況）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    _pushStateEmergency();
+    _pushNotesEmergency('visibilitychange');
+  }
+});
+
 window.addEventListener('beforeunload', () => {
-  // ★ 緊急保底：若有待同步的任務狀態變動（debounce 還沒送出），強制同步
-  if (window._fbUid && window._fbDb && typeof state !== 'undefined' && state._initDone) {
-    if (_syncDebounceTimer !== null) {
-      clearTimeout(_syncDebounceTimer);
-      _syncDebounceTimer = null;
-    }
-    // ★ 用 _emergencySave 繞過 isSyncing 鎖，確保頁面關閉前一定推送
-    _emergencySave();
-  }
+  _pushStateEmergency();
+  _pushNotesEmergency('beforeunload');
+});
 
-  // 若筆記沒有變動或 debounce 已推送完畢，不做任何事
-  if (!_notesDirty) return;
-  if (!window._fbUid || !window._fbDb) return;
-
-  // 立刻清掉 debounce timer，改由這裡接手
-  clearTimeout(_notesSyncTimer);
-
-  const notesPayload = (function() {
-    try {
-      const p = window._notesGetSyncPayload && window._notesGetSyncPayload();
-      if (p) return p;
-    } catch(e) {}
-    try {
-      const raw = localStorage.getItem('aethelgard_notes_v1');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) return parsed;
-      }
-    } catch(e) {}
-    return null;
-  })();
-
-  if (!notesPayload) return;
-
-  // 用已載入的 Firebase SDK 直接推送，不用 sendBeacon（sendBeacon 沒有 auth token 會 401）
-  // beforeunload 裡 async 不保證，但 Firestore SDK 內部用 fetch keepalive，有機會送出
-  try {
-    import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
-      .then(({ updateDoc }) => {
-        const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
-        return updateDoc(ref, { notes: notesPayload });
-      })
-      .then(() => { _notesDirty = false; _dbg('[notes] beforeunload 推送成功'); })
-      .catch(e => console.warn('[notes] beforeunload 推送失敗', e));
-  } catch(e) {
-    console.warn('[notes] beforeunload 例外', e);
-  }
+window.addEventListener('pagehide', () => {
+  _pushStateEmergency();
+  _pushNotesEmergency('pagehide');
 });
 
 // 雲端只同步當年資料，舊資料保留在本地（不會消失）

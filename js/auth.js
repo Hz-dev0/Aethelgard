@@ -1,3 +1,35 @@
+// ── 訪客 session 復原（修正無痕模式下「登入後幾秒被自動登出」的問題）──
+// 背景：訪客旗標 window._fbGuestSessionActive 原本只存在記憶體裡，一旦頁面被
+// reload（例如 Service Worker 版本更新、瀏覽器背景回收分頁），記憶體就會重置，
+// 但 Firebase 匿名登入本身在同一個無痕分頁 session 內是會存活的 —— 於是
+// onAuthStateChanged 重新觸發時看到「匿名登入 + 沒有訪客旗標」，就會誤判成
+// 未驗證的訪客，把人踢回鎖屏、清空畫面。
+// 這裡在任何 Firebase callback 有機會執行之前，同步把還沒過期的訪客通行證
+// 復原回記憶體，讓後面的判斷把這次 reload 視為「同一個訪客 session 延續」。
+window._guestSessionRestoredPending = false;
+(function _restoreGuestSessionEarly() {
+  try {
+    const raw = sessionStorage.getItem('aethelgard_guest_session');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.ownerUid || !saved.expiresAt) return;
+    if (Date.now() >= saved.expiresAt) {
+      // 通行證已過期，清掉殘留資料，維持原本「回到鎖屏」的行為
+      try { sessionStorage.removeItem('aethelgard_guest_session'); } catch(e2) {}
+      try { sessionStorage.removeItem('aethelgard_guest_uid'); } catch(e2) {}
+      return;
+    }
+    window._fbGuestSessionActive = true;
+    window._fbIsOwner = true;
+    window._fbUid = saved.ownerUid;
+    window._fbOwnerUid = saved.ownerUid;
+    // 記下「這是復原、不是全新登入」，等 onAuthStateChanged 給回同一個匿名 UID 後
+    // 需要重新掛上 guest_access 的 onSnapshot 監聽 + 到期計時器（舊的監聽已隨 reload 消失）
+    window._guestSessionRestoredPending = true;
+    window._guestSessionRestoredExpiresAt = saved.expiresAt;
+  } catch(e) {}
+})();
+
 // ── Firebase 就緒回呼（由 module script 呼叫）──
 let _firebaseReadyFired = false;
 window._onFirebaseReady = async function() {
@@ -31,9 +63,23 @@ window._onFirebaseReady = async function() {
     return;
   }
 
-  // ── 情況 2：訪客 session 登入成功（_fbGuestSessionActive 已由 submitGuestToken 設好）──
+  // ── 情況 2：訪客 session 登入成功（_fbGuestSessionActive 已由 submitGuestToken 設好，
+  //           或由上面的 _restoreGuestSessionEarly() 在 reload 後復原）──
   if (window._fbGuestSessionActive && window._fbUid) {
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    // ★ 若這是 reload 後復原的訪客 session，記憶體中的 guest_access 監聽器/計時器
+    //   已經隨 reload 消失，這裡要用同一個匿名 UID 重新掛上，才能繼續即時偵測
+    //   Owner 撤銷通行證，以及到期後自動鎖頁。
+    if (window._guestSessionRestoredPending) {
+      window._guestSessionRestoredPending = false;
+      const _restoredGuestUid = window._fbAuthUid || '';
+      const _restoredOwnerUid = window._fbOwnerUid || '';
+      const _restoredExpiresAt = window._guestSessionRestoredExpiresAt || 0;
+      if (_restoredGuestUid && _restoredOwnerUid && _restoredExpiresAt > Date.now()
+          && typeof _startGuestAccessWatcher === 'function') {
+        _startGuestAccessWatcher(_restoredGuestUid, _restoredOwnerUid, _restoredExpiresAt, true);
+      }
+    }
     _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') {
       window._onFirebaseReadyCallback();
@@ -210,6 +256,9 @@ async function ownerSignOut() {
     await window._fbOwnerSignOut();
     localStorage.removeItem('aethelgard_fb_uid');
     localStorage.removeItem('aethelgard_fb_owner_uid');
+    try { sessionStorage.removeItem('aethelgard_guest_uid'); } catch(e2) {}
+    try { sessionStorage.removeItem('aethelgard_guest_session'); } catch(e2) {}
+    window._guestSessionRestoredPending = false;
     window._fbUid = '';
     window._fbAuthUid = '';
     window._fbIsOwner = false;
@@ -327,6 +376,8 @@ function _forceGuestLockout() {
 
   // 清除 sessionStorage（無痕模式）
   try { sessionStorage.removeItem('aethelgard_guest_uid'); } catch(e) {}
+  try { sessionStorage.removeItem('aethelgard_guest_session'); } catch(e) {}
+  window._guestSessionRestoredPending = false;
   window._fbUid = '';
   window._fbAuthUid = '';
   window._fbOwnerUid = '';
@@ -617,6 +668,8 @@ async function submitGuestToken() {
     window._fbUid = ownerUid;
     window._fbOwnerUid = ownerUid;
     try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
+    // 這次是全新登入，不是 reload 復原，避免下面誤觸復原邏輯
+    window._guestSessionRestoredPending = false;
 
     const guestUser = await window._fbGuestSignInAnon();
     const guestUid = guestUser.uid;
@@ -634,6 +687,11 @@ async function submitGuestToken() {
     // ── 建立有時效的訪客通行證 ──
     const TOKEN_DURATION = data.expiresAt - Date.now();
     const passExpiresAt = Date.now() + TOKEN_DURATION;
+    // ★ 存下完整訪客 session（含到期時間），供頁面被 reload 時復原用
+    //   （見檔案開頭的 _restoreGuestSessionEarly）
+    try {
+      sessionStorage.setItem('aethelgard_guest_session', JSON.stringify({ ownerUid, expiresAt: passExpiresAt }));
+    } catch(e) {}
     let _guestAccessWritten = false;
     try {
       await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
