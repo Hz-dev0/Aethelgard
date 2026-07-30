@@ -1,4 +1,4 @@
-const _swBuild = '202607171910'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
+const _swBuild = '202607301058'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
