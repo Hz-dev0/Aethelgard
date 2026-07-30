@@ -160,14 +160,28 @@ function _startRealtimeListener(uid) {
     const dot = document.getElementById('syncDot');
     if (dot) dot.className = 'sync-dot syncing';
 
+    // ★ Bug fix：即時監聽收到的推送不保證比本機新——如果另一個裝置留著舊分頁在
+    //   背景，之後才被喚醒推了一次舊資料上去，這裡若無條件套用，會把「剛完成的
+    //   任務」這種本機較新的變動蓋回舊狀態（症狀：任務從清單消失，但因為寫入
+    //   順序關係 doneHistory 可能還留著紀錄，兩邊對不起來）。
+    //   比照 loadFromCloud 的作法：用本機快照 savedAt 跟遠端 updatedAt 比較，
+    //   本機較新時，tasks／doneHistory 保留本機版本，不被舊的遠端資料覆蓋。
+    const _localBackupForSnap = (function() {
+      try { return JSON.parse(localStorage.getItem('aethelgard_state_local') || 'null'); } catch(e) { return null; }
+    })();
+    const _cloudUpdatedAtForSnap = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
+    const _localSavedAtForSnap = _localBackupForSnap && typeof _localBackupForSnap.savedAt === 'number' ? _localBackupForSnap.savedAt : 0;
+    const _remoteIsStale = _localSavedAtForSnap > 0 && _cloudUpdatedAtForSnap > 0 && _localSavedAtForSnap > _cloudUpdatedAtForSnap;
+    if (_remoteIsStale) console.log('[snapshot] ⚠️ 遠端資料比本機舊（本機 savedAt:', _localSavedAtForSnap, '> 遠端 updatedAt:', _cloudUpdatedAtForSnap, '），tasks/doneHistory 保留本機版本');
+
     // 5. 套用遠端資料到 state（複用 loadFromCloud 的欄位映射邏輯）
-    state.tasks        = data.tasks        || [];
+    state.tasks        = (_remoteIsStale && Array.isArray(_localBackupForSnap.tasks)) ? _localBackupForSnap.tasks : (data.tasks || []);
     state.sandbox      = data.sandbox      || [];
     state.done         = data.done         || 0;
     state.rewards      = data.rewards      || [];
     state.customQuotes = data.customQuotes || [];
     state.energy       = data.energy       || 0;
-    state.doneHistory  = data.doneHistory  || [];
+    state.doneHistory  = (_remoteIsStale && Array.isArray(_localBackupForSnap.doneHistory)) ? _localBackupForSnap.doneHistory : (data.doneHistory || []);
     state.todayOrder   = data.todayOrder   || [];
     state.wishPoints   = typeof data.wishPoints === 'number' ? data.wishPoints : (state.wishPoints || 0);
     state.routines     = Array.isArray(data.routines) ? data.routines : state.routines;
@@ -225,7 +239,13 @@ function _startRealtimeListener(uid) {
     // ★ Fix：訪客模式下 snapshot 可能比 loadFromCloud 更早拿到資料，
     //   此時 closeOwnerLoginOverlay 尚未被 init() 呼叫，需在這裡主動關閉載入遮罩。
     if (typeof closeOwnerLoginOverlay === 'function') closeOwnerLoginOverlay();
-    showToast('🔄 已同步其他裝置的更新');
+    if (_remoteIsStale) {
+      // 遠端剛剛蓋成舊資料，這裡把修正後（保留本機較新版本）的狀態立刻推回去，
+      // 避免雲端／其他裝置停留在被舊分頁誤蓋掉的狀態。
+      if (typeof _syncNow === 'function') _syncNow();
+    } else {
+      showToast('🔄 已同步其他裝置的更新');
+    }
   }, (err) => {
     console.warn('[realtime] 監聽錯誤:', err.code, err.message);
   });

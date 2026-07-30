@@ -1665,7 +1665,10 @@ function _renderTreeRightPanel() {
   wrap.innerHTML = `
     <div class="tree-right-header">
       <span style="color:${node ? node.ringColor : 'inherit'}">${node ? node.icon : ''} ${escHtml(node ? node.label : goalLabel(state.goalFilter))}</span>
-      <button class="btn-ghost-green btn-add-task-right" onclick="openAddTask()" title="新增任務" style="margin:0;padding:4px 12px;font-size:11px;white-space:nowrap">＋<span class="btn-add-task-right-label"> 新增任務</span></button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="fpill${isSimpleTaskView() ? ' fpill-active' : ''}" onclick="toggleSimpleTaskView()" title="切換簡潔／詳細顯示：簡潔模式會隱藏右側的標籤與徽章">🧹 簡潔</span>
+        <button class="btn-ghost-green btn-add-task-right" onclick="openAddTask()" title="新增任務" style="margin:0;padding:4px 12px;font-size:11px;white-space:nowrap">＋<span class="btn-add-task-right-label"> 新增任務</span></button>
+      </div>
     </div>
     <div class="tree-right-list">${listHtml}</div>
   `;
@@ -1901,6 +1904,8 @@ function renderTasks() {
   if (clearBtn) clearBtn.style.display = state.goalFilter ? 'inline-flex' : 'none';
 
   const list = document.getElementById('taskList');
+  const simpleBtn = document.getElementById('simpleViewToggleBtn');
+  if (simpleBtn) simpleBtn.classList.toggle('fpill-active', isSimpleTaskView());
   const todayStrFilter = localDateStr();
   // Hide interval-scheduled clones that haven't arrived yet
   let activeTasks = state.tasks.filter(t => !t.done && !(_isFutureIntervalTask(t, todayStrFilter)));
@@ -2093,6 +2098,9 @@ function taskHTML(t, compact) {
   const steps = t.steps || [];
   const hasSteps = steps.length > 0;
   const isOpen = t._breakdownOpen || false;
+  // 簡潔顯示模式：隱藏右側標籤/徽章雜訊（能量標籤、日期、逾期、重複∞、久未完成、備忘圖示），
+  // 只留勾選框、名稱、內容本身跟「⋯」更多選單。純顯示偏好，跟裝置綁定，不需要同步到雲端。
+  const simple = isSimpleTaskView();
 
   // Goal color map
   const goalColorMap = { '技能': '#D4608A', '自我': '#C9A227', '日常': '#3A6EA5' };
@@ -2212,21 +2220,39 @@ function taskHTML(t, compact) {
         ${t.meaning ? `<div class="task-meaning">${escHtml(t.meaning)}</div>` : ''}
         ${t.note ? `<div class="task-note-preview" style="font-size:12px;color:var(--gold);margin-top:4px;padding:4px 8px;background:rgba(200,169,110,0.08);border-radius:6px;border-left:2px solid var(--gold);line-height:1.5">📝 ${escHtml(t.note)}</div>` : ''}
         ${t.minimalAction ? `<div class="task-minimal-action-preview" style="font-size:12px;color:var(--sky);margin-top:4px;padding:4px 8px;background:${state.energyFilter === 'charge' ? 'rgba(110,174,224,0.14)' : 'rgba(110,174,224,0.07)'};border-radius:6px;border-left:2px solid var(--sky);line-height:1.5;${state.energyFilter === 'charge' ? 'font-weight:600' : ''}">🪫 沒力氣時：${escHtml(t.minimalAction)}</div>` : ''}
-        ${compact ? '' : tagsHTML}
+        ${simple || compact ? '' : tagsHTML}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
+        ${simple ? '' : `
         <div style="display:flex;flex-direction:row;gap:6px;align-items:center">
           ${countdownHTML}
+          ${t.recurring ? `<span class="recur-infinity-badge" title="${t.recurMode === 'interval' ? `重複任務 — 每${t.recurInterval || '?'}天` : '重複任務 — 每日'}" style="font-size:14px;line-height:1;color:var(--sky);opacity:0.65">∞</span>` : ''}
           ${neglected ? `<span class="neglect-badge" title="久未完成 — 點擊重新計算天數" onclick="event.stopPropagation();resetNeglect(${t.id})">⏳<span class="tag-label"> 久未完成</span></span>` : ''}
           <div onclick="openNoteModal(${t.id})" id="noteBtn-${t.id}" class="task-icon-btn" style="opacity:${t.note ? 1 : 0.3};color:${t.note ? 'var(--gold)' : 'inherit'}" title="${t.note ? '查看/編輯備忘' : '新增備忘'}">📝</div>
         </div>
         ${compact ? tagsHTML : ''}
+        `}
         <div onclick="openCtxMenu(event,${t.id})" class="task-icon-btn" style="font-size:16px;opacity:0.3;line-height:1;letter-spacing:1px" title="更多">⋯</div>
       </div>
     </div>
     ${breakdownHTML}
   </div>`;
 }
+
+// ── 簡潔顯示模式：右側標籤/徽章一鍵隱藏、需要時再切回來看 ──────────────
+// 純顯示偏好，跟這台裝置綁定（不寫進 state、不同步到雲端），所以不會因為
+// 多裝置同步而互相干擾，也不會佔用 Firestore 文件空間。
+const SIMPLE_TASK_VIEW_KEY = 'aethelgard_simple_task_view';
+function isSimpleTaskView() {
+  return localStorage.getItem(SIMPLE_TASK_VIEW_KEY) === '1';
+}
+function toggleSimpleTaskView() {
+  const next = !isSimpleTaskView();
+  localStorage.setItem(SIMPLE_TASK_VIEW_KEY, next ? '1' : '0');
+  renderTasks();
+  if (typeof _renderTreeRightPanel === 'function') _renderTreeRightPanel();
+}
+window.toggleSimpleTaskView = toggleSimpleTaskView;
 
 function toggleDoneSection() {
   state.doneOpen = !state.doneOpen;

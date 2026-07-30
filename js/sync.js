@@ -313,7 +313,15 @@ async function loadFromCloud() {
         state.routineResetDate = localBackup.routineResetDate || null;
         return true;
       }
-      state.tasks   = data.tasks;
+      // ★ Bug fix：勾選完成任務後，syncToCloud 是即時推送沒錯，但寫入 Firebase 跟
+      //   下面的頁面重新整理/切換分頁是兩個各自獨立的非同步流程——如果使用者在
+      //   剛完成任務的幾秒內就重新整理頁面（或切到背景太久、另一個裝置的舊分頁
+      //   剛好在這之後又推了一次舊資料上去），這裡原本會無條件用雲端資料覆蓋
+      //   state.tasks，導致「剛勾選完成的任務消失」，但 doneHistory 若剛好沒被
+      //   同一波覆蓋覆蓋掉，月曆/成長軌跡那邊卻還留著紀錄，兩邊對不起來。
+      //   解法比照 rewards／wishPoints 的作法：本機快照比雲端新時，優先採用本機的
+      //   tasks／doneHistory，不要被舊的雲端資料蓋掉。
+      state.tasks = (localIsNewer && Array.isArray(localBackup.tasks)) ? localBackup.tasks : data.tasks;
       {
         const _lrk = localStorage.getItem('aethelgard_last_reset');
         const _lrkTs = _lrk && /^\d{10,}$/.test(_lrk) ? parseInt(_lrk) : 0;
@@ -333,7 +341,7 @@ async function loadFromCloud() {
       state.rewards = (localIsNewer && Array.isArray(localBackup.rewards)) ? localBackup.rewards : (data.rewards || []);
       state.customQuotes = data.customQuotes || [];
       state.energy  = data.energy  || 0;
-      state.doneHistory = data.doneHistory || [];
+      state.doneHistory = (localIsNewer && Array.isArray(localBackup.doneHistory)) ? localBackup.doneHistory : (data.doneHistory || []);
       state.todayOrder  = data.todayOrder  || [];
       state.wishPoints  = (localIsNewer && typeof localBackup.wishPoints === 'number')
         ? localBackup.wishPoints
