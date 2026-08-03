@@ -800,25 +800,25 @@
     <label>你的願望</label>
     <input id="newRewardName" placeholder="例如：去一趟旅行、買一本新書、吃一頓好的…">
     <label>解鎖條件 — 完成哪個分類幾個任務後可出現在抽獎牌</label>
-    <div class="modal-row">
-      <div>
-        <select id="newRewardGoal">
-          <option value="任意">🌈 任意分類</option>
-          <option value="技能">🚩 限時活動</option>
-          <option value="自我">💎 突破素材</option>
-          <option value="日常">🧭 每日委託</option>
+    <div class="modal-row" style="align-items:flex-start">
+      <div style="flex:0 0 92px">
+        <select id="newRewardGoal" style="padding:10px 6px">
+          <option value="任意">🌈 任意</option>
+          <option value="技能">🚩 活動</option>
+          <option value="自我">💎 素材</option>
+          <option value="日常">🧭 委託</option>
         </select>
       </div>
-      <div>
-        <div class="toggle-tabs" style="width:100%;margin-bottom:6px">
-          <button type="button" class="toggle-tab active" id="wishModeShardBtn" style="flex:1" onclick="setWishInputMode('shard')">🌟 碎片數量</button>
-          <button type="button" class="toggle-tab" id="wishModeMoneyBtn" style="flex:1" onclick="setWishInputMode('money')">💰 金額</button>
-        </div>
+      <div style="flex:1;min-width:0">
         <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="需要幾個碎片解鎖（0表示無條件解鎖）" oninput="updateWishAmountHint()">
-        <input id="newRewardAmount" type="number" min="0" style="display:none;margin-top:6px" placeholder="輸入金額（NT$，例如 99）" oninput="updateWishAmountHint()">
-        <div id="wishAmountHint" style="font-size:11px;color:var(--text-faint);margin-top:4px;display:none"></div>
+        <input id="newRewardAmount" type="number" min="0" style="display:none" placeholder="輸入金額（NT$，例如 99）" oninput="updateWishAmountHint()">
+      </div>
+      <div style="flex:0 0 auto;display:flex;gap:6px;margin-top:1px">
+        <button type="button" class="wish-mode-emoji-btn active" id="wishModeShardBtn" title="以碎片數量輸入" onclick="setWishInputMode('shard')">🌟</button>
+        <button type="button" class="wish-mode-emoji-btn" id="wishModeMoneyBtn" title="以金額輸入" onclick="setWishInputMode('money')">💰</button>
       </div>
     </div>
+    <div id="wishAmountHint" style="font-size:11px;color:var(--text-faint);margin:-10px 0 16px 2px;display:none"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('addRewardModal')">取消</button>
       <button class="btn-confirm" onclick="addReward()">許願 🌊</button>

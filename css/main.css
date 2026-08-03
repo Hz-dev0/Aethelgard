@@ -1209,6 +1209,17 @@
   .toggle-tab:hover { color: var(--text); background: rgba(74,130,196,0.05); }
   .toggle-tab.active { background: var(--green); color: #fff; }
 
+  .wish-mode-emoji-btn {
+    width: 40px; height: 40px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg3);
+    font-size: 16px; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.45; transition: all 0.18s; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wish-mode-emoji-btn:hover { opacity: 0.75; }
+  .wish-mode-emoji-btn.active { opacity: 1; border-color: var(--green); background: rgba(58,110,165,0.12); }
+
   .progress-ring { transform: rotate(-90deg); }
   .ring-track { fill: none; stroke: var(--bg3); stroke-width: 3; }
   .ring-fill { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
