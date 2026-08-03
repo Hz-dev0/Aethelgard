@@ -810,7 +810,13 @@
         </select>
       </div>
       <div>
-        <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="需完成任務數（0表示無條件解鎖）">
+        <div class="toggle-tabs" style="width:100%;margin-bottom:6px">
+          <button type="button" class="toggle-tab active" id="wishModeShardBtn" style="flex:1" onclick="setWishInputMode('shard')">🌟 碎片數量</button>
+          <button type="button" class="toggle-tab" id="wishModeMoneyBtn" style="flex:1" onclick="setWishInputMode('money')">💰 金額</button>
+        </div>
+        <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="需要幾個碎片解鎖（0表示無條件解鎖）" oninput="updateWishAmountHint()">
+        <input id="newRewardAmount" type="number" min="0" style="display:none;margin-top:6px" placeholder="輸入金額（NT$，例如 99）" oninput="updateWishAmountHint()">
+        <div id="wishAmountHint" style="font-size:11px;color:var(--text-faint);margin-top:4px;display:none"></div>
       </div>
     </div>
     <div class="modal-actions">

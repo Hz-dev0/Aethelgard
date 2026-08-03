@@ -254,17 +254,8 @@ function renderRewards() {
   if (oldBar) oldBar.remove();
 
   const available = getAvailableWishPoints();
-  // Sort：已解鎖排最前；未解鎖的依「進度百分比」由高到低排，讓快完成的願望浮上來，維持動力
-  const wishes = (state.rewards || []).slice().sort((a, b) => {
-    const pa = getWishProgress(a), pb = getWishProgress(b);
-    const ua = pa >= a.count, ub = pb >= b.count;
-    if (ua && !ub) return -1;
-    if (!ua && ub) return 1;
-    if (ua && ub) return 0;
-    const ra = a.count === 0 ? 1 : pa / a.count;
-    const rb = b.count === 0 ? 1 : pb / b.count;
-    return rb - ra;
-  });
+  // ★ 維持願望新增時的固定順序，不因配點/進度變化而重新排序，避免使用者點錯願望
+  const wishes = (state.rewards || []).slice();
 
   if (wishes.length === 0) {
     wishList.innerHTML = '';
@@ -561,9 +552,41 @@ function removeCustomQuote(i) {
   _syncNow();
 }
 
+// 1 個願望碎片 = 50 元（無條件進位，99 元需要 2 個碎片）
+const WISH_FRAGMENT_VALUE = 50;
+
+function setWishInputMode(mode) {
+  const shardBtn = document.getElementById('wishModeShardBtn');
+  const moneyBtn = document.getElementById('wishModeMoneyBtn');
+  const shardInput = document.getElementById('newRewardCount');
+  const amountInput = document.getElementById('newRewardAmount');
+  if (!shardBtn || !moneyBtn || !shardInput || !amountInput) return;
+  shardBtn.classList.toggle('active', mode === 'shard');
+  moneyBtn.classList.toggle('active', mode === 'money');
+  shardInput.style.display = mode === 'shard' ? '' : 'none';
+  amountInput.style.display = mode === 'money' ? '' : 'none';
+  amountInput.dataset.active = mode === 'money' ? '1' : '0';
+  updateWishAmountHint();
+}
+
+function updateWishAmountHint() {
+  const amountInput = document.getElementById('newRewardAmount');
+  const hint = document.getElementById('wishAmountHint');
+  if (!amountInput || !hint) return;
+  if (amountInput.style.display === 'none') { hint.style.display = 'none'; return; }
+  const amount = parseFloat(amountInput.value);
+  if (!amount || amount <= 0) { hint.style.display = 'none'; return; }
+  const shards = Math.ceil(amount / WISH_FRAGMENT_VALUE);
+  hint.textContent = `= ${shards} 個碎片（每個碎片 ${WISH_FRAGMENT_VALUE} 元，不足 ${WISH_FRAGMENT_VALUE} 元無條件進位）`;
+  hint.style.display = 'block';
+}
+
 function openAddWish() {
   document.getElementById('newRewardName').value = '';
   document.getElementById('newRewardCount').value = '3';
+  document.getElementById('newRewardAmount').value = '';
+  document.getElementById('wishAmountHint').style.display = 'none';
+  setWishInputMode('shard');
   document.getElementById('addRewardModal').classList.add('open');
   setTimeout(() => document.getElementById('newRewardName').focus(), 50);
 }
@@ -573,8 +596,16 @@ function addReward() {
   const name = document.getElementById('newRewardName').value.trim();
   if (!name) return;
   const goal = document.getElementById('newRewardGoal').value;
-  const countVal = document.getElementById('newRewardCount').value;
-  const count = countVal === '' ? 0 : Math.max(0, parseInt(countVal) || 0);
+  const amountInput = document.getElementById('newRewardAmount');
+  const isMoneyMode = amountInput && amountInput.dataset.active === '1';
+  let count;
+  if (isMoneyMode) {
+    const amount = parseFloat(amountInput.value);
+    count = amount > 0 ? Math.ceil(amount / WISH_FRAGMENT_VALUE) : 0;
+  } else {
+    const countVal = document.getElementById('newRewardCount').value;
+    count = countVal === '' ? 0 : Math.max(0, parseInt(countVal) || 0);
+  }
   if (!state.rewards) state.rewards = [];
   const startCount = getGoalCount(goal);
   const id = Date.now();
