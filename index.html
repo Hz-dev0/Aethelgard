@@ -809,13 +809,12 @@
           <option value="日常">🧭 委託</option>
         </select>
       </div>
-      <div style="flex:1;min-width:0">
-        <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="需要幾個碎片解鎖（0表示無條件解鎖）" oninput="updateWishAmountHint()">
-        <input id="newRewardAmount" type="number" min="0" style="display:none" placeholder="輸入金額（NT$，例如 99）" oninput="updateWishAmountHint()">
+      <div style="flex:0 0 110px">
+        <input id="newRewardCount" type="number" min="0" max="100" value="0" placeholder="碎片數" oninput="updateWishAmountHint()">
+        <input id="newRewardAmount" type="number" min="0" style="display:none" placeholder="例如 99" oninput="updateWishAmountHint()">
       </div>
-      <div style="flex:0 0 auto;display:flex;gap:6px;margin-top:1px">
-        <button type="button" class="wish-mode-emoji-btn active" id="wishModeShardBtn" title="以碎片數量輸入" onclick="setWishInputMode('shard')">🌟</button>
-        <button type="button" class="wish-mode-emoji-btn" id="wishModeMoneyBtn" title="以金額輸入" onclick="setWishInputMode('money')">💰</button>
+      <div style="flex:0 0 auto;margin-top:1px">
+        <button type="button" class="wish-mode-emoji-btn active" id="wishModeToggleBtn" title="點一下切換：碎片數量／金額" onclick="toggleWishInputMode()">🌟</button>
       </div>
     </div>
     <div id="wishAmountHint" style="font-size:11px;color:var(--text-faint);margin:-10px 0 16px 2px;display:none"></div>

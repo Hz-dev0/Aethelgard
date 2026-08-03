@@ -556,17 +556,23 @@ function removeCustomQuote(i) {
 const WISH_FRAGMENT_VALUE = 50;
 
 function setWishInputMode(mode) {
-  const shardBtn = document.getElementById('wishModeShardBtn');
-  const moneyBtn = document.getElementById('wishModeMoneyBtn');
+  const toggleBtn = document.getElementById('wishModeToggleBtn');
   const shardInput = document.getElementById('newRewardCount');
   const amountInput = document.getElementById('newRewardAmount');
-  if (!shardBtn || !moneyBtn || !shardInput || !amountInput) return;
-  shardBtn.classList.toggle('active', mode === 'shard');
-  moneyBtn.classList.toggle('active', mode === 'money');
-  shardInput.style.display = mode === 'shard' ? '' : 'none';
-  amountInput.style.display = mode === 'money' ? '' : 'none';
-  amountInput.dataset.active = mode === 'money' ? '1' : '0';
+  if (!toggleBtn || !shardInput || !amountInput) return;
+  const isMoney = mode === 'money';
+  toggleBtn.textContent = isMoney ? '💰' : '🌟';
+  toggleBtn.title = isMoney ? '目前：金額（點一下切換回碎片數量）' : '目前：碎片數量（點一下切換成金額）';
+  shardInput.style.display = isMoney ? 'none' : '';
+  amountInput.style.display = isMoney ? '' : 'none';
+  amountInput.dataset.active = isMoney ? '1' : '0';
   updateWishAmountHint();
+}
+
+function toggleWishInputMode() {
+  const amountInput = document.getElementById('newRewardAmount');
+  const isMoney = amountInput && amountInput.dataset.active === '1';
+  setWishInputMode(isMoney ? 'shard' : 'money');
 }
 
 function updateWishAmountHint() {
