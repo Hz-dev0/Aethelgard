@@ -204,8 +204,11 @@ function allocateWishPoint(id) {
   const justUnlocked = r.count > 0 && r.allocatedPoints >= r.count;
   checkRewardUnlocks();
   renderRewards();
+  // ★ 改為立即同步（原本用 debounce 的 syncToCloud，無痕模式下配點後很快關閉
+  //   分頁，等待期間的資料可能連本地備份都沒有，直接遺失）
+  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   _markSyncWrite();
-  syncToCloud();
+  _doSyncToCloud();
   _flyWishPoint(btnRect, justUnlocked);
 }
 
@@ -229,8 +232,10 @@ function deallocateWishPoint(id) {
   if (!r || !r.allocatedPoints || r.allocatedPoints <= 0) return;
   r.allocatedPoints--;
   renderRewards();
+  // ★ 同上，改為立即同步，不等 debounce
+  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   _markSyncWrite();
-  syncToCloud();
+  _doSyncToCloud();
 }
 
 function renderRewards() {

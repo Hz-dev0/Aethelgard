@@ -281,6 +281,9 @@ function _applyDateChange(t, newDate) {
   renderTasks(); renderStats();
   if (typeof _renderTreeRightPanel === 'function') _renderTreeRightPanel();
   showToast(newDate ? `📅 日期已更新為 ${newDate}` : '📅 日期已清除');
-  syncToCloud();
+  // ★ 改為立即同步（原本用 debounce 的 syncToCloud，無痕模式下若使用者改期後
+  //   很快關閉分頁，30 秒的等待可能來不及推上雲端，且無痕模式沒有 localStorage
+  //   備份可救，等於資料真的遺失）
+  _syncNow();
 }
 window.openDateTagPicker = openDateTagPicker;
