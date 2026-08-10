@@ -3115,18 +3115,30 @@ function addTask() {
   _syncNow();
 }
 
-// ── Quick Todo（生命樹下方的輕量待辦清單）──
+let _quickTodoOpen = true;
+function toggleQuickTodoSection() {
+  _quickTodoOpen = !_quickTodoOpen;
+  const body = document.getElementById('quickTodoBody');
+  const arrow = document.getElementById('quickTodoArrow');
+  if (body) {
+    body.style.maxHeight = _quickTodoOpen ? '600px' : '0';
+    body.style.opacity   = _quickTodoOpen ? '1' : '0';
+  }
+  if (arrow) arrow.style.transform = _quickTodoOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
+// ── Quick Todo（生命樹「今日任務」下方的輕量待辦清單）──
 // 直接借用既有的 task 物件與 toggleTask() 流程，
 // 這樣完成時會「自動」跟一般任務一樣寫入 doneHistory、給願望碎片、
 // 並且在每日重置時比照非重複任務被歸檔清除，不需要另外寫一套規則。
-// isQuickTodo 只用來讓這個頁面篩出屬於自己的項目，不影響任務總覽/生命樹的篩選。
+// 完成後就從這個區塊消失（只顯示未完成項目），已完成的紀錄請到「成長軌跡」查看。
+// isQuickTodo 只用來讓這個區塊篩出屬於自己的項目，不影響任務總覽/生命樹的篩選。
 function renderTodoPage() {
   const list = document.getElementById('todoList');
-  const doneList = document.getElementById('todoDoneList');
-  if (!list || !doneList) return;
-  const items = state.tasks.filter(t => t.isQuickTodo);
-  const pending = items.slice().sort((a, b) => b.id - a.id).filter(t => !t.done);
-  const done = items.filter(t => t.done);
+  if (!list) return;
+  const pending = state.tasks
+    .filter(t => t.isQuickTodo && !t.done)
+    .sort((a, b) => b.id - a.id);
 
   list.innerHTML = pending.length ? pending.map(t => `
     <div class="task-item" onclick="toggleTask(${t.id})">
@@ -3135,14 +3147,6 @@ function renderTodoPage() {
       <span class="sandbox-del" onclick="event.stopPropagation();deleteQuickTodo(${t.id})" title="刪除">×</span>
     </div>
   `).join('') : '<div style="color:var(--text-faint);font-size:13px;font-style:italic;padding:8px">還沒有待辦事項，寫下第一件事吧。</div>';
-
-  doneList.innerHTML = done.length ? done.map(t => `
-    <div class="task-item done" onclick="toggleTask(${t.id})">
-      <div class="task-check checked" onclick="event.stopPropagation();toggleTask(${t.id})">✓</div>
-      <div class="task-body"><div class="task-name">${escHtml(t.name)}</div></div>
-      <span class="sandbox-del" onclick="event.stopPropagation();deleteQuickTodo(${t.id})" title="刪除">×</span>
-    </div>
-  `).join('') : '<div style="color:var(--text-faint);font-size:12px;padding:4px 8px">今天還沒有完成的項目</div>';
 }
 
 function quickAddTodo() {
