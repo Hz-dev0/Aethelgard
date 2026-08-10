@@ -785,6 +785,13 @@ function runDailyReset() {
     // 有「截止日」的重複任務，過了截止日（今天 > taskDate）就視為這個重複
     // 系列已經結束，跟非重複任務一樣歸檔刪除，不再重置回「未完成」。
     const recurExpired = t.recurring && t.taskDate && todayKey > t.taskDate;
+    // ★ 保護：若這筆完成發生在「本次重置週期開始之後」，代表使用者是在
+    // 這個新週期裡才完成的（例如重置流程因例外狀況被重複觸發），
+    // 不應該把它打回未完成——比照 routines 既有的 doneTs 判斷方式。
+    const doneInCurrentCycle = t.completedTs && t.completedTs >= thisCycleResetTs;
+    if (t.recurring && t.recurMode !== 'interval' && !recurExpired && doneInCurrentCycle) {
+      return;
+    }
     if (t.recurring && t.recurMode !== 'interval' && !recurExpired) {
       // Daily recurring（且還沒過截止日）: reset back to undone，清掉排程讓早晨對話框重新詢問
       if (state.done > 0) state.done--;
@@ -905,13 +912,23 @@ function scheduleNextReset() {
 }
 
 // 啟動時補跑錯過的重置（例如 app 關閉多天）
+//
+// ★ 修正舊版 bug：舊版會用一個「逐日往前走」的迴圈，每天呼叫一次 runDailyReset()，
+// 想要一天一天補回來。但 runDailyReset() 內部的 thisCycleResetTs 一律用
+// getLastResetTimestamp() 依「現在的實際時間」計算，跟迴圈的 cursor 完全無關，
+// 所以無論迴圈跑幾輪，每一輪算出來的 thisCycleResetTs 其實都是同一個值
+// （就是「現在」對應的那個重置點）。結果就是同一個重置週期被重複執行了 N 次
+// （N = 錯過的天數），只是浪費效能、重複推送同步、重複跳提示，
+// 在某些時序下（例如多分頁同時開啟、或使用者剛好在補跑期間操作）
+// 還可能讓剛完成的重複任務被多算一次重置而誤判回未完成。
+// runDailyReset() 本身已經是用「現在」一次算出最新的重置界線，
+// 並會一次處理完所有目前已完成的任務／重複任務／例行任務，
+// 所以不管錯過幾天，只需要解除舊的鎖（清掉過期的 LAST_RESET_KEY 守衛）
+// 呼叫一次即可補到最新狀態，完全不需要逐日迴圈。
 function checkMissedReset() {
-  const [hStr, mStr] = getResetTime().split(':');
-  const resetH = parseInt(hStr), resetM = parseInt(mStr);
-  const now = new Date();
   const rawStored = localStorage.getItem(LAST_RESET_KEY);
   // 向下相容：舊版存日期字串
-  let lastResetTs = rawStored && /^\d{10,}$/.test(rawStored) ? parseInt(rawStored) : 0;
+  const lastResetTs = rawStored && /^\d{10,}$/.test(rawStored) ? parseInt(rawStored) : 0;
 
   if (!lastResetTs) {
     // 第一次執行或舊格式 — 從今天的重置點開始排程即可
@@ -919,43 +936,16 @@ function checkMissedReset() {
     return;
   }
 
-  // 從 lastResetTs 之後，逐個重置點往前走直到「上一個應觸發的重置點」
-  // 每個重置點 = 某天的 HH:MM
   const thisCycleResetTs = getLastResetTimestamp();
   if (lastResetTs >= thisCycleResetTs) {
-    // 本週期已重置，只需排程下一次
+    // 本週期已重置，只需排程下一次（runDailyReset 內部的守衛也會擋掉重複執行）
     scheduleNextReset();
     return;
   }
 
-  // 計算從 lastResetTs 到 thisCycleResetTs 之間有幾個重置點需要補跑
-  // 從 lastResetTs 的隔天重置點開始逐步往前
-  let cursor = new Date(lastResetTs);
-  // 移到下一個重置點
-  cursor.setHours(resetH, resetM, 0, 0);
-  if (cursor.getTime() <= lastResetTs) {
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  let didReset = false;
-  while (cursor.getTime() <= now.getTime()) {
-    const cursorTs = cursor.getTime();
-    // 暫時把 LAST_RESET_KEY 清掉讓 runDailyReset 的守衛通過
-    try { localStorage.removeItem(LAST_RESET_KEY); } catch(e) {}
-    runDailyReset();
-    // runDailyReset 會把 LAST_RESET_KEY 設為 thisCycleResetTs
-    // 若還有更早的重置點要補，手動覆寫回 cursor 前一刻讓下一輪能通過守衛
-    cursor.setDate(cursor.getDate() + 1);
-    if (cursor.getTime() <= now.getTime()) {
-      // 還有更多重置點要補，把 key 設回剛才這個點
-      try { localStorage.setItem(LAST_RESET_KEY, String(cursorTs)); } catch(e) {}
-    }
-    didReset = true;
-  }
-
-  if (!didReset) {
-    scheduleNextReset();
-  }
+  // 有錯過至少一個重置點：直接呼叫一次 runDailyReset()，
+  // 它會依「現在」算出最新的重置界線並一次補齊。
+  runDailyReset();
 }
 
 // ── Logo Long-Press Menu ──
@@ -1636,6 +1626,7 @@ function showPage(id, skipRender) {
   _flashPageTitle(id);
   if (!skipRender) {
     if (id === 'tree')   { renderTree(); }
+    if (id === 'todo')   { renderTodoPage(); }
     if (id === 'tasks')  { renderTasks(); }
     if (id === 'sandbox') { renderSandbox(); }
     if (id === 'stats') {
@@ -2705,6 +2696,9 @@ function toggleTask(id) {
   if (!wasDone) {
     // 使用「有效今日」：若現在在 00:00~重置時間 之間，仍屬上個週期的今天
     t.completedAt = localDateStr(new Date(getLastResetTimestamp()));
+    // ★ 記錄真實完成時間戳，讓 runDailyReset() 能判斷這筆完成是否屬於「本週期」，
+    // 避免重複任務在剛完成、重置又意外重跑一次時被誤判成「舊週期未完成」而打回未完成
+    t.completedTs = Date.now();
     // ── 追蹤完成次數與近期完成日期（用於早晨重複任務排序與連續天數判斷）──
     if (!t.completionCount) t.completionCount = 0;
     t.completionCount++;
@@ -2751,6 +2745,7 @@ function toggleTask(id) {
     // 取消完成：清除 completedAt 並從 doneHistory 移除對應紀錄
     const wasCompletedAt = t.completedAt;
     t.completedAt = null;
+    t.completedTs = null;
     // ── 撤銷 doneHistory：移除剛才寫入的那筆，避免成長軌跡留下錯誤紀錄 ──
     if (wasCompletedAt && state.doneHistory) {
       const histKey = t.id + '_' + wasCompletedAt;
@@ -3117,6 +3112,68 @@ function addTask() {
     renderTree();
   }
   showToast('🌱 任務已種下，再新增或按取消關閉');
+  _syncNow();
+}
+
+// ── Quick Todo（生命樹下方的輕量待辦清單）──
+// 直接借用既有的 task 物件與 toggleTask() 流程，
+// 這樣完成時會「自動」跟一般任務一樣寫入 doneHistory、給願望碎片、
+// 並且在每日重置時比照非重複任務被歸檔清除，不需要另外寫一套規則。
+// isQuickTodo 只用來讓這個頁面篩出屬於自己的項目，不影響任務總覽/生命樹的篩選。
+function renderTodoPage() {
+  const list = document.getElementById('todoList');
+  const doneList = document.getElementById('todoDoneList');
+  if (!list || !doneList) return;
+  const items = state.tasks.filter(t => t.isQuickTodo);
+  const pending = items.slice().sort((a, b) => b.id - a.id).filter(t => !t.done);
+  const done = items.filter(t => t.done);
+
+  list.innerHTML = pending.length ? pending.map(t => `
+    <div class="task-item" onclick="toggleTask(${t.id})">
+      <div class="task-check" onclick="event.stopPropagation();toggleTask(${t.id})"></div>
+      <div class="task-body"><div class="task-name">${escHtml(t.name)}</div></div>
+      <span class="sandbox-del" onclick="event.stopPropagation();deleteQuickTodo(${t.id})" title="刪除">×</span>
+    </div>
+  `).join('') : '<div style="color:var(--text-faint);font-size:13px;font-style:italic;padding:8px">還沒有待辦事項，寫下第一件事吧。</div>';
+
+  doneList.innerHTML = done.length ? done.map(t => `
+    <div class="task-item done" onclick="toggleTask(${t.id})">
+      <div class="task-check checked" onclick="event.stopPropagation();toggleTask(${t.id})">✓</div>
+      <div class="task-body"><div class="task-name">${escHtml(t.name)}</div></div>
+      <span class="sandbox-del" onclick="event.stopPropagation();deleteQuickTodo(${t.id})" title="刪除">×</span>
+    </div>
+  `).join('') : '<div style="color:var(--text-faint);font-size:12px;padding:4px 8px">今天還沒有完成的項目</div>';
+}
+
+function quickAddTodo() {
+  const input = document.getElementById('todoInput');
+  const name = input.value.trim();
+  if (!name) return;
+  const newTask = {
+    id: Date.now(), name, meaning: '', goal: '日常', energy: 'easy',
+    reward: null, done: false, postponed: 0,
+    recurring: false, recurMode: null, recurInterval: 0, taskDate: null,
+    minimalAction: null, isQuickTodo: true
+  };
+  state.tasks.push(newTask);
+  input.value = '';
+  input.focus();
+  saveStateLocal();
+  renderTodoPage();
+  _syncNow();
+}
+
+function deleteQuickTodo(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  // 若已完成，一併撤銷對應的成長軌跡紀錄，避免留下刪除後仍存在的紀錄
+  if (t.done && t.completedAt && state.doneHistory) {
+    const histKey = t.id + '_' + t.completedAt;
+    state.doneHistory = state.doneHistory.filter(h => h.id !== histKey);
+  }
+  state.tasks = state.tasks.filter(x => x.id !== id);
+  saveStateLocal();
+  renderTodoPage();
   _syncNow();
 }
 

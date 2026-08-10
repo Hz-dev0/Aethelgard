@@ -66,6 +66,9 @@
     <div class="nav-item active" onclick="showPage('tree')" id="nav-tree" title="生命樹">
       <span class="nav-icon">🌿</span> <span class="nav-label">生命樹</span>
     </div>
+    <div class="nav-item" onclick="showPage('todo')" id="nav-todo" title="待辦事項">
+      <span class="nav-icon">📋</span> <span class="nav-label">待辦事項</span>
+    </div>
     <div class="nav-item" onclick="showPage('tasks')" id="nav-tasks" title="任務總覽">
       <span class="nav-icon">✦</span> <span class="nav-label">任務總覽</span>
     </div>
@@ -201,6 +204,23 @@
             </div>
           </div>
           <div class="task-list" id="taskList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: Quick Todo -->
+    <div class="page" id="page-todo">
+      <div class="section-title">待辦事項 <span class="sub">隨手記下、隨手完成，一樣會寫入紀錄並給願望碎片</span></div>
+      <div class="card">
+        <div class="card-title">📋 今天想到就先寫下來</div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <input id="todoInput" placeholder="要做的事…" class="input-sandbox" onkeydown="if(event.key==='Enter')quickAddTodo()">
+          <button class="btn-confirm" onclick="quickAddTodo()">新增</button>
+        </div>
+        <div class="task-list" id="todoList"></div>
+        <div style="margin-top:18px">
+          <div style="font-size:12px;color:var(--text-dim);font-weight:600;margin-bottom:8px">✓ 今天已完成</div>
+          <div class="task-list" id="todoDoneList"></div>
         </div>
       </div>
     </div>
@@ -365,6 +385,9 @@
   <div class="mobile-nav-inner">
     <button class="mob-nav-item active" id="mob-tree" onclick="showPage('tree')">
       <span class="mob-nav-icon">🌿</span>生命樹
+    </button>
+    <button class="mob-nav-item" id="mob-todo" onclick="showPage('todo')">
+      <span class="mob-nav-icon">📋</span>待辦
     </button>
     <button class="mob-nav-item" id="mob-tasks" onclick="showPage('tasks')">
       <span class="mob-nav-icon">✦</span>任務
