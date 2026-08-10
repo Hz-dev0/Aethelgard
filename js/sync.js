@@ -273,6 +273,40 @@ function _quickHash(obj) {
   } catch(e) { return ''; }
 }
 
+// ── 「本機是否真的有雲端還沒看過的變動」判斷 ──
+// 背景（真實踩過的資料被覆蓋事故）：過去的做法是拿 savedAt（本機快照
+// 「最後一次被寫入」的時間）跟雲端 updatedAt 比較，本機比較新就優先採用本機。
+// 但 saveStateLocal() 每次呼叫都會把 savedAt 蓋成「現在」，不管內容有沒有真的
+// 改變——裝置只要重新打開、跑一次本機渲染流程，即使裡面裝的其實是好幾個月前
+// 的舊資料，savedAt 也會被蓋成「剛剛」。這會讓「本機比較新」的判斷幾乎每次
+// 都成立，導致陳舊的本機資料被誤判成最新版本，接著又被 init 流程自動推回雲端，
+// 蓋掉真正的最新資料——完全不需要使用者做任何操作就會發生。
+// 修正：改成記錄「上一次成功跟雲端對齊時的內容雜湊」，只有本機目前內容真的跟
+// 那次對齊時不一樣，才代表這台裝置存在雲端還沒看過的變動，這時才進一步比對
+// 時間戳來決定先後；內容沒變的話，無論 savedAt 看起來多新都不該優先採用本機。
+const SYNCED_HASH_KEY = 'aethelgard_synced_hash';
+function _markStateSynced(fields) {
+  try { localStorage.setItem(SYNCED_HASH_KEY, _quickHash(fields)); } catch(e) {}
+}
+function _localHasUnsyncedEdit(localFields) {
+  try {
+    const syncedHash = localStorage.getItem(SYNCED_HASH_KEY);
+    if (!syncedHash) return true; // 從沒記錄過對齊點（例如剛升級這個修正）：保守起見退回舊行為，交由時間戳判斷
+    return _quickHash(localFields) !== syncedHash;
+  } catch(e) { return true; }
+}
+const SYNCED_LOTTERY_HASH_KEY = 'aethelgard_synced_lottery_hash';
+function _markLotterySynced(lottery) {
+  try { localStorage.setItem(SYNCED_LOTTERY_HASH_KEY, _quickHash(lottery)); } catch(e) {}
+}
+function _localLotteryHasUnsyncedEdit(localLottery) {
+  try {
+    const syncedHash = localStorage.getItem(SYNCED_LOTTERY_HASH_KEY);
+    if (!syncedHash) return true;
+    return _quickHash(localLottery) !== syncedHash;
+  } catch(e) { return true; }
+}
+
 async function loadFromCloud() {
   if (!window._fbUid) return false;
   try {
@@ -297,7 +331,12 @@ async function loadFromCloud() {
       //   還沒推上雲端的變動）優先採用本機的 rewards／wishPoints，避免被舊的雲端資料蓋掉。
       const cloudUpdatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
       const localSavedAt = localBackup && typeof localBackup.savedAt === 'number' ? localBackup.savedAt : 0;
-      const localIsNewer = isOwnUid && localSavedAt > cloudUpdatedAt;
+      const _localCoreFields = localBackup ? {
+        tasks: localBackup.tasks, rewards: localBackup.rewards,
+        doneHistory: localBackup.doneHistory, wishPoints: localBackup.wishPoints
+      } : null;
+      const localIsNewer = isOwnUid && localSavedAt > cloudUpdatedAt
+        && (!_localCoreFields || _localHasUnsyncedEdit(_localCoreFields));
       if (!hasCloudData && localHasTasks && isOwnUid) {
         console.warn('Firebase 無資料但本地有，保留本地並重新推送');
         state.tasks        = localBackup.tasks;
@@ -439,7 +478,9 @@ async function loadFromCloud() {
         })();
         const localLotterySavedAt = localLottery && typeof localLottery.savedAt === 'number' ? localLottery.savedAt : 0;
         const cloudLotteryUpdatedAt = typeof data.lotteryState.savedAt === 'number' ? data.lotteryState.savedAt : cloudUpdatedAt;
-        if (isOwnUid && localLottery && localLotterySavedAt > cloudLotteryUpdatedAt) {
+        const _lotteryIsNewer = isOwnUid && localLottery && localLotterySavedAt > cloudLotteryUpdatedAt
+          && _localLotteryHasUnsyncedEdit(localLottery);
+        if (_lotteryIsNewer) {
           lotteryState = { ...lotteryState, ...localLottery };
         } else {
           lotteryState = { ...lotteryState, ...data.lotteryState };
@@ -459,6 +500,12 @@ async function loadFromCloud() {
           if (ndEl) ndEl.value = data.settings.neglectDays;
         }
       }
+      // ★ 這裡代表本機 state 已經確定跟雲端這次讀到的版本對齊了（不管是直接採用
+      //   雲端資料，還是因為偵測到本機有真的未同步的變動而保留本機）——記錄下這個
+      //   對齊點的內容雜湊，下次讀取時才能正確分辨「本機是否真的有新變動」，
+      //   而不是被 saveStateLocal() 每次都重新蓋掉的 savedAt 時間戳誤導。
+      _markStateSynced({ tasks: state.tasks, rewards: state.rewards, doneHistory: state.doneHistory, wishPoints: state.wishPoints });
+      _markLotterySynced(lotteryState);
       return true;
     }
     return false;
@@ -937,6 +984,10 @@ async function _doSyncToCloud() {
     if (!ok) throw new Error('Firebase save failed');
     _markSyncWrite(); // ★ 告知 snapshot 監聽器：接下來 2 秒的更新是自己寫的，忽略
     _lastSyncHash = _hash;
+    // ★ 推送成功代表雲端現在跟這份 payload 內容一致，記錄對齊點，
+    //   避免下次啟動時 saveStateLocal() 重新蓋出的 savedAt 被誤判成「本機有新變動」
+    _markStateSynced({ tasks: _payload.tasks, rewards: _payload.rewards, doneHistory: _payload.doneHistory, wishPoints: _payload.wishPoints });
+    _markLotterySynced(_payload.lotteryState);
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
     _notesDirty = false;
