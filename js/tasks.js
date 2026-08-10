@@ -1626,7 +1626,6 @@ function showPage(id, skipRender) {
   _flashPageTitle(id);
   if (!skipRender) {
     if (id === 'tree')   { renderTree(); }
-    if (id === 'todo')   { renderTodoPage(); }
     if (id === 'tasks')  { renderTasks(); }
     if (id === 'sandbox') { renderSandbox(); }
     if (id === 'stats') {
@@ -2406,6 +2405,7 @@ let _todayDragIdx = null;
 function renderTodayPanel() {
   const list = document.getElementById('todayPanelList');
   const countBadge = document.getElementById('todayPanelCount');
+  renderTodoPage();
   if (!list) return;
   const todayStr = localDateStr();
   // 有效今日：重置時間決定，00:00~重置時間之間仍屬上個週期
