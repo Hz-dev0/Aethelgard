@@ -57,6 +57,8 @@ if ('serviceWorker' in navigator) {
         //   用 typeof 檢查是因為理論上這個事件有極小機率在 notes.js 載入完成前就觸發，
         //   保守起見加個防呆，避免噴錯擋掉重整本身。
         if (typeof window._saveReloadRestoreState === 'function') window._saveReloadRestoreState();
+        // ★ 靜默重整：SW 版本更新造成的重整也是同一個已驗證 session 的延續，不用再跳鎖屏
+        try { sessionStorage.setItem('aethelgard_silent_reload', '1'); } catch(e) {}
         location.reload();
       }
     });

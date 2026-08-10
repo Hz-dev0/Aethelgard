@@ -1434,6 +1434,8 @@ document.addEventListener('visibilitychange', () => {
     const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
     if (_hiddenDuration < 15000) return;
     window._saveReloadRestoreState();
+    // ★ 靜默重整：告知 early.js 這次重整不用顯示「正在驗證身份」鎖屏畫面
+    try { sessionStorage.setItem('aethelgard_silent_reload', '1'); } catch(e) {}
     location.reload();
   }
 });
