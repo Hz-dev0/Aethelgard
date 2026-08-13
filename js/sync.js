@@ -366,7 +366,18 @@ async function loadFromCloud() {
         const _lrkTs = _lrk && /^\d{10,}$/.test(_lrk) ? parseInt(_lrk) : 0;
         const _cycleTs = typeof getLastResetTimestamp === 'function' ? getLastResetTimestamp() : 0;
         if (_lrkTs >= _cycleTs && _cycleTs > 0) {
-          const _cycleDate = new Date(_cycleTs).toISOString().slice(0,10);
+          // ★★ Bug fix（真正找到「兩天前完成的任務今天又出現」的元兇）：
+          //   這裡原本用 new Date(_cycleTs).toISOString().slice(0,10) 取得「本次重置點」
+          //   對應的日期字串，但 toISOString() 是 UTC 時間，不是本地時區！
+          //   對 UTC+8（例如台灣）的使用者來說，重置時間通常設在清晨（例如 04:00），
+          //   換算成 UTC 會落在「前一個 UTC 日期的 20:00」，toISOString() 切出來的日期
+          //   會整整少一天。全專案其他地方（runDailyReset()、localDateStr() 等）都刻意
+          //   避開這個陷阱、統一用本地時區的 YYYY-MM-DD，只有這裡漏用了。
+          //   結果：t.completedAt < _cycleDate 這個比較基準日期算錯，變成只有「2 天前（以上）
+          //   完成」的重複任務才會被打回未完成，「昨天」完成的反而不會被正確重置——
+          //   跟預期的「重置週期一到，之前完成的重複任務就該重新出現」完全錯位，
+          //   使用者感覺就是「已經是兩天前的完成紀錄，怎麼突然又跑出來要重做」。
+          const _cycleDate = localDateStr(new Date(_cycleTs));
           state.tasks.forEach(t => {
             if (!t.recurring || t.recurMode === 'interval') return;
             if (t.done && t.completedAt && t.completedAt < _cycleDate) {
@@ -588,9 +599,49 @@ function _pickNotes(cloudNotes) {
 
     if (mergedTabs.length === 0) return cloudNotes; // 保險：合併結果不該是空的，退回雲端版本
 
+    // ★ Bug fix：舊資料沒有 id 時，notesEnsureDefaults() 會在「每一台裝置上各自」
+    //   用 _notesGenId() 現場補一個 id。同一個分頁（同名）在兩台裝置上因此拿到
+    //   不同的 id，上面用 id 當 key 的合併邏輯就會把它們當成兩個不同分頁，
+    //   結果同一個標籤越同步越多份。這裡在合併結果出爐後，用「名稱」再做一次
+    //   保險性去重：同名分頁只留一份（挑更新時間較新的那份為主），並把另一份
+    //   有內容、主分頁沒有的頁面併進去，避免真的遺失資料。
+    const _dedupedTabs = (function() {
+      const byName = {};
+      const order = [];
+      mergedTabs.forEach(t => {
+        const key = (t.name || '').trim();
+        if (!byName[key]) { byName[key] = []; order.push(key); }
+        byName[key].push(t);
+      });
+      const out = [];
+      order.forEach(key => {
+        const group = byName[key];
+        if (group.length === 1) { out.push(group[0]); return; }
+        // 同名多份：挑 updatedAt 最新的當主分頁
+        group.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const primary = { ...group[0], pages: [...(group[0].pages || [])] };
+        const isBlank = pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim();
+        const sig = pg => [pg.titleA, pg.a, pg.titleB, pg.b].map(s => (s || '').trim()).join('\u0001');
+        const existingSigs = new Set(primary.pages.filter(pg => !isBlank(pg)).map(sig));
+        group.slice(1).forEach(dup => {
+          (dup.pages || []).forEach(pg => {
+            if (isBlank(pg)) return;
+            const s = sig(pg);
+            if (!existingSigs.has(s)) { primary.pages.push(pg); existingSigs.add(s); }
+          });
+        });
+        if (primary.pages.length === 0) primary.pages = [{ titleA:'', a:'', titleB:'', b:'' }];
+        out.push(primary);
+      });
+      if (out.length !== mergedTabs.length) {
+        _dbg('[_pickNotes] 偵測到同名重複分頁，已去重合併：', mergedTabs.length, '→', out.length);
+      }
+      return out;
+    })();
+
     const base = baseIsCloud ? cloudNotes : localNotes;
     const merged = {
-      tabs: mergedTabs,
+      tabs: _dedupedTabs,
       lastTab: base.lastTab || 0,
       lastViewedTab: typeof base.lastViewedTab === 'number' ? base.lastViewedTab : (base.lastTab || 0),
       lastViewedPage: base.lastViewedPage || 0,
@@ -756,7 +807,7 @@ function archiveOldHistory() {
 
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const cutoff = oneYearAgo.toISOString().slice(0, 10); // YYYY-MM-DD
+  const cutoff = localDateStr(oneYearAgo); // YYYY-MM-DD（本地時區，跟其餘日期比較基準一致；小影響但順手修正）
 
   const toArchive = state.doneHistory.filter(h => h.completedAt && h.completedAt < cutoff);
   if (toArchive.length === 0) return;
@@ -889,7 +940,7 @@ function _buildSyncPayload() {
     doneHistory: (function() {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const _cutoffStr = oneYearAgo.toISOString().slice(0, 10);
+      const _cutoffStr = localDateStr(oneYearAgo);
       const _filtered = (state.doneHistory || []).filter(h => !h.completedAt || h.completedAt >= _cutoffStr);
       // ★ 緊急止血：近一年篩選在使用量大時仍可能無上限增長，導致整份文件
       // 超過 Firestore 1MB 硬上限、所有同步全面失敗。這裡再加一道「最多保留

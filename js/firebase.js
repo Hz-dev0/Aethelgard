@@ -171,7 +171,19 @@ function _startRealtimeListener(uid) {
     })();
     const _cloudUpdatedAtForSnap = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
     const _localSavedAtForSnap = _localBackupForSnap && typeof _localBackupForSnap.savedAt === 'number' ? _localBackupForSnap.savedAt : 0;
-    const _remoteIsStale = _localSavedAtForSnap > 0 && _cloudUpdatedAtForSnap > 0 && _localSavedAtForSnap > _cloudUpdatedAtForSnap;
+    // ★ Bug fix：原本只比 savedAt vs updatedAt，但 saveStateLocal() 幾乎每次操作
+    //   都會把 savedAt 蓋成「現在」，跟內容有沒有真的變動無關——這會讓「本機比較新」
+    //   幾乎永遠成立，導致即時監聽把剛從其他裝置/剛完成任務推上來的新資料，誤判成
+    //   「遠端是舊的」而用本機過時的 tasks/doneHistory 蓋掉，還會反推回雲端，
+    //   造成「剛完成的任務又跑回來、成長軌跡歷史消失」。
+    //   比照 loadFromCloud() 已經修過的做法：加上內容雜湊比對，確認本機真的有
+    //   還沒同步的變動，才判定遠端資料是過時的。
+    const _localCoreFieldsForSnap = _localBackupForSnap ? {
+      tasks: _localBackupForSnap.tasks, rewards: _localBackupForSnap.rewards,
+      doneHistory: _localBackupForSnap.doneHistory, wishPoints: _localBackupForSnap.wishPoints
+    } : null;
+    const _remoteIsStale = _localSavedAtForSnap > 0 && _cloudUpdatedAtForSnap > 0 && _localSavedAtForSnap > _cloudUpdatedAtForSnap
+      && (!_localCoreFieldsForSnap || (typeof _localHasUnsyncedEdit !== 'function' || _localHasUnsyncedEdit(_localCoreFieldsForSnap)));
     if (_remoteIsStale) console.log('[snapshot] ⚠️ 遠端資料比本機舊（本機 savedAt:', _localSavedAtForSnap, '> 遠端 updatedAt:', _cloudUpdatedAtForSnap, '），tasks/doneHistory 保留本機版本');
 
     // 5. 套用遠端資料到 state（複用 loadFromCloud 的欄位映射邏輯）
@@ -213,6 +225,11 @@ function _startRealtimeListener(uid) {
     }
 
     saveStateLocal();
+    // ★ 跟 loadFromCloud() 一樣，套用完後記錄這次對齊點的雜湊，
+    //   避免下次 snapshot 進來時，_localHasUnsyncedEdit() 誤判本機有新變動。
+    if (typeof _markStateSynced === 'function') {
+      _markStateSynced({ tasks: state.tasks, rewards: state.rewards, doneHistory: state.doneHistory, wishPoints: state.wishPoints });
+    }
     // 更新 hash，讓下一次 syncToCloud 不會把剛收到的資料重新推回去
     _lastSyncHash = _quickHash({
       tasks: state.tasks, sandbox: state.sandbox, done: state.done,
@@ -222,7 +239,7 @@ function _startRealtimeListener(uid) {
         if (!h.completedAt) return true;
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        return h.completedAt >= oneYearAgo.toISOString().slice(0, 10);
+        return h.completedAt >= localDateStr(oneYearAgo);
       }),
       todayOrder: state.todayOrder || [], lotteryState,
       wishPoints: state.wishPoints || 0,
