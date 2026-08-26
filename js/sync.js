@@ -791,14 +791,48 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', (e) => {
   _pushStateEmergency();
   _pushNotesEmergency('beforeunload');
+  // ★★ 新增：關頁前若還有「確定尚未送達雲端」的變動，跳出瀏覽器原生的離開確認對話框。
+  //   背景：_pushStateEmergency() 呼叫的 _fbSave() 是非同步的 fetch/XHR 請求；beforeunload
+  //   結束後瀏覽器隨時可能真的把分頁砍掉，這個請求很可能根本來不及跑完就被中止——
+  //   這正是「PC 編輯完，過幾天在其他裝置打開又變回沒改過」最常見的真正成因：
+  //   使用者當下完全不知道那筆修改其實還卡在半路上，就把分頁關了。
+  //   瀏覽器不允許自訂提示文字（會顯示各自的通用字樣），但只要設定 returnValue，
+  //   就能逼出「確定要離開這個網站嗎？」的提示，讓使用者有機會多等幾秒再關閉，
+  //   而不是靜悄悄地遺失這筆修改。只有在真的有未確認同步完成的變動時才跳出，
+  //   避免每次關頁都被打擾。
+  try {
+    const dot = document.getElementById('syncDot');
+    const _hasUnconfirmedChange = isSyncing || (dot && !dot.className.includes('synced'));
+    if (_hasUnconfirmedChange) {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  } catch(err) {}
 });
 
 window.addEventListener('pagehide', () => {
   _pushStateEmergency();
   _pushNotesEmergency('pagehide');
+});
+
+// ★★ 新增：網路恢復時主動補推。
+//   背景：_doSyncToCloud() 失敗只會在同一個分頁內自動重試最多 3 次（間隔 3/6/9 秒），
+//   重試用盡就放棄，靜靜停在「同步失敗」的紅燈狀態，不會再自己動——如果那次失敗
+//   剛好是因為斷網（例如搭電梯、進地下室、切換 Wi-Fi），使用者往往完全沒注意到紅燈，
+//   之後即使網路恢復了，也不會有任何東西再觸發一次推送，直到使用者剛好又編輯了
+//   什麼、或手動點同步燈為止。這裡監聽瀏覽器的 online 事件，網路一恢復就立刻
+//   補推一次，縮小「資料卡在本機出不去」的時間窗口。
+window.addEventListener('online', () => {
+  const dot = document.getElementById('syncDot');
+  if (dot && dot.className.includes('error')) {
+    _dbg('[sync] 偵測到網路恢復，補推先前失敗的同步');
+    _syncRetryCount = 0;
+    _doSyncToCloud();
+  }
 });
 
 // 雲端只同步當年資料，舊資料保留在本地（不會消失）
