@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ★★ 把下面這個 UID 換成你自己的 Owner UID ★★
+    // 取得方式：登入 App → 設定 → 「複製我的 UID」按鈕（copyMyUid()），
+    // 或用 email/password 登入後，在瀏覽器 console 打 firebase.auth().currentUser.uid
+    function isRealOwner() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.uid == "REPLACE_WITH_YOUR_OWNER_UID";
+    }
+
+    // 訪客：必須有一份「未過期」且 ownerUid 對得上的 guest_access/{uid} 文件
+    function isValidGuestFor(ownerDocId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/guest_access/$(request.auth.uid))
+        && get(/databases/$(database)/documents/guest_access/$(request.auth.uid)).data.ownerUid == ownerDocId
+        && get(/databases/$(database)/documents/guest_access/$(request.auth.uid)).data.expiresAt > request.time.toMillis();
+    }
+
+    // ── 個人資料主文件：以前是「任何登入者（含免費匿名登入）都可讀寫」，
+    //    現在收緊成「只有你本人，或是拿著有效訪客通行證的人」才行 ──
+    match /Aethelgard/{docId} {
+      allow read, write: if isRealOwner() || isValidGuestFor(docId);
+    }
+    match /IsolaPath/{docId} {
+      allow read, write: if isRealOwner();
+    }
+    match /SanctuaryOfReed/{docId} {
+      allow read, write: if isRealOwner();
+    }
+
+    // ── 通行碼：原本 allow read: if true 讓「未登入的任何人」都能直接讀取，
+    //    且會讓下面的 allow list: if isOwner() 形同虛設（read 已經涵蓋 list）。
+    //    現在改成：讀取需要先登入（App 已改成先匿名登入才讀 token），
+    //    列出全部只有你本人可以 ──
+    match /tokens/{code} {
+      allow get:    if request.auth != null;
+      allow list:   if isRealOwner();
+      allow create: if isRealOwner();
+      allow delete: if request.auth != null;
+    }
+
+    // ── 訪客通行證：讀取收斂成「你本人」或「訪客本人查自己那份」，
+    //    列出/刪除只有你本人 ──
+    match /guest_access/{uid} {
+      allow read:   if isRealOwner() || (request.auth != null && request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.ownerUid is string
+                    && request.resource.data.expiresAt is number;
+      allow update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if isRealOwner();
+      allow list:   if isRealOwner();
+    }
+
+    // 目前程式碼沒有實際用到 users/{userId}，保留原本的 per-uid 隔離即可
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
