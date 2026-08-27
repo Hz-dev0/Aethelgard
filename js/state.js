@@ -253,19 +253,13 @@ async function forceSyncNotes() {
   if (statusEl) statusEl.textContent = '同步中…';
   try {
     const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
-    // ★ Bug fix：原本這裡用動態 import firebase-firestore.js 再呼叫 updateDoc()，
-    // 跟 syncNotesToCloud()／_pushNotesEmergency() 已經修過的問題一模一樣：
-    // 1) 動態 import 在無痕模式/網路較慢時常常還沒抓完就被中斷，這個「強制同步」
-    //    按鈕反而最常在使用者急著確認資料有沒有上雲端時被按，恰好最容易踩到。
-    // 2) updateDoc() 要求文件必須已存在，若 Aethelgard/data 這份文件因故還不存在
-    //    （例如全新裝置、文件被清過），updateDoc 會直接丟例外失敗；而 setDoc(merge:true)
-    //    沒有這個資料，不存在就直接建立。
-    // 改用已經在記憶體裡、其他地方也在用的 window._fbSetDoc(merge:true)，行為一致。
-    await window._fbSetDoc(ref, { notes: notesPayload }, { merge: true });
+    // 使用 setDoc merge 方式更新 notes 欄位
+    const { getFirestore, doc: fDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    await updateDoc(ref, { notes: notesPayload });
     if (statusEl) statusEl.textContent = '✓ 筆記已推送至雲端！tabs: ' + notesPayload.tabs.length;
     showToast('✓ 筆記已同步');
   } catch(e) {
-    if (statusEl) statusEl.textContent = '❌ 同步失敗：' + (e && e.message || e);
+    if (statusEl) statusEl.textContent = '❌ 同步失敗：' + e.message;
   }
 }
 window.forceSyncNotes = forceSyncNotes;

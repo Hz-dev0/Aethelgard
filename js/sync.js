@@ -273,40 +273,6 @@ function _quickHash(obj) {
   } catch(e) { return ''; }
 }
 
-// ── 「本機是否真的有雲端還沒看過的變動」判斷 ──
-// 背景（真實踩過的資料被覆蓋事故）：過去的做法是拿 savedAt（本機快照
-// 「最後一次被寫入」的時間）跟雲端 updatedAt 比較，本機比較新就優先採用本機。
-// 但 saveStateLocal() 每次呼叫都會把 savedAt 蓋成「現在」，不管內容有沒有真的
-// 改變——裝置只要重新打開、跑一次本機渲染流程，即使裡面裝的其實是好幾個月前
-// 的舊資料，savedAt 也會被蓋成「剛剛」。這會讓「本機比較新」的判斷幾乎每次
-// 都成立，導致陳舊的本機資料被誤判成最新版本，接著又被 init 流程自動推回雲端，
-// 蓋掉真正的最新資料——完全不需要使用者做任何操作就會發生。
-// 修正：改成記錄「上一次成功跟雲端對齊時的內容雜湊」，只有本機目前內容真的跟
-// 那次對齊時不一樣，才代表這台裝置存在雲端還沒看過的變動，這時才進一步比對
-// 時間戳來決定先後；內容沒變的話，無論 savedAt 看起來多新都不該優先採用本機。
-const SYNCED_HASH_KEY = 'aethelgard_synced_hash';
-function _markStateSynced(fields) {
-  try { localStorage.setItem(SYNCED_HASH_KEY, _quickHash(fields)); } catch(e) {}
-}
-function _localHasUnsyncedEdit(localFields) {
-  try {
-    const syncedHash = localStorage.getItem(SYNCED_HASH_KEY);
-    if (!syncedHash) return true; // 從沒記錄過對齊點（例如剛升級這個修正）：保守起見退回舊行為，交由時間戳判斷
-    return _quickHash(localFields) !== syncedHash;
-  } catch(e) { return true; }
-}
-const SYNCED_LOTTERY_HASH_KEY = 'aethelgard_synced_lottery_hash';
-function _markLotterySynced(lottery) {
-  try { localStorage.setItem(SYNCED_LOTTERY_HASH_KEY, _quickHash(lottery)); } catch(e) {}
-}
-function _localLotteryHasUnsyncedEdit(localLottery) {
-  try {
-    const syncedHash = localStorage.getItem(SYNCED_LOTTERY_HASH_KEY);
-    if (!syncedHash) return true;
-    return _quickHash(localLottery) !== syncedHash;
-  } catch(e) { return true; }
-}
-
 async function loadFromCloud() {
   if (!window._fbUid) return false;
   try {
@@ -331,12 +297,7 @@ async function loadFromCloud() {
       //   還沒推上雲端的變動）優先採用本機的 rewards／wishPoints，避免被舊的雲端資料蓋掉。
       const cloudUpdatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
       const localSavedAt = localBackup && typeof localBackup.savedAt === 'number' ? localBackup.savedAt : 0;
-      const _localCoreFields = localBackup ? {
-        tasks: localBackup.tasks, rewards: localBackup.rewards,
-        doneHistory: localBackup.doneHistory, wishPoints: localBackup.wishPoints
-      } : null;
-      const localIsNewer = isOwnUid && localSavedAt > cloudUpdatedAt
-        && (!_localCoreFields || _localHasUnsyncedEdit(_localCoreFields));
+      const localIsNewer = isOwnUid && localSavedAt > cloudUpdatedAt;
       if (!hasCloudData && localHasTasks && isOwnUid) {
         console.warn('Firebase 無資料但本地有，保留本地並重新推送');
         state.tasks        = localBackup.tasks;
@@ -366,18 +327,7 @@ async function loadFromCloud() {
         const _lrkTs = _lrk && /^\d{10,}$/.test(_lrk) ? parseInt(_lrk) : 0;
         const _cycleTs = typeof getLastResetTimestamp === 'function' ? getLastResetTimestamp() : 0;
         if (_lrkTs >= _cycleTs && _cycleTs > 0) {
-          // ★★ Bug fix（真正找到「兩天前完成的任務今天又出現」的元兇）：
-          //   這裡原本用 new Date(_cycleTs).toISOString().slice(0,10) 取得「本次重置點」
-          //   對應的日期字串，但 toISOString() 是 UTC 時間，不是本地時區！
-          //   對 UTC+8（例如台灣）的使用者來說，重置時間通常設在清晨（例如 04:00），
-          //   換算成 UTC 會落在「前一個 UTC 日期的 20:00」，toISOString() 切出來的日期
-          //   會整整少一天。全專案其他地方（runDailyReset()、localDateStr() 等）都刻意
-          //   避開這個陷阱、統一用本地時區的 YYYY-MM-DD，只有這裡漏用了。
-          //   結果：t.completedAt < _cycleDate 這個比較基準日期算錯，變成只有「2 天前（以上）
-          //   完成」的重複任務才會被打回未完成，「昨天」完成的反而不會被正確重置——
-          //   跟預期的「重置週期一到，之前完成的重複任務就該重新出現」完全錯位，
-          //   使用者感覺就是「已經是兩天前的完成紀錄，怎麼突然又跑出來要重做」。
-          const _cycleDate = localDateStr(new Date(_cycleTs));
+          const _cycleDate = new Date(_cycleTs).toISOString().slice(0,10);
           state.tasks.forEach(t => {
             if (!t.recurring || t.recurMode === 'interval') return;
             if (t.done && t.completedAt && t.completedAt < _cycleDate) {
@@ -489,9 +439,7 @@ async function loadFromCloud() {
         })();
         const localLotterySavedAt = localLottery && typeof localLottery.savedAt === 'number' ? localLottery.savedAt : 0;
         const cloudLotteryUpdatedAt = typeof data.lotteryState.savedAt === 'number' ? data.lotteryState.savedAt : cloudUpdatedAt;
-        const _lotteryIsNewer = isOwnUid && localLottery && localLotterySavedAt > cloudLotteryUpdatedAt
-          && _localLotteryHasUnsyncedEdit(localLottery);
-        if (_lotteryIsNewer) {
+        if (isOwnUid && localLottery && localLotterySavedAt > cloudLotteryUpdatedAt) {
           lotteryState = { ...lotteryState, ...localLottery };
         } else {
           lotteryState = { ...lotteryState, ...data.lotteryState };
@@ -511,12 +459,6 @@ async function loadFromCloud() {
           if (ndEl) ndEl.value = data.settings.neglectDays;
         }
       }
-      // ★ 這裡代表本機 state 已經確定跟雲端這次讀到的版本對齊了（不管是直接採用
-      //   雲端資料，還是因為偵測到本機有真的未同步的變動而保留本機）——記錄下這個
-      //   對齊點的內容雜湊，下次讀取時才能正確分辨「本機是否真的有新變動」，
-      //   而不是被 saveStateLocal() 每次都重新蓋掉的 savedAt 時間戳誤導。
-      _markStateSynced({ tasks: state.tasks, rewards: state.rewards, doneHistory: state.doneHistory, wishPoints: state.wishPoints });
-      _markLotterySynced(lotteryState);
       return true;
     }
     return false;
@@ -599,49 +541,9 @@ function _pickNotes(cloudNotes) {
 
     if (mergedTabs.length === 0) return cloudNotes; // 保險：合併結果不該是空的，退回雲端版本
 
-    // ★ Bug fix：舊資料沒有 id 時，notesEnsureDefaults() 會在「每一台裝置上各自」
-    //   用 _notesGenId() 現場補一個 id。同一個分頁（同名）在兩台裝置上因此拿到
-    //   不同的 id，上面用 id 當 key 的合併邏輯就會把它們當成兩個不同分頁，
-    //   結果同一個標籤越同步越多份。這裡在合併結果出爐後，用「名稱」再做一次
-    //   保險性去重：同名分頁只留一份（挑更新時間較新的那份為主），並把另一份
-    //   有內容、主分頁沒有的頁面併進去，避免真的遺失資料。
-    const _dedupedTabs = (function() {
-      const byName = {};
-      const order = [];
-      mergedTabs.forEach(t => {
-        const key = (t.name || '').trim();
-        if (!byName[key]) { byName[key] = []; order.push(key); }
-        byName[key].push(t);
-      });
-      const out = [];
-      order.forEach(key => {
-        const group = byName[key];
-        if (group.length === 1) { out.push(group[0]); return; }
-        // 同名多份：挑 updatedAt 最新的當主分頁
-        group.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-        const primary = { ...group[0], pages: [...(group[0].pages || [])] };
-        const isBlank = pg => !pg.a?.trim() && !pg.b?.trim() && !pg.titleA?.trim() && !pg.titleB?.trim();
-        const sig = pg => [pg.titleA, pg.a, pg.titleB, pg.b].map(s => (s || '').trim()).join('\u0001');
-        const existingSigs = new Set(primary.pages.filter(pg => !isBlank(pg)).map(sig));
-        group.slice(1).forEach(dup => {
-          (dup.pages || []).forEach(pg => {
-            if (isBlank(pg)) return;
-            const s = sig(pg);
-            if (!existingSigs.has(s)) { primary.pages.push(pg); existingSigs.add(s); }
-          });
-        });
-        if (primary.pages.length === 0) primary.pages = [{ titleA:'', a:'', titleB:'', b:'' }];
-        out.push(primary);
-      });
-      if (out.length !== mergedTabs.length) {
-        _dbg('[_pickNotes] 偵測到同名重複分頁，已去重合併：', mergedTabs.length, '→', out.length);
-      }
-      return out;
-    })();
-
     const base = baseIsCloud ? cloudNotes : localNotes;
     const merged = {
-      tabs: _dedupedTabs,
+      tabs: mergedTabs,
       lastTab: base.lastTab || 0,
       lastViewedTab: typeof base.lastViewedTab === 'number' ? base.lastViewedTab : (base.lastTab || 0),
       lastViewedPage: base.lastViewedPage || 0,
@@ -791,48 +693,14 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-window.addEventListener('beforeunload', (e) => {
+window.addEventListener('beforeunload', () => {
   _pushStateEmergency();
   _pushNotesEmergency('beforeunload');
-  // ★★ 新增：關頁前若還有「確定尚未送達雲端」的變動，跳出瀏覽器原生的離開確認對話框。
-  //   背景：_pushStateEmergency() 呼叫的 _fbSave() 是非同步的 fetch/XHR 請求；beforeunload
-  //   結束後瀏覽器隨時可能真的把分頁砍掉，這個請求很可能根本來不及跑完就被中止——
-  //   這正是「PC 編輯完，過幾天在其他裝置打開又變回沒改過」最常見的真正成因：
-  //   使用者當下完全不知道那筆修改其實還卡在半路上，就把分頁關了。
-  //   瀏覽器不允許自訂提示文字（會顯示各自的通用字樣），但只要設定 returnValue，
-  //   就能逼出「確定要離開這個網站嗎？」的提示，讓使用者有機會多等幾秒再關閉，
-  //   而不是靜悄悄地遺失這筆修改。只有在真的有未確認同步完成的變動時才跳出，
-  //   避免每次關頁都被打擾。
-  try {
-    const dot = document.getElementById('syncDot');
-    const _hasUnconfirmedChange = isSyncing || (dot && !dot.className.includes('synced'));
-    if (_hasUnconfirmedChange) {
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
-    }
-  } catch(err) {}
 });
 
 window.addEventListener('pagehide', () => {
   _pushStateEmergency();
   _pushNotesEmergency('pagehide');
-});
-
-// ★★ 新增：網路恢復時主動補推。
-//   背景：_doSyncToCloud() 失敗只會在同一個分頁內自動重試最多 3 次（間隔 3/6/9 秒），
-//   重試用盡就放棄，靜靜停在「同步失敗」的紅燈狀態，不會再自己動——如果那次失敗
-//   剛好是因為斷網（例如搭電梯、進地下室、切換 Wi-Fi），使用者往往完全沒注意到紅燈，
-//   之後即使網路恢復了，也不會有任何東西再觸發一次推送，直到使用者剛好又編輯了
-//   什麼、或手動點同步燈為止。這裡監聽瀏覽器的 online 事件，網路一恢復就立刻
-//   補推一次，縮小「資料卡在本機出不去」的時間窗口。
-window.addEventListener('online', () => {
-  const dot = document.getElementById('syncDot');
-  if (dot && dot.className.includes('error')) {
-    _dbg('[sync] 偵測到網路恢復，補推先前失敗的同步');
-    _syncRetryCount = 0;
-    _doSyncToCloud();
-  }
 });
 
 // 雲端只同步當年資料，舊資料保留在本地（不會消失）
@@ -841,7 +709,7 @@ function archiveOldHistory() {
 
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const cutoff = localDateStr(oneYearAgo); // YYYY-MM-DD（本地時區，跟其餘日期比較基準一致；小影響但順手修正）
+  const cutoff = oneYearAgo.toISOString().slice(0, 10); // YYYY-MM-DD
 
   const toArchive = state.doneHistory.filter(h => h.completedAt && h.completedAt < cutoff);
   if (toArchive.length === 0) return;
@@ -974,7 +842,7 @@ function _buildSyncPayload() {
     doneHistory: (function() {
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const _cutoffStr = localDateStr(oneYearAgo);
+      const _cutoffStr = oneYearAgo.toISOString().slice(0, 10);
       const _filtered = (state.doneHistory || []).filter(h => !h.completedAt || h.completedAt >= _cutoffStr);
       // ★ 緊急止血：近一年篩選在使用量大時仍可能無上限增長，導致整份文件
       // 超過 Firestore 1MB 硬上限、所有同步全面失敗。這裡再加一道「最多保留
@@ -1069,10 +937,6 @@ async function _doSyncToCloud() {
     if (!ok) throw new Error('Firebase save failed');
     _markSyncWrite(); // ★ 告知 snapshot 監聽器：接下來 2 秒的更新是自己寫的，忽略
     _lastSyncHash = _hash;
-    // ★ 推送成功代表雲端現在跟這份 payload 內容一致，記錄對齊點，
-    //   避免下次啟動時 saveStateLocal() 重新蓋出的 savedAt 被誤判成「本機有新變動」
-    _markStateSynced({ tasks: _payload.tasks, rewards: _payload.rewards, doneHistory: _payload.doneHistory, wishPoints: _payload.wishPoints });
-    _markLotterySynced(_payload.lotteryState);
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
     _notesDirty = false;

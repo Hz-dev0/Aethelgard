@@ -123,20 +123,6 @@
             </div>
             <div id="todayPanelList"></div>
           </div>
-          <!-- Quick Todo Section（今日任務下方，隨手記、隨手完成，一樣寫入紀錄並給願望碎片） -->
-          <div class="card" id="quickTodoCard" style="margin-top:14px">
-            <div class="card-title" onclick="toggleQuickTodoSection()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none">
-              <span>📋 待完成</span>
-              <span id="quickTodoArrow" style="font-size:11px;color:var(--text-faint);transition:transform 0.2s;transform:rotate(90deg)">▶</span>
-            </div>
-            <div id="quickTodoBody" style="overflow:hidden;max-height:600px;opacity:1;transition:max-height 0.3s ease, opacity 0.2s ease">
-              <div style="display:flex;gap:10px;margin:12px 0 14px">
-                <input id="todoInput" placeholder="要做的事…" class="input-sandbox" onkeydown="if(event.key==='Enter')quickAddTodo()">
-                <button class="btn-confirm" onclick="quickAddTodo()">新增</button>
-              </div>
-              <div class="task-list" id="todoList"></div>
-            </div>
-          </div>
           <div id="allClearBanner">
             <div style="font-size:22px;margin-bottom:4px">🎉</div>
             <div style="font-size:14px;font-weight:700;letter-spacing:0.04em">今日全部完成！</div>

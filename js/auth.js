@@ -631,73 +631,49 @@ async function submitGuestToken() {
     if (typeof window._otpFlashError === 'function') window._otpFlashError();
     return;
   }
-  // ★★ 安全性修正：原本這裡是「先讀 tokens/{code}，驗證成功才登入」，
-  //   代表讀取 tokens 文件那一刻使用者根本還沒登入（request.auth 是 null）。
-  //   若 Firestore 規則要收緊成「只有登入者才能讀 tokens」（防止任何人不用登入
-  //   就對六位數通行碼做暴力枚舉），這裡的讀取順序就會直接壞掉。
-  //   改成「先匿名登入，登入成功後才讀 tokens/{code}」，順序對調，
-  //   讓 tokens 的讀取規則可以收緊成 request.auth != null，不必對外公開。
-  errEl.textContent = '登入中…'; errEl.style.color = '';
-  window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
-  // ★ 第二個競態條件的修正：guest_access/{guestUid} 文件還沒寫入完成前，
-  //   不能讓 onAuthStateChanged 提前呼叫 _onFirebaseReadyCallback()。
-  //   因為 Firestore 安全規則很可能靠 guest_access/{uid} 是否存在來判斷訪客
-  //   有沒有權限讀 Aethelgard/data；signInAnonymously() 一成功，onAuthStateChanged
-  //   就會觸發，但這時 guest_access 文件還沒寫到伺服器上，會被權限規則擋下來，
-  //   讀取直接失敗回傳 null —— 這就是無痕模式下「驗證碼登入後讀不到任務資料」的成因。
-  window._fbGuestAccessPending = true;
-  // 這次是全新登入，不是 reload 復原，避免下面誤觸復原邏輯
-  window._guestSessionRestoredPending = false;
-
-  let guestUser;
-  try {
-    guestUser = await window._fbGuestSignInAnon();
-  } catch (authErr) {
-    console.warn('[guest] 匿名登入失敗', authErr);
-    window._fbGuestSessionActive = false;
-    window._fbGuestAccessPending = false;
-    errEl.textContent = '登入失敗，請檢查網路後重試';
-    return;
-  }
-  const guestUid = guestUser.uid;
-  window._fbAuthUid = guestUid;
-
-  errEl.textContent = '驗證中…';
+  errEl.textContent = '驗證中…'; errEl.style.color = '';
   try {
     const tokenRef = window._fbDoc(window._fbDb, 'tokens', code);
     const snap = await window._fbGetDoc(tokenRef);
-    if (!snap.exists()) {
-      errEl.textContent = '通行碼不存在或已被使用';
-      window._fbGuestSessionActive = false;
-      window._fbGuestAccessPending = false;
-      return;
-    }
+    if (!snap.exists()) { errEl.textContent = '通行碼不存在或已被使用'; return; }
     const data = snap.data();
-    if (Date.now() > data.expiresAt) {
-      errEl.textContent = '通行碼已過期，請重新申請';
-      window._fbGuestSessionActive = false;
-      window._fbGuestAccessPending = false;
-      return;
-    }
+    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期，請重新申請'; return; }
 
     const ownerUid = data.ownerUid;
     if (!ownerUid) {
       errEl.textContent = '通行碼格式不正確，請請 Owner 重新產生';
       errEl.style.color = 'var(--rose)';
-      window._fbGuestSessionActive = false;
-      window._fbGuestAccessPending = false;
       return;
     }
 
+    // ── 以匿名身份登入（保持匿名，不用 email/password）──
+    errEl.textContent = '登入中…'; errEl.style.color = '';
+    window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
+    // ★ 第二個競態條件的修正：guest_access/{guestUid} 文件還沒寫入完成前，
+    //   不能讓 onAuthStateChanged 提前呼叫 _onFirebaseReadyCallback()。
+    //   因為 Firestore 安全規則很可能靠 guest_access/{uid} 是否存在來判斷訪客
+    //   有沒有權限讀 Aethelgard/data；signInAnonymously() 一成功，onAuthStateChanged
+    //   就會觸發，但這時 guest_access 文件還沒寫到伺服器上，會被權限規則擋下來，
+    //   讀取直接失敗回傳 null —— 這就是無痕模式下「驗證碼登入後讀不到任務資料」的成因。
+    window._fbGuestAccessPending = true;
+
+    // ★ 修正競態條件：_fbUid 必須在呼叫 signInAnonymously() 之前就設成 ownerUid。
+    //   原因：signInAnonymously() 若需要真的跟 Firebase 伺服器來回建立全新匿名帳號
+    //   （無痕模式下一定會，因為沒有任何快取憑證），onAuthStateChanged 監聽器可能在
+    //   這個 await 真正 resolve 回來之前就先被觸發，並呼叫 _onFirebaseReadyCallback()
+    //   讓 init() 提前繼續往下跑去呼叫 loadFromCloud()——這時若 _fbUid 還是空字串，
+    //   loadFromCloud() 會直接判斷「未就緒」並回傳 false，資料就讀空了。
+    //   ownerUid 在這裡已經從 token 文件讀出來了，不需要等匿名登入完成才能設定。
     window._fbUid = ownerUid;
     window._fbOwnerUid = ownerUid;
     try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
+    // 這次是全新登入，不是 reload 復原，避免下面誤觸復原邏輯
+    window._guestSessionRestoredPending = false;
 
-    // ── 用完即刪 token ──
-    try { await window._fbDeleteDoc(tokenRef); } catch(delErr) {
-      console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
-    }
+    const guestUser = await window._fbGuestSignInAnon();
+    const guestUid = guestUser.uid;
+    window._fbAuthUid = guestUid;
 
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // ★ 切換 UID 後立刻抑制 snapshot，避免舊版 snapshot 在 init/loadFromCloud 完成前進來蓋掉資料
@@ -711,16 +687,29 @@ async function submitGuestToken() {
     try {
       sessionStorage.setItem('aethelgard_guest_session', JSON.stringify({ ownerUid, expiresAt: passExpiresAt }));
     } catch(e) {}
+    // ★ 修正順序性 bug：guest_access 必須在「刪除通行碼」之前寫入。
+    //   若安全規則是靠檢查 tokens/{code} 是否還存在、ownerUid 是否相符來決定
+    //   要不要放行 guest_access 的建立，先刪 token 再寫 guest_access 會讓這個
+    //   寫入 100% 被規則擋下（不是偶發網路問題），導致這個訪客 session 之後
+    //   讀取 Aethelgard/data 永遠 permission-denied。改成先寫 guest_access、
+    //   確認成功後才刪 token；並加上重試，單次網路抖動不會整個 session 直接壞掉。
     let _guestAccessWritten = false;
-    try {
-      await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
-        ownerUid: ownerUid,
-        grantedAt: Date.now(),
-        expiresAt: passExpiresAt
-      });
-      _guestAccessWritten = true;
-    } catch(gaErr) {
-      console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
+    for (let attempt = 0; attempt < 3 && !_guestAccessWritten; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
+        await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
+          ownerUid: ownerUid,
+          grantedAt: Date.now(),
+          expiresAt: passExpiresAt
+        });
+        _guestAccessWritten = true;
+      } catch(gaErr) {
+        console.warn(`[guest] guest_access 寫入失敗（第 ${attempt + 1} 次嘗試）`, gaErr.code, gaErr.message);
+      }
+    }
+    // ── 用完即刪 token（guest_access 確認寫入後才刪，順序不能反）──
+    try { await window._fbDeleteDoc(tokenRef); } catch(delErr) {
+      console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
     }
     // ★ guest_access 寫入嘗試（成功或失敗）已經結束，現在才能放行 ready callback。
     //   不論成功失敗都要清除，否則寫入失敗時會永遠卡住、永遠不呼叫 ready callback。

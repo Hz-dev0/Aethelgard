@@ -253,21 +253,14 @@ function notesEnsureDefaults() {
   // ★ fix：id 一旦補上就立刻寫回 localStorage，避免下次載入時又重新產生「不一樣」的 id，
   // 導致 _pickNotes 用 id 比對時把同一個分頁誤判成兩個不同分頁而複製。
   if (_idBackfilled) {
-    // ★ Bug fix：原本補上 id 後寫回 localStorage 時沒有更新 updatedAt，
-    // 導致這次「補 id」不會被當成一次真正的本機變動，_notesMemUpdatedAt 也沒同步更新——
-    // 下次跟雲端合併時，這份剛補好 id 的本機資料時間戳可能還是舊的（甚至是 0），
-    // 讓 _pickNotes() 誤判雲端版本才是最新，白白浪費了剛補上的 id。
-    const _backfillTs = Date.now();
     try {
       const raw = localStorage.getItem(NOTES_STORAGE_KEY);
       const d = raw ? JSON.parse(raw) : {};
       localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
         ...d,
         tabs: notesFolderData,
-        updatedAt: _backfillTs,
       }));
     } catch(e) {}
-    window._notesMemUpdatedAt = _backfillTs;
   }
 }
 
@@ -1441,8 +1434,6 @@ document.addEventListener('visibilitychange', () => {
     const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
     if (_hiddenDuration < 15000) return;
     window._saveReloadRestoreState();
-    // ★ 靜默重整：告知 early.js 這次重整不用顯示「正在驗證身份」鎖屏畫面
-    try { sessionStorage.setItem('aethelgard_silent_reload', '1'); } catch(e) {}
     location.reload();
   }
 });
