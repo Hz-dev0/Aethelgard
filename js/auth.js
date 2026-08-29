@@ -632,46 +632,65 @@ async function submitGuestToken() {
     return;
   }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
+  // ★ 規則調整後：讀 tokens/{code} 要求 request.auth != null
+  //   （match /tokens/{code} { allow get: if request.auth != null; }）。
+  //   必須先匿名登入才能讀通行碼是否存在/有效——原本「先讀 token、驗證通過才
+  //   登入」的順序跟規則對不上，一定會被擋在讀 token 這一步（permission-denied）。
+  // 先掛旗標，避免 onAuthStateChanged 把這次匿名登入誤判成「未通過 OTP 驗證的
+  // 遊蕩匿名 session」而觸發鎖屏／清空 _fbUid，也避免 ready callback 在
+  // token 都還沒驗證完就提前被叫用。
+  window._fbGuestSessionActive = true;
+  window._fbGuestAccessPending = true;
+  let guestUser;
+  try {
+    guestUser = await window._fbGuestSignInAnon();
+  } catch (signInErr) {
+    window._fbGuestSessionActive = false;
+    window._fbGuestAccessPending = false;
+    errEl.textContent = '登入失敗：' + signInErr.message;
+    return;
+  }
   try {
     const tokenRef = window._fbDoc(window._fbDb, 'tokens', code);
     const snap = await window._fbGetDoc(tokenRef);
-    if (!snap.exists()) { errEl.textContent = '通行碼不存在或已被使用'; return; }
+    if (!snap.exists()) {
+      errEl.textContent = '通行碼不存在或已被使用';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
+      return;
+    }
     const data = snap.data();
-    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期，請重新申請'; return; }
+    if (Date.now() > data.expiresAt) {
+      errEl.textContent = '通行碼已過期，請重新申請';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
+      return;
+    }
 
     const ownerUid = data.ownerUid;
     if (!ownerUid) {
       errEl.textContent = '通行碼格式不正確，請請 Owner 重新產生';
       errEl.style.color = 'var(--rose)';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
       return;
     }
 
-    // ── 以匿名身份登入（保持匿名，不用 email/password）──
+    // ── 通行碼有效，繼續走訪客登入流程 ──
     errEl.textContent = '登入中…'; errEl.style.color = '';
-    window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
-    // ★ 第二個競態條件的修正：guest_access/{guestUid} 文件還沒寫入完成前，
-    //   不能讓 onAuthStateChanged 提前呼叫 _onFirebaseReadyCallback()。
-    //   因為 Firestore 安全規則很可能靠 guest_access/{uid} 是否存在來判斷訪客
-    //   有沒有權限讀 Aethelgard/data；signInAnonymously() 一成功，onAuthStateChanged
-    //   就會觸發，但這時 guest_access 文件還沒寫到伺服器上，會被權限規則擋下來，
-    //   讀取直接失敗回傳 null —— 這就是無痕模式下「驗證碼登入後讀不到任務資料」的成因。
-    window._fbGuestAccessPending = true;
 
-    // ★ 修正競態條件：_fbUid 必須在呼叫 signInAnonymously() 之前就設成 ownerUid。
-    //   原因：signInAnonymously() 若需要真的跟 Firebase 伺服器來回建立全新匿名帳號
-    //   （無痕模式下一定會，因為沒有任何快取憑證），onAuthStateChanged 監聽器可能在
-    //   這個 await 真正 resolve 回來之前就先被觸發，並呼叫 _onFirebaseReadyCallback()
-    //   讓 init() 提前繼續往下跑去呼叫 loadFromCloud()——這時若 _fbUid 還是空字串，
-    //   loadFromCloud() 會直接判斷「未就緒」並回傳 false，資料就讀空了。
-    //   ownerUid 在這裡已經從 token 文件讀出來了，不需要等匿名登入完成才能設定。
+    // ★ 修正競態條件：_fbUid 必須在後續流程用到之前就設成 ownerUid。
+    //   ownerUid 在這裡已經從 token 文件讀出來了。
     window._fbUid = ownerUid;
     window._fbOwnerUid = ownerUid;
     try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
     // 這次是全新登入，不是 reload 復原，避免下面誤觸復原邏輯
     window._guestSessionRestoredPending = false;
 
-    const guestUser = await window._fbGuestSignInAnon();
     const guestUid = guestUser.uid;
     window._fbAuthUid = guestUid;
 

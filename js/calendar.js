@@ -281,6 +281,6 @@ function _applyDateChange(t, newDate) {
   renderTasks(); renderStats();
   if (typeof _renderTreeRightPanel === 'function') _renderTreeRightPanel();
   showToast(newDate ? `📅 日期已更新為 ${newDate}` : '📅 日期已清除');
-  syncToCloud();
+  _syncNow();
 }
 window.openDateTagPicker = openDateTagPicker;

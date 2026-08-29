@@ -818,16 +818,15 @@ window._syncNow = _syncNow;
 
 // ── syncToCloud：對外入口，帶 debounce 防止短時間內連續呼叫造成閃爍 ──
 // ★ Optimistic UI：saveStateLocal() 立即執行，UI 永遠不阻塞等待雲端
+// ★ 改版：原本用 debounce（手機 5 秒／PC 30 秒）延後推送，是為了把連續操作合併成
+//   一次寫入省額度。但實測下來會呼叫 syncToCloud() 的地方全是一次性動作（點擊/
+//   選取/確認），沒有逐字輸入場景（筆記走另一套 syncNotesToCloud，不受影響）。
+//   debounce 延遲在無痕模式下是資料遺失的破口：操作後很快關分頁，資料還沒推上
+//   雲端、無痕又沒有 localStorage 可當備份，兩邊都救不回來。改成立即推送；
+//   靠 _lastSyncHash 比對，沒有實際變動時仍會靜默跳過，寫入量不會明顯增加
+//   （個人用量遠低於 Firestore 免費額度每日 20,000 次寫入上限）。
 function syncToCloud() {
-  saveStateLocal();
-  if (!state._initDone) return;
-  if (!_isFirebaseReady()) return;
-  if (_syncDebounceTimer !== null) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
-  // ★★ 省額度：依裝置調整 debounce（手機 5 秒 / PC 30 秒）
-  // 手機：觸控編輯短暫，5 秒後推；PC：停止操作 30 秒後推，省寫入次數
-  // 關頁/切頁由 visibilitychange + beforeunload 保底
-  _syncDebounceTimer = setTimeout(() => { _syncDebounceTimer = null; _doSyncToCloud(); },
-    /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
+  _syncNow();
 }
 
 // ── 組建同步 payload（抽出供緊急推送複用）──
