@@ -148,6 +148,11 @@ function openOwnerLoginOverlay() {
           <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
         </div>
         <div>
+          <button onclick="submitGoogleLogin()" id="googleLoginBtn"
+            style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">使用 Google 登入</button>
+          <div id="googleLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin:6px 0 10px;text-align:center"></div>
+        </div>
+        <div>
           <button onclick="toggleOwnerLoginSection()"
             id="ownerLoginToggleBtn"
             style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px"
@@ -249,6 +254,41 @@ async function submitOwnerLogin() {
   }
 }
 window.submitOwnerLogin = submitOwnerLogin;
+
+async function submitGoogleLogin() {
+  const errEl = document.getElementById('googleLoginError');
+  if (errEl) { errEl.textContent = '登入中…'; errEl.style.color = ''; }
+  try {
+    const cred = await window._fbGoogleLogin();
+    if (!cred) return; // 改走整頁跳轉，頁面即將離開
+    window._fbAuthUid = cred.user.uid;
+    window._fbIsOwner = true;
+    window._fbGuestSessionActive = false;
+    window._fbUid = cred.user.uid;
+    try { localStorage.setItem('aethelgard_fb_uid', cred.user.uid); } catch(e2) {}
+    try { localStorage.setItem('aethelgard_fb_owner_uid', cred.user.uid); } catch(e2) {}
+    const _card = document.getElementById('ownerLoginCard');
+    if (_card) {
+      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
+        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
+        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">Owner 已登入，正在載入資料…</div>';
+    }
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    _firebaseReadyFired = false;
+    if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+  } catch(e) {
+    const codeMap = {
+      'app/not-owner': '這個 Google 帳號不是 Owner，已登出',
+      'auth/popup-closed-by-user': '已取消登入',
+      'auth/cancelled-popup-request': '已取消登入',
+      'auth/unauthorized-domain': '這個網址尚未加入 Firebase 的授權網域',
+      'auth/network-request-failed': '網路連線失敗，請稍後再試',
+    };
+    if (errEl) { errEl.textContent = codeMap[e.code] || ('登入失敗：' + e.message); errEl.style.color = 'var(--rose)'; }
+  }
+}
+window.submitGoogleLogin = submitGoogleLogin;
 
 // ── Owner 登出 ──
 async function ownerSignOut() {
@@ -632,53 +672,67 @@ async function submitGuestToken() {
     return;
   }
   errEl.textContent = '驗證中…'; errEl.style.color = '';
+  // ★ 規則調整後：讀 tokens/{code} 要求 request.auth != null
+  //   （match /tokens/{code} { allow get: if request.auth != null; }）。
+  //   必須先匿名登入才能讀通行碼是否存在/有效——原本「先讀 token、驗證通過才
+  //   登入」的順序跟規則對不上，一定會被擋在讀 token 這一步（permission-denied）。
+  // 先掛旗標，避免 onAuthStateChanged 把這次匿名登入誤判成「未通過 OTP 驗證的
+  // 遊蕩匿名 session」而觸發鎖屏／清空 _fbUid，也避免 ready callback 在
+  // token 都還沒驗證完就提前被叫用。
+  window._fbGuestSessionActive = true;
+  window._fbGuestAccessPending = true;
+  let guestUser;
+  try {
+    guestUser = await window._fbGuestSignInAnon();
+  } catch (signInErr) {
+    window._fbGuestSessionActive = false;
+    window._fbGuestAccessPending = false;
+    errEl.textContent = '登入失敗：' + signInErr.message;
+    return;
+  }
   try {
     const tokenRef = window._fbDoc(window._fbDb, 'tokens', code);
     const snap = await window._fbGetDoc(tokenRef);
-    if (!snap.exists()) { errEl.textContent = '通行碼不存在或已被使用'; return; }
+    if (!snap.exists()) {
+      errEl.textContent = '通行碼不存在或已被使用';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
+      return;
+    }
     const data = snap.data();
-    if (Date.now() > data.expiresAt) { errEl.textContent = '通行碼已過期，請重新申請'; return; }
+    if (Date.now() > data.expiresAt) {
+      errEl.textContent = '通行碼已過期，請重新申請';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
+      return;
+    }
 
     const ownerUid = data.ownerUid;
     if (!ownerUid) {
       errEl.textContent = '通行碼格式不正確，請請 Owner 重新產生';
       errEl.style.color = 'var(--rose)';
+      window._fbGuestSessionActive = false;
+      window._fbGuestAccessPending = false;
+      try { await window._fbOwnerSignOut(); } catch(e) {}
       return;
     }
 
-    // ── 以匿名身份登入（保持匿名，不用 email/password）──
+    // ── 通行碼有效，繼續走訪客登入流程 ──
     errEl.textContent = '登入中…'; errEl.style.color = '';
-    window._fbGuestSessionActive = true;  // 告知 onAuthStateChanged 這是訪客 session
     window._fbIsOwner = true;  // ★ 訪客通過 OTP 驗證後享有完整 Owner 權限（讀寫/編輯全開）
-    // ★ 第二個競態條件的修正：guest_access/{guestUid} 文件還沒寫入完成前，
-    //   不能讓 onAuthStateChanged 提前呼叫 _onFirebaseReadyCallback()。
-    //   因為 Firestore 安全規則很可能靠 guest_access/{uid} 是否存在來判斷訪客
-    //   有沒有權限讀 Aethelgard/data；signInAnonymously() 一成功，onAuthStateChanged
-    //   就會觸發，但這時 guest_access 文件還沒寫到伺服器上，會被權限規則擋下來，
-    //   讀取直接失敗回傳 null —— 這就是無痕模式下「驗證碼登入後讀不到任務資料」的成因。
-    window._fbGuestAccessPending = true;
 
-    // ★ 修正競態條件：_fbUid 必須在呼叫 signInAnonymously() 之前就設成 ownerUid。
-    //   原因：signInAnonymously() 若需要真的跟 Firebase 伺服器來回建立全新匿名帳號
-    //   （無痕模式下一定會，因為沒有任何快取憑證），onAuthStateChanged 監聽器可能在
-    //   這個 await 真正 resolve 回來之前就先被觸發，並呼叫 _onFirebaseReadyCallback()
-    //   讓 init() 提前繼續往下跑去呼叫 loadFromCloud()——這時若 _fbUid 還是空字串，
-    //   loadFromCloud() 會直接判斷「未就緒」並回傳 false，資料就讀空了。
-    //   ownerUid 在這裡已經從 token 文件讀出來了，不需要等匿名登入完成才能設定。
+    // ★ 修正競態條件：_fbUid 必須在後續流程用到之前就設成 ownerUid。
+    //   ownerUid 在這裡已經從 token 文件讀出來了。
     window._fbUid = ownerUid;
     window._fbOwnerUid = ownerUid;
     try { sessionStorage.setItem('aethelgard_guest_uid', ownerUid); } catch(e) {}
     // 這次是全新登入，不是 reload 復原，避免下面誤觸復原邏輯
     window._guestSessionRestoredPending = false;
 
-    const guestUser = await window._fbGuestSignInAnon();
     const guestUid = guestUser.uid;
     window._fbAuthUid = guestUid;
-
-    // ── 用完即刪 token ──
-    try { await window._fbDeleteDoc(tokenRef); } catch(delErr) {
-      console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
-    }
 
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // ★ 切換 UID 後立刻抑制 snapshot，避免舊版 snapshot 在 init/loadFromCloud 完成前進來蓋掉資料
@@ -692,16 +746,29 @@ async function submitGuestToken() {
     try {
       sessionStorage.setItem('aethelgard_guest_session', JSON.stringify({ ownerUid, expiresAt: passExpiresAt }));
     } catch(e) {}
+    // ★ 修正順序性 bug：guest_access 必須在「刪除通行碼」之前寫入。
+    //   若安全規則是靠檢查 tokens/{code} 是否還存在、ownerUid 是否相符來決定
+    //   要不要放行 guest_access 的建立，先刪 token 再寫 guest_access 會讓這個
+    //   寫入 100% 被規則擋下（不是偶發網路問題），導致這個訪客 session 之後
+    //   讀取 Aethelgard/data 永遠 permission-denied。改成先寫 guest_access、
+    //   確認成功後才刪 token；並加上重試，單次網路抖動不會整個 session 直接壞掉。
     let _guestAccessWritten = false;
-    try {
-      await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
-        ownerUid: ownerUid,
-        grantedAt: Date.now(),
-        expiresAt: passExpiresAt
-      });
-      _guestAccessWritten = true;
-    } catch(gaErr) {
-      console.warn('[guest] guest_access 寫入失敗（不影響登入流程）', gaErr);
+    for (let attempt = 0; attempt < 3 && !_guestAccessWritten; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
+        await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
+          ownerUid: ownerUid,
+          grantedAt: Date.now(),
+          expiresAt: passExpiresAt
+        });
+        _guestAccessWritten = true;
+      } catch(gaErr) {
+        console.warn(`[guest] guest_access 寫入失敗（第 ${attempt + 1} 次嘗試）`, gaErr.code, gaErr.message);
+      }
+    }
+    // ── 用完即刪 token（guest_access 確認寫入後才刪，順序不能反）──
+    try { await window._fbDeleteDoc(tokenRef); } catch(delErr) {
+      console.warn('[guest] token 刪除失敗（不影響登入流程）', delErr);
     }
     // ★ guest_access 寫入嘗試（成功或失敗）已經結束，現在才能放行 ready callback。
     //   不論成功失敗都要清除，否則寫入失敗時會永遠卡住、永遠不呼叫 ready callback。

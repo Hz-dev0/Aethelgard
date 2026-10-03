@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>任務（新版試玩）</title>
+<style>
+:root{--bg:#F0F4F8;--card:#fff;--bg3:#E2EAF4;--line:rgba(90,140,200,.18);--blue:#3A6EA5;--gray:#829AB1;--text:#1e2d45;--dim:rgba(30,45,69,.55);--faint:rgba(30,45,69,.28);--dk:#3a4150}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.6 'Noto Sans TC','PingFang TC','Microsoft JhengHei',system-ui,sans-serif;padding:env(safe-area-inset-top) 0 90px}
+main{max-width:560px;margin:0 auto;padding:16px}
+nav{display:flex;gap:6px;align-items:center;margin-bottom:14px}
+.tab{background:none;border:0;font:inherit;color:var(--dim);padding:6px 12px;border-radius:8px;cursor:pointer}
+.tab.on{background:var(--bg3);color:var(--blue);font-weight:700}
+nav .sp{flex:1}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:13px;font-weight:700;color:var(--gray);margin:20px 0 8px}
+h2.fold{cursor:pointer;user-select:none}
+.sub,.meta{font-size:12px;color:var(--dim)}.sub{font-size:13px;margin-bottom:10px}
+.warn{color:#9a6b00}
+.empty{color:var(--dim);font-size:14px;padding:4px 2px}
+select,input[type=date],input[type=time],input[type=number]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;background:#fff;color:var(--text)}
+.add{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.add .in{flex:1;min-width:0;padding:8px 10px}
+.add input.nm{width:100%;border:0;outline:0;font:inherit;background:none;padding:6px 2px}
+.add summary{font-size:12px;color:var(--faint);cursor:pointer}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.addb{width:78px;flex:none;border:0;border-left:1px solid var(--line);background:rgba(58,110,165,.09);color:var(--blue);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.row{display:flex;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:6px;overflow:hidden;position:relative}
+.ckz{width:54px;flex:none;border:0;border-right:1px solid var(--line);background:var(--bg);cursor:pointer;display:grid;place-items:center}
+.ck{display:block;width:24px;height:24px;border:2px solid var(--gray);border-radius:50%;color:#fff;font-size:14px;line-height:20px;text-align:center}
+.bd{flex:1;min-width:0;padding:11px 10px}
+.side{display:flex;flex-direction:column;width:78px;flex:none;border-left:1px solid var(--line)}
+.b{font:inherit;font-size:14px;font-weight:700;border:0;background:rgba(58,110,165,.09);color:var(--blue);min-height:46px;padding:0 8px;cursor:pointer}
+.b.q{background:var(--bg);color:var(--dim);font-weight:400}
+.dk{background:var(--dk)!important;color:#fff!important;font-weight:400}
+.side .b{flex:1}
+.del{width:42px;flex:none;border:0;font:inherit;font-size:12px;cursor:pointer}
+.soon .row{background:#FFF8E6;border-color:rgba(200,150,40,.3)}
+.soon .ckz{background:#FBEFCB;border-color:rgba(200,150,40,.3)}
+.soon .side{border-color:rgba(200,150,40,.3)}
+.card2{background:var(--bg3);border-radius:12px;padding:12px 14px;margin-bottom:8px;overflow:hidden}
+.foot{display:flex;margin:12px -14px -12px;border-top:1px solid var(--line)}
+.foot>*{flex:1;min-width:0;border:0;border-radius:0;min-height:46px;background:transparent}
+.foot>*+*{border-left:1px solid var(--line)}
+.foot input{text-align:center;color:var(--blue)}
+.row.shine::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,222,120,.9) 50%,transparent 70%);transform:translateX(-100%);animation:sh .43s ease-out forwards;pointer-events:none}
+@keyframes sh{to{transform:translateX(100%)}}
+.box.sb{display:flex;max-width:460px}
+.sb.p1{flex-direction:column}.sb.p2{flex-direction:column-reverse}
+.tabs{display:flex;flex-direction:column;gap:4px;padding:10px 6px;width:78px;flex:none;background:var(--bg);border-right:1px solid var(--line)}
+.p1 .tabs,.p2 .tabs{flex-direction:row;width:auto;border-right:0;padding:6px;justify-content:space-around}
+.p1 .tabs{border-bottom:1px solid var(--line)}.p2 .tabs{border-top:1px solid var(--line)}
+.tb{border:0;background:none;padding:8px 4px;font:inherit;font-size:12px;color:var(--dim);display:flex;flex-direction:column;align-items:center;border-radius:10px;cursor:pointer;flex:1}
+.tb i{font-style:normal;font-size:18px;line-height:1.3}
+.p0 .tb{flex:none}
+.tb.on{color:var(--blue);background:rgba(58,110,165,.1);font-weight:700}
+.pane{flex:1;min-width:0;display:flex;flex-direction:column}
+.pc{padding:16px 18px;flex:1;min-height:220px}
+.sl{display:flex;align-items:center;gap:6px;margin:10px 0;flex-wrap:wrap;font-size:13px}
+#toast{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:var(--text);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:15}
+#toast.on{opacity:1}
+#fp{position:fixed;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:stretch;pointer-events:none;z-index:10}
+#fp>*{pointer-events:auto}
+#fpb{width:100%;min-height:24px;padding:2px 0 calc(2px + env(safe-area-inset-bottom,0px));background:var(--card);border:0;border-top:1px solid var(--line);color:var(--gray);font-size:12px;cursor:pointer}
+#fpp{display:none;background:var(--card);border-top:1px solid var(--line);padding:14px max(16px,calc((100% - 560px)/2)) 6px;max-height:60vh;overflow:auto;box-shadow:0 -6px 18px rgba(30,45,69,.1)}
+.tiles{display:flex;gap:8px;margin-bottom:12px}
+.tile{flex:1;background:var(--bg);border-radius:10px;padding:8px 4px;text-align:center}
+.tile b{display:block;font-size:24px;line-height:1.2;color:var(--blue)}
+.tile span{font-size:11px;color:var(--dim)}
+.rm{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line)}
+.rm span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rm .b{min-height:32px;border-radius:7px}
+#ov{position:fixed;inset:0;background:rgba(30,45,69,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:30}
+#ov.on{display:flex}
+.box{background:#fff;border-radius:14px;width:100%;max-width:340px;overflow:auto;max-height:90vh}
+.box .t{padding:18px}
+.box .foot{margin:0}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+</style></head><body><main>
+<nav><button class="tab on" data-v="today">今天</button><button class="tab" data-v="all">全部</button><span class="sp"></span><button class="tab" id="gear">設定</button></nav>
+<div id="app"></div>
+</main>
+<div id="toast"></div>
+<div id="fp"><button id="fpb" aria-label="完成紀錄">▲</button><div id="fpp"></div></div>
+<div id="ov"></div>
+<script>
+const K='todo_proto_v1';
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
+let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
+const diff=a=>Math.round((new Date(a+'T00:00')-new Date(today()+'T00:00'))/864e5);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id);
+const by=id=>S.tasks.find(t=>t.id==id);
+const age=t=>Math.floor((Date.now()-t.touched)/864e5);
+const key=t=>(t.date||'9999')+(t.time||''),byDate=(a,b)=>key(a)<key(b)?-1:1;
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':n<=30?'month':'later'}
+function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
+  if(t.kind==='dayonly')return d===0?'今天'+(t.time?' '+t.time+' ':'')+'才能做':d>0?'限 '+t.date+tm+'（剩 '+d+' 天）':'日子已過';
+  return d===0?'今天截止':d>0?'剩 '+d+' 天（'+t.date+'）':'已過期 '+(-d)+' 天'}
+function toast(m,id){const t=$('toast');t.textContent=m;t.dataset.id=id||'';t.style.pointerEvents=id?'auto':'none';
+  if(id){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
+  t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),id?3500:1400)}
+function row(t,o={}){const m=[],d=today();
+  const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
+  if(dayToday&&o.inToday){if(t.time)m.push(`<span class="meta warn">${t.time}</span>`)}
+  else if(t.kind!=='none'&&t.date)m.push(`<span class="meta ${diff(t.date)<=S.cfg.soon?'warn':''}">${dueLabel(t)}</span>`);
+  if(t.repeat)m.push(`<span class="meta">↻ 每 ${t.repeat} 天</span>`);
+  let side='';
+  if(auto){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
+  else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
+  return `<div class="row"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"><div>${esc(t.name)}</div>${m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
+function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
+function addBox(){return `<div class="add"><div class="in"><input class="nm" id="nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
+<select id="kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
+<input type="date" id="dt"><input type="time" id="tm"></div>
+<div class="opts"><label class="meta">完成後 <input type="number" id="rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
+const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
+function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
+  const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
+  const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d).sort(byDate);
+  const mine=open.filter(t=>!lapsed.includes(t)&&grp(t)==='today').sort((a,b)=>(a.kind==='dayonly'&&a.time||'99:99')<(b.kind==='dayonly'&&b.time||'99:99')?-1:1);
+  let h=`<h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
+  if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>`<div class="card2"><div>${esc(t.name)}</div><div class="meta">${dueLabel(t)}</div><div class="foot"><input type="date" data-a="resched" data-id="${t.id}"><button class="b dk" data-a="del" data-id="${t.id}">不用做了</button></div></div>`).join('');
+  h+='<h2>今天要做</h2>'+(mine.length?mine.map(t=>row(t,{unmark:1,inToday:1})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
+  if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
+  return h}
+function renderAll(){const G={week:[],month:[],later:[],today:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',later:'有空再說',today:'今天'};
+  S.tasks.filter(t=>!t.done).forEach(t=>G[grp(t)].push(t));
+  let h=`<h1>全部</h1><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
+  for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t)).join(''):'<div class="empty">空的</div>');
+  return h}
+function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,5);
+  const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
+  $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
+  $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
+function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();
+  document.querySelectorAll('.tab[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===view))}
+function addTask(){const n=$('nm').value.trim();if(!n)return;
+  const kind=$('kd').value;let date=$('dt').value||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?$('tm').value:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
+  if(view==='today'&&(k==='none'||date===today()))t.on=today();
+  S.tasks.push(t);save();render();$('nm').focus()}
+function ask(msg,ok){pend=ok;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
+function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
+  const pool=S.tasks.filter(t=>!t.done&&grp(t)==='later'&&S.skip[t.id]!==d);if(!pool.length)return;
+  const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
+  const t=old||pool[Math.floor(Math.random()*pool.length)];sugId=t.id;ovMode='sug';S.sug.n++;save();
+  $('ov').innerHTML=`<div class="box"><div class="t"><div class="meta">順手做一件？（今天第 ${S.sug.n}／${S.cfg.sugMax} 次）</div><p style="font-size:18px;margin:8px 0 4px">${esc(t.name)}</p><div class="meta">${age(t)>=S.cfg.stale?'放了 '+age(t)+' 天了':'沒有急的期限'}</div></div><div class="foot"><button class="b" data-a="m-today">今天做</button><button class="b q" data-a="m-skip">改天</button><button class="b dk" data-a="m-del">放掉</button></div></div>`;$('ov').className='on'}
+function fx(r,cb){r.classList.add('shine');navigator.vibrate&&navigator.vibrate(15);
+  setTimeout(()=>{const b=r.getBoundingClientRect(),C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#fff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
+    for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=document.createElement('i');
+      p.style.cssText=`position:fixed;z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]};pointer-events:none`;document.body.append(p);
+      p.animate([{transform:'none',opacity:1},{transform:`translate(${(Math.random()-.5)*80}px,${140+Math.random()*120}px) rotate(${(Math.random()-.5)*160}deg)`,opacity:0}],{duration:650+Math.random()*350,delay:Math.random()*120,easing:'cubic-bezier(.5,0,1,.6)'}).onfinish=()=>p.remove()}
+    r.style.visibility='hidden';setTimeout(cb,350)},430)}
+function act(a,id,val){const t=by(id);if(!t)return;
+  if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
+    if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
+      if(t.repeat){const x=new Date(today()+'T00:00');x.setDate(x.getDate()+t.repeat);
+        const nx={id:Date.now()+1,name:t.name,kind:'deadline',date:ymd(x),time:'',repeat:t.repeat,done:false,touched:Date.now()};S.tasks.push(nx);t.nextId=nx.id;m+='　'+t.repeat+' 天後再提醒'}
+      toast(m,t.id)}
+    else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
+  else if(a==='today'){t.on=today();t.touched=Date.now()}
+  else if(a==='untoday')t.on=null;
+  else if(a==='resched'){if(!val)return;t.date=val;t.touched=Date.now()}
+  else if(a==='del'){ask('確定要刪除「'+t.name+'」嗎？',()=>{S.tasks=S.tasks.filter(x=>x!==t);save();render()});return}
+  else return;save();render()}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.closest&&e.target.closest('.add'))addTask()});
+document.addEventListener('click',e=>{
+  if(fpOpen&&!e.target.closest('#fp')){fpOpen=false;renderFp()}
+  const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
+  if(a==='add')return addTask();
+  if(a==='fold'){S.fold[el.dataset.k]=S.fold[el.dataset.k]===false;save();return render()}
+  if(a==='s-close'){$('ov').className='';return}
+  if(a==='s-tab'){stab=el.dataset.k;return openSet()}
+  if(a==='s-exp'){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'})),x=document.createElement('a');x.href=u;x.download='tasks-'+today()+'.json';x.click();URL.revokeObjectURL(u);return}
+  if(a==='c-no'){pend=null;$('ov').className='';return}
+  if(a==='c-yes'){const f=pend;pend=null;$('ov').className='';f&&f();return}
+  if(a.startsWith('m-')){const t=by(sugId);$('ov').className='';if(!t)return;
+    if(a==='m-today')act('today',t.id);else if(a==='m-skip'){S.skip[t.id]=today();save()}else act('del',t.id);return}
+  const t=by(id);if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r)return fx(r,()=>act(a,id))}
+  act(a,id)});
+$('ov').addEventListener('click',e=>{if(e.target.id!=='ov')return;if(ovMode==='sug'){const t=by(sugId);if(t){S.skip[t.id]=today();save()}}pend=null;$('ov').className=''});
+document.addEventListener('change',e=>{const el=e.target;if(el.matches('input[type=date][data-a]'))act(el.dataset.a,el.dataset.id,el.value)});
+$('toast').onclick=()=>{const id=$('toast').dataset.id;if(id){$('toast').classList.remove('on');act('chk',id)}};
+$('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
+document.querySelectorAll('.tab[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
+let stab='gen';
+function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" style="width:64px">`;
+  const TB=[['gen','⚙','一般'],['look','◐','外觀'],['acct','◉','帳號'],['exp','⇩','匯出']];
+  const P={gen:`<label class="sl">快到期區：截止前 ${o('soon',0,60)} 天，開始列進「快到期」</label>
+<label class="sl">沒期限的任務超過 ${o('stale',1,365)} 天沒動，彈窗會優先出現它</label>
+<label class="sl">「順手做一件」彈窗：每天最多出現 ${o('sugMax',0,20)} 次</label>
+<label class="sl">每天 <select data-c="reset">${Array.from({length:24},(_,i)=>`<option value="${i}">${i} 點</option>`).join('')}</select> 重置（換日、彈窗次數）</label>`,
+  look:`<label class="sl">標籤位置 <select data-c="tabPos"><option value="0">左側</option><option value="1">上方</option><option value="2">下方</option></select></label>
+<label class="sl">完成特效 <select data-c="fx"><option value="1">開</option><option value="0">關</option></select></label>`,
+  acct:`<div class="meta" style="margin-bottom:10px">預覽：接進正式專案後，這裡會顯示目前登入的 Google 帳號。</div>
+<button class="b" style="width:100%;border-radius:8px" disabled>使用 Google 登入</button>
+<div class="meta" style="margin-top:12px">登入後會檢查是不是 Owner 帳號，不符時會顯示提示。</div>`,
+  exp:`<button class="b" style="width:100%;border-radius:8px" data-a="s-exp">匯出資料（JSON）</button>
+<label class="sl" style="margin-top:14px">匯入 <input type="file" id="imp" accept=".json"></label><div class="meta" id="inote">匯入會取代目前所有資料。</div>`};
+  $('ov').innerHTML=`<div class="box sb p${S.cfg.tabPos}"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane"><div class="pc">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
+  $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();if(k==='tabPos')openSet()}}});
+  const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(s=>{try{const j=JSON.parse(s);if(!Array.isArray(j.tasks))throw 0;S=j;norm();save();render();$('inote').textContent='匯入完成'}catch(x){$('inote').textContent='檔案格式不對'}})};
+  $('ov').className='on'}
+$('gear').onclick=openSet;
+render();setTimeout(suggest,300);
+</script></body></html>
