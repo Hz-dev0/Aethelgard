@@ -26,6 +26,7 @@
 <meta name="theme-color" content="#3A6EA5">
 <!-- Styles -->
 <link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/todo.css">
 </head>
 <body>
 
@@ -62,6 +63,8 @@
 
   <!-- Sidebar -->
   <aside>
+    <div class="nav-item active" onclick="todoGo('today')" id="nav-today" title="今天"><span class="nav-icon">☀</span> <span class="nav-label">今天</span></div>
+    <div class="nav-item" onclick="todoGo('all')" id="nav-all" title="全部"><span class="nav-icon">☰</span> <span class="nav-label">全部</span></div>
     <div class="sidebar-section"><span class="nav-label">探索</span></div>
     <div class="nav-item active" onclick="showPage('tree')" id="nav-tree" title="生命樹">
       <span class="nav-icon">🌿</span> <span class="nav-label">生命樹</span>
@@ -89,7 +92,8 @@
   <main>
 
     <!-- Page: Life Tree -->
-    <div class="page active" id="page-tree">
+    <div class="page active" id="page-todo"><div id="todoRoot"></div></div>
+    <div class="page" id="page-tree">
       <div class="section-title">生命樹 <span class="sub">每個任務都扎根於你認同的意義</span></div>
 
       <div class="tree-page-layout" id="treePageLayout">
@@ -378,6 +382,8 @@
     <button class="mob-nav-item" id="mob-stats" onclick="showPage('stats')">
       <span class="mob-nav-icon">🐾</span>軌跡
     </button>
+    <button class="mob-nav-item active" id="mob-today" onclick="todoGo('today')"><span class="mob-nav-icon">☀</span>今天</button>
+    <button class="mob-nav-item" id="mob-all" onclick="todoGo('all')"><span class="mob-nav-icon">☰</span>全部</button>
     <button class="mob-nav-item" id="mob-notes" onclick="showPage('notes')">
       <span class="mob-nav-icon">📝</span>筆記
     </button>
@@ -919,5 +925,6 @@
 <script src="js/datepicker.js"></script>
 <script src="js/notes.js"></script>
 <script src="js/routines.js"></script>
+<script src="js/todo.js"></script>
 </body>
 </html>

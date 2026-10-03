@@ -1,4 +1,4 @@
-const _swBuild = '202610030708'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
+const _swBuild = '202608290556'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
@@ -7,6 +7,7 @@ const ASSETS = [
   '/Aethelgard/manifest.json',
   '/Aethelgard/icon.png',
   '/Aethelgard/css/main.css',
+  '/Aethelgard/css/todo.css',
   '/Aethelgard/js/early.js',
   '/Aethelgard/js/firebase-init.js',
   '/Aethelgard/js/firebase.js',
@@ -17,6 +18,7 @@ const ASSETS = [
   '/Aethelgard/js/sync.js',
   '/Aethelgard/js/notes.js',
   '/Aethelgard/js/routines.js',
+  '/Aethelgard/js/todo.js',
   '/Aethelgard/js/calendar.js',
   '/Aethelgard/js/datepicker.js',
   '/Aethelgard/js/stats.js',

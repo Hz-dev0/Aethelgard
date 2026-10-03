@@ -6,11 +6,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     signOut,
     onAuthStateChanged,
     browserLocalPersistence,
-    setPersistence,
-    GoogleAuthProvider,
-    signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult
+    setPersistence
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
     getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
@@ -45,48 +41,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     await setPersistence(auth, browserLocalPersistence);
     return signInWithEmailAndPassword(auth, email, password);
   };
-
-  // ── Owner 驗證：不把 UID 寫進程式，直接試讀 Owner 文件；規則擋下（permission-denied）就不是 Owner ──
-  async function _verifyOwner(user) {
-    try {
-      await getDoc(doc(db, 'Aethelgard', 'data'));
-    } catch (e) {
-      if (e && e.code === 'permission-denied') {
-        await signOut(auth);
-        const err = new Error('NOT_OWNER');
-        err.code = 'app/not-owner';
-        throw err;
-      }
-      // 斷線等其他錯誤：不誤判，交給後續流程
-    }
-  }
-
-  // ── Owner 登入（Google）：先彈窗，被擋或不支援時改整頁跳轉 ──
-  window._fbGoogleLogin = async function() {
-    await setPersistence(auth, browserLocalPersistence);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    let cred;
-    try {
-      cred = await signInWithPopup(auth, provider);
-    } catch (e) {
-      if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(e.code)) {
-        await signInWithRedirect(auth, provider);
-        return null; // 頁面會跳走，回來後由 getRedirectResult 接手
-      }
-      throw e;
-    }
-    await _verifyOwner(cred.user);
-    return cred;
-  };
-
-  // 整頁跳轉回來的結果（只在走過跳轉時才會有值）
-  getRedirectResult(auth).then(async (res) => {
-    if (res && res.user) await _verifyOwner(res.user);
-  }).catch((e) => {
-    if (e && e.code === 'app/not-owner') alert('這個 Google 帳號不是 Owner，已登出。');
-    else console.warn('[getRedirectResult]', e);
-  });
 
   // ── 訪客匿名登入（token 驗證成功後呼叫，保持匿名身份）──
   window._fbGuestSignInAnon = async function() {

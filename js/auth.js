@@ -148,6 +148,11 @@ function openOwnerLoginOverlay() {
           <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
         </div>
         <div>
+          <button onclick="submitGoogleLogin()" id="googleLoginBtn"
+            style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">使用 Google 登入</button>
+          <div id="googleLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin:6px 0 10px;text-align:center"></div>
+        </div>
+        <div>
           <button onclick="toggleOwnerLoginSection()"
             id="ownerLoginToggleBtn"
             style="width:100%;padding:8px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-faint);font-size:12px;cursor:pointer;font-family:inherit;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px"
@@ -249,6 +254,41 @@ async function submitOwnerLogin() {
   }
 }
 window.submitOwnerLogin = submitOwnerLogin;
+
+async function submitGoogleLogin() {
+  const errEl = document.getElementById('googleLoginError');
+  if (errEl) { errEl.textContent = '登入中…'; errEl.style.color = ''; }
+  try {
+    const cred = await window._fbGoogleLogin();
+    if (!cred) return; // 改走整頁跳轉，頁面即將離開
+    window._fbAuthUid = cred.user.uid;
+    window._fbIsOwner = true;
+    window._fbGuestSessionActive = false;
+    window._fbUid = cred.user.uid;
+    try { localStorage.setItem('aethelgard_fb_uid', cred.user.uid); } catch(e2) {}
+    try { localStorage.setItem('aethelgard_fb_owner_uid', cred.user.uid); } catch(e2) {}
+    const _card = document.getElementById('ownerLoginCard');
+    if (_card) {
+      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
+        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
+        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">Owner 已登入，正在載入資料…</div>';
+    }
+    if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
+    _firebaseReadyFired = false;
+    if (typeof window._onFirebaseReady === 'function') window._onFirebaseReady();
+    if (typeof window._onFirebaseReadyCallback === 'function') window._onFirebaseReadyCallback();
+  } catch(e) {
+    const codeMap = {
+      'app/not-owner': '這個 Google 帳號不是 Owner，已登出',
+      'auth/popup-closed-by-user': '已取消登入',
+      'auth/cancelled-popup-request': '已取消登入',
+      'auth/unauthorized-domain': '這個網址尚未加入 Firebase 的授權網域',
+      'auth/network-request-failed': '網路連線失敗，請稍後再試',
+    };
+    if (errEl) { errEl.textContent = codeMap[e.code] || ('登入失敗：' + e.message); errEl.style.color = 'var(--rose)'; }
+  }
+}
+window.submitGoogleLogin = submitGoogleLogin;
 
 // ── Owner 登出 ──
 async function ownerSignOut() {
