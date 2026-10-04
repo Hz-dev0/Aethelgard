@@ -597,17 +597,24 @@ function selectTokenDuration(btn, minutes) {
 }
 window.selectTokenDuration = selectTokenDuration;
 
+// 同步更新「舊設定視窗」與「新設定面板」兩邊的通行碼顯示
+function _tokSet(codeText, statusText, copyCode) {
+  [['tokenDisplay', 'tokenStatus'], ['td-tkcode', 'td-tkst']].forEach(([di, si]) => {
+    const d = document.getElementById(di), st = document.getElementById(si);
+    if (d && codeText !== null) {
+      d.textContent = codeText;
+      d.style.cursor = copyCode ? 'pointer' : '';
+      d.onclick = copyCode ? () => { navigator.clipboard.writeText(copyCode).then(() => { _tokSet(null, '✓ 已複製！'); }); } : null;
+    }
+    if (st && statusText !== null) st.textContent = statusText;
+  });
+}
+window._setTokenMinutes = function(m) { _selectedTokenMinutes = m; };
+window._getTokenMinutes = function() { return _selectedTokenMinutes; };
+
 async function generateToken() {
-  if (window._fbGuestSessionActive) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '❌ 只有 Owner 才能產生通行碼';
-    return;
-  }
-  if (!window._fbUid || !window._fbDb) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '尚未連線 Firebase，請稍候再試';
-    return;
-  }
+  if (window._fbGuestSessionActive) { _tokSet(null, '❌ 只有 Owner 才能產生通行碼'); return; }
+  if (!window._fbUid || !window._fbDb) { _tokSet(null, '尚未連線 Firebase，請稍候再試'); return; }
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const TOKEN_DURATION = _selectedTokenMinutes * 60 * 1000;
@@ -617,27 +624,15 @@ async function generateToken() {
     ? `${_selectedTokenMinutes} 分鐘`
     : `${_selectedTokenMinutes / 60} 小時`;
   try {
-    await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), {
-      ownerUid, expiresAt
-    });
-    const display = document.getElementById('tokenDisplay');
-    const ts = document.getElementById('tokenStatus');
-    if (display) {
-      display.textContent = code;
-      display.style.cursor = 'pointer';
-      display.onclick = () => { navigator.clipboard.writeText(code).then(() => { if (ts) ts.textContent = '✓ 已複製！'; }); };
-    }
-    if (ts) ts.textContent = `${label}內有效 · 用完自動刪除 · 點數字複製`;
+    await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), { ownerUid, expiresAt });
+    _tokSet(code, `${label}內有效 · 用完自動刪除 · 點數字複製`, code);
     if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
-    _tokenExpireTimer = setTimeout(() => {
-      if (display) { display.textContent = '——————'; display.style.cursor = ''; display.onclick = null; }
-      if (ts) ts.textContent = '通行碼已過期';
-    }, TOKEN_DURATION);
+    _tokenExpireTimer = setTimeout(() => { _tokSet('——————', '通行碼已過期'); }, TOKEN_DURATION);
   } catch(e) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '產生失敗：' + e.message;
+    _tokSet(null, '產生失敗：' + e.message);
   }
 }
+window.generateToken = generateToken;
 
 function closeGuestTokenOverlay() {
   const el = document.getElementById('guestTokenOverlay');
