@@ -281,12 +281,15 @@
 
 
 <!-- ★ 最早期判斷：localStorage 有 Owner UID → 直接顯示載入畫面，無需等 Firebase -->
+<script>window._BUILD="20261004-1445";</script>
 <script src="js/early.js"></script>
 
 <div id="ownerLoginOverlay">
   <div class="lock-orb lock-orb-1"></div>
   <div class="lock-orb lock-orb-2"></div>
   <div class="lock-orb lock-orb-3"></div>
+
+  <div id="buildStamp" style="position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:10px;color:var(--text-faint);opacity:.7;z-index:2;pointer-events:none">版本 20261004-1445</div>
 
   <div id="ownerLoginCard">
     <!-- Logo 區 -->

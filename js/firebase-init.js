@@ -10,7 +10,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     GoogleAuthProvider,
     signInWithPopup,
     signInWithRedirect,
-    getRedirectResult
+    getRedirectResult,
+    linkWithPopup
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
     getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
@@ -78,6 +79,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     }
     await _verifyOwner(cred.user);
     return cred;
+  };
+
+  // ── 把 Google 綁定到目前登入的 Owner 帳號：綁定後 Google 登入 = 同一個 UID = 同一份資料 ──
+  window._fbLinkGoogle = async function() {
+    const user = auth.currentUser;
+    if (!user || user.isAnonymous) { const e = new Error('請先用 Owner 信箱登入'); e.code = 'app/not-signed-in'; throw e; }
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    return linkWithPopup(user, provider);
+  };
+
+  // 目前登入身分資訊（診斷用）
+  window._fbAuthInfo = function() {
+    const u = auth.currentUser;
+    return u ? { uid: u.uid, email: u.email, providers: u.providerData.map(p => p.providerId) } : null;
   };
 
   // 整頁跳轉回來的結果（只在走過跳轉時才會有值）

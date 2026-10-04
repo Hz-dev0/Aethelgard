@@ -102,6 +102,16 @@ document.addEventListener('click',e=>{
   if(a==='fold'){S.fold[el.dataset.k]=S.fold[el.dataset.k]===false;save();return render()}
   if(a==='s-close'){$('ov').className='';return}
   if(a==='s-out'){$('ov').className='';if(typeof window.ownerSignOut==='function')window.ownerSignOut();return}
+  if(a==='s-tdur'){const mm=parseInt(el.dataset.m);if(typeof window._setTokenMinutes==='function')window._setTokenMinutes(mm);
+    document.querySelectorAll('#td-tkp [data-m]').forEach(x=>{const on=x===el;x.classList.toggle('dk',on);x.classList.toggle('q',!on)});return}
+  if(a==='s-tgen'){if(typeof window.generateToken==='function')window.generateToken();return}
+  if(a==='s-link'){const say=m=>typeof window.showToast==='function'&&window.showToast(m);
+    if(typeof window._fbLinkGoogle!=='function')return say('Firebase 尚未就緒');
+    window._fbLinkGoogle().then(()=>{say('✅ 已綁定 Google，之後用 Google 登入會讀到同一份資料');openSet()}).catch(err=>{
+      const m={'auth/credential-already-in-use':'這個 Google 帳號已經是另一個獨立帳號。請到 Firebase 主控台 → Authentication → Users 刪掉它，再回來綁定一次',
+        'auth/provider-already-linked':'已經綁定過 Google 了','auth/popup-closed-by-user':'已取消','auth/cancelled-popup-request':'已取消',
+        'auth/operation-not-allowed':'Firebase 後台尚未啟用 Google 登入方式','auth/unauthorized-domain':'這個網址尚未加入 Firebase 授權網域'};
+      say('❌ '+(m[err.code]||('綁定失敗：'+(err.code||err.message))))});return}
   if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
   if(a==='s-tab'){stab=el.dataset.k;return openSet()}
   if(a==='s-exp'){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'})),x=document.createElement('a');x.href=u;x.download='tasks-'+today()+'.json';x.click();URL.revokeObjectURL(u);return}
@@ -118,7 +128,7 @@ $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
 let stab='gen';
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" style="width:64px">`;
   const N=cur==='notes';
-  const TB=N?[['nio','⇅','匯入匯出'],['acct','◉','帳號']]:[['gen','⚙','一般'],['look','◐','外觀'],['acct','◉','帳號'],['exp','⇩','匯出']];
+  const TB=N?[['nio','⇅','匯入匯出'],['tok','🔑','通行碼'],['acct','◉','帳號']]:[['gen','⚙','一般'],['look','◐','外觀'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','匯出']];
   if(!TB.some(t=>t[0]===stab))stab=TB[0][0];
   const P={gen:`<label class="sl">快到期區：截止前 ${o('soon',0,60)} 天，開始列進「快到期」</label>
 <label class="sl">沒期限的任務超過 ${o('stale',1,365)} 天沒動，彈窗會優先出現它</label>
@@ -126,8 +136,15 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
 <label class="sl">每天 <select data-c="reset">${Array.from({length:24},(_,i)=>`<option value="${i}">${i} 點</option>`).join('')}</select> 重置（換日、彈窗次數）</label>`,
   look:`<label class="sl">標籤位置 <select data-c="tabPos"><option value="0">左側</option><option value="1">上方</option><option value="2">下方</option></select></label>
 <label class="sl">完成特效 <select data-c="fx"><option value="1">開</option><option value="0">關</option></select></label>`,
+  tok:`<div class="meta">產生 6 位數臨時通行碼，在別的裝置輸入就能進來，不用打帳密。用過一次或到期就失效。</div>
+<div id="td-tkp" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${[[30,'30 分鐘'],[60,'1 小時'],[180,'3 小時'],[480,'8 小時']].map(([m,l])=>`<button class="b ${(window._getTokenMinutes?window._getTokenMinutes():30)===m?'dk':'q'}" data-a="s-tdur" data-m="${m}" style="border-radius:16px;min-height:32px;font-size:12px">${l}</button>`).join('')}</div>
+<div style="display:flex;gap:8px;align-items:center"><div id="td-tkcode" style="flex:1;font-size:22px;font-family:monospace;font-weight:700;letter-spacing:.18em;text-align:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">——————</div><button class="b dk" data-a="s-tgen" style="border-radius:8px;flex:none;min-height:42px">產生</button></div>
+<div class="meta" id="td-tkst" style="margin-top:6px;min-height:16px"></div>`,
   acct:`<div class="sl">帳號：<b>${esc((window._fbAuth&&window._fbAuth.currentUser&&window._fbAuth.currentUser.email)||'（未取得）')}</b></div>
+<div class="meta" style="margin:6px 0">已綁定登入方式：${esc(((window._fbAuthInfo&&window._fbAuthInfo()||{}).providers||[]).map(p=>p==='google.com'?'Google':p==='password'?'信箱密碼':p).join('、')||'—')}</div>
+<button class="b q" style="width:100%;border-radius:8px;margin-bottom:8px" data-a="s-link">綁定 Google 到此帳號（Google 登入就會讀同一份資料）</button>
 <button class="b dk" style="width:100%;border-radius:8px" data-a="s-out">登出</button>
+<div class="meta" style="margin-top:12px">版本 ${esc(window._BUILD||'舊版（未帶版本號）')}</div>
 ${N?'':'<div class="meta" style="margin-top:12px">任務資料同步位置：Firestore 的 Aethelgard/todo。</div>'}`,
   nio:`<div class="meta" style="margin-bottom:8px">筆記</div>${[['notesExportTxt','匯出為 .txt'],['notesExportMd','匯出為 .md'],['notesExportJson','匯出為 JSON'],['notesImportJson','從 JSON 匯入'],['forceSyncNotesFromMenu','強制同步至雲端']].map(([f,l])=>`<button class="b q" style="width:100%;border-radius:8px;margin-bottom:6px" data-a="s-n" data-f="${f}">${l}</button>`).join('')}`,
   exp:`<button class="b" style="width:100%;border-radius:8px" data-a="s-exp">匯出資料（JSON）</button>

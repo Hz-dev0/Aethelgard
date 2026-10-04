@@ -27,6 +27,7 @@ async function _fbLoad() {
     return null;
   } catch(e) {
     console.warn('[_fbLoad] 讀取失敗:', e.code, e.message);
+    if (e && e.code === 'permission-denied' && typeof showToast === 'function') showToast('❌ 這個登入身分沒有讀取權限（UID 與 Owner 不同），請先用信箱登入並綁定 Google');
     return null;
   }
 }

@@ -148,8 +148,8 @@ function openOwnerLoginOverlay() {
           <button class="lock-submit-btn" onclick="submitGuestToken()">進入 →</button>
         </div>
         <div>
-          <button onclick="submitGoogleLogin()" id="googleLoginBtn"
-            style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">使用 Google 登入</button>
+          <button onclick="submitGoogleLogin()" id="googleLoginBtn" aria-label="使用 Google 登入" title="使用 Google 登入"
+            style="width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto;cursor:pointer;padding:0"><svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.5 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg></button>
           <div id="googleLoginError" style="font-size:11px;color:var(--rose);min-height:16px;margin:6px 0 10px;text-align:center"></div>
         </div>
         <div>
@@ -283,6 +283,7 @@ async function submitGoogleLogin() {
       'auth/popup-closed-by-user': '已取消登入',
       'auth/cancelled-popup-request': '已取消登入',
       'auth/unauthorized-domain': '這個網址尚未加入 Firebase 的授權網域',
+      'auth/operation-not-allowed': 'Firebase 後台尚未啟用 Google 登入方式',
       'auth/network-request-failed': '網路連線失敗，請稍後再試',
     };
     if (errEl) { errEl.textContent = codeMap[e.code] || ('登入失敗：' + e.message); errEl.style.color = 'var(--rose)'; }
@@ -596,17 +597,24 @@ function selectTokenDuration(btn, minutes) {
 }
 window.selectTokenDuration = selectTokenDuration;
 
+// 同步更新「舊設定視窗」與「新設定面板」兩邊的通行碼顯示
+function _tokSet(codeText, statusText, copyCode) {
+  [['tokenDisplay', 'tokenStatus'], ['td-tkcode', 'td-tkst']].forEach(([di, si]) => {
+    const d = document.getElementById(di), st = document.getElementById(si);
+    if (d && codeText !== null) {
+      d.textContent = codeText;
+      d.style.cursor = copyCode ? 'pointer' : '';
+      d.onclick = copyCode ? () => { navigator.clipboard.writeText(copyCode).then(() => { _tokSet(null, '✓ 已複製！'); }); } : null;
+    }
+    if (st && statusText !== null) st.textContent = statusText;
+  });
+}
+window._setTokenMinutes = function(m) { _selectedTokenMinutes = m; };
+window._getTokenMinutes = function() { return _selectedTokenMinutes; };
+
 async function generateToken() {
-  if (window._fbGuestSessionActive) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '❌ 只有 Owner 才能產生通行碼';
-    return;
-  }
-  if (!window._fbUid || !window._fbDb) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '尚未連線 Firebase，請稍候再試';
-    return;
-  }
+  if (window._fbGuestSessionActive) { _tokSet(null, '❌ 只有 Owner 才能產生通行碼'); return; }
+  if (!window._fbUid || !window._fbDb) { _tokSet(null, '尚未連線 Firebase，請稍候再試'); return; }
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const TOKEN_DURATION = _selectedTokenMinutes * 60 * 1000;
@@ -616,27 +624,15 @@ async function generateToken() {
     ? `${_selectedTokenMinutes} 分鐘`
     : `${_selectedTokenMinutes / 60} 小時`;
   try {
-    await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), {
-      ownerUid, expiresAt
-    });
-    const display = document.getElementById('tokenDisplay');
-    const ts = document.getElementById('tokenStatus');
-    if (display) {
-      display.textContent = code;
-      display.style.cursor = 'pointer';
-      display.onclick = () => { navigator.clipboard.writeText(code).then(() => { if (ts) ts.textContent = '✓ 已複製！'; }); };
-    }
-    if (ts) ts.textContent = `${label}內有效 · 用完自動刪除 · 點數字複製`;
+    await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), { ownerUid, expiresAt });
+    _tokSet(code, `${label}內有效 · 用完自動刪除 · 點數字複製`, code);
     if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
-    _tokenExpireTimer = setTimeout(() => {
-      if (display) { display.textContent = '——————'; display.style.cursor = ''; display.onclick = null; }
-      if (ts) ts.textContent = '通行碼已過期';
-    }, TOKEN_DURATION);
+    _tokenExpireTimer = setTimeout(() => { _tokSet('——————', '通行碼已過期'); }, TOKEN_DURATION);
   } catch(e) {
-    const ts = document.getElementById('tokenStatus');
-    if (ts) ts.textContent = '產生失敗：' + e.message;
+    _tokSet(null, '產生失敗：' + e.message);
   }
 }
+window.generateToken = generateToken;
 
 function closeGuestTokenOverlay() {
   const el = document.getElementById('guestTokenOverlay');
@@ -741,6 +737,7 @@ async function submitGuestToken() {
         if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
         await window._fbSetDoc(window._fbDoc(window._fbDb, 'guest_access', guestUid), {
           ownerUid: ownerUid,
+          code: code,
           grantedAt: Date.now(),
           expiresAt: passExpiresAt
         });
