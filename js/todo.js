@@ -128,8 +128,7 @@ $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
 let stab='gen';
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
   const row=(t,d,c)=>`<div class="srow"><div class="sx"><div class="st">${t}</div>${d?`<div class="sd">${d}</div>`:''}</div><div class="sc">${c}</div></div>`;
-  const N=cur==='notes';
-  const TB=N?[['nio','⇅','匯入匯出'],['tok','🔑','通行碼'],['acct','◉','帳號']]:[['gen','⚙','一般'],['look','◐','外觀'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
+  const TB=[['gen','⚙','一般'],['look','◐','外觀'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
   if(!TB.some(t=>t[0]===stab))stab=TB[0][0];
   const info=(window._fbAuthInfo&&window._fbAuthInfo())||{},email=info.email||(window._fbAuth&&window._fbAuth.currentUser&&window._fbAuth.currentUser.email)||'',
     hasG=(info.providers||[]).includes('google.com');
@@ -139,8 +138,7 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
     +row('每日重置時間','過了這個時間才算新的一天，彈窗次數也會歸零',`<select data-c="reset">${Array.from({length:24},(_,i)=>`<option value="${i}">${pad(i)}:00</option>`).join('')}</select>`),
   look:row('分頁位置','設定視窗裡，分頁按鈕放在哪裡（手機固定在上方）','<select data-c="tabPos"><option value="0">左側</option><option value="1">上方</option><option value="2">下方</option></select>')
     +row('完成特效','勾掉任務時的閃光與碎片動畫','<select data-c="fx"><option value="1">開啟</option><option value="0">關閉</option></select>'),
-  tok:`<div class="sd" style="margin:0 0 4px">在另一台裝置輸入 6 位數通行碼就能登入，不必打帳密。每組只能用一次，過期也會失效。</div>
-<div class="sh">有效時間</div>
+  tok:`<div class="sh">有效時間</div>
 <div id="td-tkp" class="tkchips">${[[30,'30 分鐘'],[60,'1 小時'],[180,'3 小時'],[480,'8 小時']].map(([m,l])=>`<button class="b ${(window._getTokenMinutes?window._getTokenMinutes():30)===m?'dk':'q'}" data-a="s-tdur" data-m="${m}">${l}</button>`).join('')}</div>
 <div class="sh">通行碼</div>
 <div class="tkrow"><div id="td-tkcode" class="tkcode">——————</div><button class="b dk" data-a="s-tgen">產生</button></div>
@@ -149,12 +147,13 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
     +(hasG?row('Google 登入','已綁定，用 Google 登入會看到同一份資料','<span class="okmark">✓ 已綁定</span>')
           :row('Google 登入','綁定後，也能用 Google 登入並看到同一份資料','<button class="b q" data-a="s-link" style="border-radius:8px;min-height:36px;padding:0 14px">綁定</button>'))
     +`<button class="b dk sbtn" data-a="s-out" style="margin-top:14px">登出</button><div class="ver">版本 ${esc(window._BUILD||'—')}</div>`,
-  nio:`<div class="sh">匯出</div>${[['notesExportTxt','純文字（.txt）'],['notesExportMd','Markdown（.md）'],['notesExportJson','JSON 備份']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">${l}</button>`).join('')}
-<div class="sh">匯入與同步</div><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">從 JSON 匯入</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步到雲端</button>`,
-  exp:`<div class="sh">匯出</div><button class="b sbtn" data-a="s-exp">下載任務備份（JSON）</button>
-<div class="sh">匯入</div><label class="b q sbtn upl">選擇備份檔…<input type="file" id="td-imp" accept=".json"></label>
-<div class="sd" id="td-inote" style="margin-top:6px">匯入後，會取代目前所有任務資料。</div>`};
-  $('ov').innerHTML=`<div class="box sb p${S.cfg.tabPos}"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane"><div class="pc">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
+  exp:`<div class="sh">任務</div>
+<div class="brow"><button class="b sbtn" data-a="s-exp">下載備份</button><label class="b q sbtn upl">匯入備份<input type="file" id="td-imp" accept=".json"></label></div>
+<div class="sd" id="td-inote" style="margin-top:6px">匯入後，會取代目前所有任務資料。</div>
+<div class="sh">筆記</div>
+<div class="brow">${[['notesExportTxt','TXT'],['notesExportMd','MD'],['notesExportJson','JSON']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">匯出 ${l}</button>`).join('')}</div>
+<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">從 JSON 匯入</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步到雲端</button></div>`};
+  $('ov').innerHTML=`<div class="box sb p${S.cfg.tabPos}" style="height:min(540px,88vh);max-height:none;overflow:hidden"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane" style="min-height:0"><div class="pc" style="min-height:0;overflow-y:auto">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
   $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();if(k==='tabPos')openSet()}}});
   const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(s=>{try{const j=JSON.parse(s);if(!Array.isArray(j.tasks))throw 0;S=j;norm();save();render();$('inote').textContent='匯入完成'}catch(x){$('inote').textContent='檔案格式不對'}})};
   $('ov').className='on'}
