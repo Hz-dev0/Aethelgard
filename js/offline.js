@@ -8,14 +8,7 @@
   if (!window._earlyHasOwner) return;   // 這支手機沒登入過 Owner，一定要走正常登入
   let entered = false;
 
-  function say(msg) {
-    try {
-      if (typeof window._todoToast === 'function') window._todoToast(msg);
-      else if (typeof window.showToast === 'function') window.showToast(msg);
-    } catch (e) {}
-  }
-
-  function enter(slow) {
+  function enter() {
     if (entered) return;
     if (document.body.classList.contains('auth-ready')) return;   // 已經正常進來了
     entered = true;
@@ -23,14 +16,13 @@
     const ov = document.getElementById('ownerLoginOverlay');
     if (ov) ov.style.display = 'none';
     document.body.classList.add('auth-ready');
-    say(slow ? '連線較慢，先使用本機資料' : '離線中，先使用本機資料，連上網會自動同步');
   }
 
   function check(final) {
     if (document.body.classList.contains('auth-ready')) return;
     // Firebase 沒載入（_fbDb 不存在）或明確離線，都先放行
-    if (navigator.onLine === false || !window._fbDb) enter(navigator.onLine !== false);
-    else if (final) enter(true);
+    if (navigator.onLine === false || !window._fbDb) enter();
+    else if (final) enter();
   }
 
   document.addEventListener('DOMContentLoaded', () => {

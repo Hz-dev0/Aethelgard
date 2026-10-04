@@ -40,7 +40,11 @@ function row(t,o={}){const m=[],d=today();
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   return `<div class="row"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"><div>${esc(t.name)}</div>${m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
-function addBox(){return `<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
+/* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
+const AF='aeth_todo_addfold';
+let addOpen=(()=>{try{return localStorage.getItem(AF)!=='1'}catch(e){return true}})();
+function addBox(){const hd=`<h2 class="fold" data-a="addfold">${addOpen?'▾':'▸'} 新增任務</h2>`;if(!addOpen)return hd;
+  return hd+`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
 <select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
 <input type="date" id="td-dt"><input type="time" id="td-tm"></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
@@ -100,6 +104,7 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
   if(a==='add')return addTask();
   if(a==='go')return go(el.dataset.v);
+  if(a==='addfold'){addOpen=!addOpen;try{localStorage.setItem(AF,addOpen?'0':'1')}catch(e){}render();if(addOpen)setTimeout(()=>{const n=$('nm');if(n)n.focus()},0);return}
   if(a==='fold'){S.fold[el.dataset.k]=S.fold[el.dataset.k]===false;save();return render()}
   if(a==='s-close'){$('ov').className='';return}
   if(a==='s-sync'){syncClick();return}
@@ -195,7 +200,7 @@ window._todoSyncNow=syncNow;window._todoToast=toast;
 
 /* ===== 同步狀態點（頂列）：已同步 / 待同步 / 離線 / 連線中 ===== */
 function stateNow(){
-  const nd=typeof _notesDirty!=='undefined'&&_notesDirty,pend=dirty||nd;
+  const nd=(typeof _notesDirty!=='undefined'&&_notesDirty)||(typeof window._notesPendingGet==='function'&&window._notesPendingGet()),pend=dirty||nd;
   if(navigator.onLine===false)return[pend?'off pend':'off','離線'];   // 離線且有待同步：同樣顯示「離線」，圓點改橘色
   if(pend)return['pend','待同步'];
   if(!cloudReady)return['wait','連線中'];

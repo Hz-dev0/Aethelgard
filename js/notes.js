@@ -52,11 +52,14 @@ const _notesDlg = (() => {
   const ti  = () => document.getElementById('notes-dlg-title');
   const inp = () => document.getElementById('notes-dlg-input');
 
-  function _open(title, { isConfirm=false, defaultVal='' } = {}) {
+  const EXTRA = Symbol('extra');
+  function _open(title, { isConfirm=false, defaultVal='', extra='' } = {}) {
     if (_res) { const old=_res; _res=null; _cleanup(); old(null); }
     return new Promise(resolve => {
       _res = resolve;
       ti().textContent = title;
+      const exBtn = document.getElementById('notes-dlg-extra');
+      if (exBtn) { exBtn.style.display = extra ? '' : 'none'; exBtn.textContent = extra || ''; }
       const cnBtn = document.getElementById('notes-dlg-cancel');
       if (isConfirm) {
         inp().style.display = 'none';
@@ -86,10 +89,13 @@ const _notesDlg = (() => {
   function _cancel() {
     _cleanup(); if (_res) { _res(null); _res=null; }
   }
+  function _extra() {
+    _cleanup(); if (_res) { const r = _res; _res = null; r(EXTRA); }
+  }
   return {
-    prompt:  (t, d='') => _open(t, { defaultVal: d }),
+    prompt:  (t, d='', opts={}) => _open(t, { defaultVal: d, extra: opts.extra || '' }),
     confirm: (t)       => _open(t, { isConfirm: true }),
-    _confirm, _cancel
+    EXTRA, _confirm, _cancel, _extra
   };
 })();
 window._notesDlg = _notesDlg;
@@ -402,8 +408,19 @@ function _notesTabPointerDown(e, div, row) {
     }
   }, 300);
 
+  // 長按約 0.55 秒且手指沒有移動 → 開「修改名稱／刪除標籤」（開始拖曳的話就不會觸發）
+  let renameTimer = setTimeout(() => {
+    if (clone || dragState === 'scrolling' || dragState === 'cancelled') return;
+    _tabJustDragged = true;                       // 放開手指時不要當成點擊去切換分頁
+    setTimeout(() => { _tabJustDragged = false; }, 500);
+    if (navigator.vibrate) navigator.vibrate(40);
+    cleanup();
+    notesTabMenu(fromIdx);
+  }, 550);
+
   function cleanup() {
     clearTimeout(longPressTimer);
+    clearTimeout(renameTimer);
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup',   onUp);
     document.removeEventListener('pointercancel', onCancel);
@@ -555,26 +572,12 @@ function notesRenderTabs() {
       notesRenderTabs();
     };
 
-    div.ondblclick = async e => {
-      e.stopPropagation();
-      const idx = parseInt(div.dataset.tabIdx);
-      const t = notesFolderData[idx];
-      const n = await _notesDlg.prompt('修改標籤名稱', t.name);
-      if (n?.trim()) { t.name = n.trim(); notesRenderTabs(); notesSave(); }
-    };
+    div.ondblclick = e => { e.stopPropagation(); notesTabMenu(parseInt(div.dataset.tabIdx)); };
+    div.addEventListener('contextmenu', e => e.preventDefault());   // 長按時不要跳出瀏覽器自己的選單
 
     const nameSpan = document.createElement('span');
     nameSpan.textContent = tab.name;
-    const delSpan = document.createElement('span');
-    delSpan.className = 'tab-del-btn';
-    delSpan.textContent = '✕';
-    delSpan.addEventListener('click', e => {
-      e.stopPropagation();
-      const idx = parseInt(div.dataset.tabIdx);
-      notesDeleteTab(idx);
-    });
     div.appendChild(nameSpan);
-    div.appendChild(delSpan);
     row.appendChild(div);
   });
 
@@ -595,6 +598,19 @@ function notesRenderTabs() {
     if (pnd) pnd.textContent = (tab.currentPage + 1) + ' / ' + tab.pages.length;
   }
 }
+
+// ── 標籤選單：修改名稱＋刪除標籤（長按或雙擊標籤開啟）──
+async function notesTabMenu(idx) {
+  const t = notesFolderData[idx];
+  if (!t) return;
+  const canDelete = notesFolderData.length > 1;   // 至少要留一個標籤，只剩一個時不顯示刪除鈕
+  const r = await _notesDlg.prompt('修改標籤名稱', t.name, canDelete ? { extra: '刪除標籤' } : {});
+  const i = notesFolderData.indexOf(t);            // 對話框開著的時候標籤順序可能變了，用物件找回位置
+  if (i < 0) return;
+  if (r === _notesDlg.EXTRA) { await notesDeleteTab(i); return; }
+  if (typeof r === 'string' && r.trim()) { t.name = r.trim(); notesRenderTabs(); notesSave(); }
+}
+window.notesTabMenu = notesTabMenu;
 
 // ── Add / Delete tabs ──────────────────────────────────
 async function notesPromptAddTab() {

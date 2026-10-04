@@ -104,6 +104,7 @@ async function syncDotClicked() {
   _pendingSync = false;
   _syncRetryCount = 0;
   _notesDirty = true; // 手動同步強制帶上 notes，確保完整推送
+  if (typeof _notesPendingSet === 'function') _notesPendingSet(true);
   _markSyncWrite(); // 先抑制 snapshot，避免推送中途被舊資料覆蓋
   if (typeof showToast === 'function') showToast('☁️ 同步中…');
   const dot = document.getElementById('syncDot');

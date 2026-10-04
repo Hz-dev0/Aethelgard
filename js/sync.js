@@ -494,6 +494,13 @@ function _pickNotes(cloudNotes) {
 // ── Notes cloud sync helper — debounced 5s to avoid pushing on every keystroke ──
 let _notesSyncTimer = null;
 let _notesDirty = false; // 只有筆記真正修改時才標記，避免每次 sync 都帶上全文
+// 「筆記有修改還沒送上雲端」的持久標記（只給同步狀態點用）。_notesDirty 只存在記憶體，
+// 關掉 App 就歸零；這個存在 localStorage，重開後狀態點才不會誤報「已同步」。
+const _NOTES_PENDING_KEY = 'aethelgard_notes_pending';
+function _notesPendingSet(v) {
+  try { if (v) localStorage.setItem(_NOTES_PENDING_KEY, '1'); else localStorage.removeItem(_NOTES_PENDING_KEY); } catch(e) {}
+}
+window._notesPendingGet = () => { try { return localStorage.getItem(_NOTES_PENDING_KEY) === '1'; } catch(e) { return false; } };
 
 function syncNotesToCloud() {
   const nowTs = Date.now();
@@ -512,6 +519,7 @@ function syncNotesToCloud() {
     }
   } catch(e) {}
   _notesDirty = true;
+  _notesPendingSet(true);
 
   // ★ 筆記直接寫 Firestore，不走 syncToCloud 的 debounce/hash，防止關頁前遺失
   clearTimeout(_notesSyncTimer);
@@ -544,6 +552,7 @@ function syncNotesToCloud() {
       //   常常還沒抓完頁面就被 reload/關閉打斷，是筆記遺失的主因之一。
       await window._fbSetDoc(ref, { notes: notesPayload }, { merge: true });
       _notesDirty = false;
+      _notesPendingSet(false);
       _dbg('[notes] 直接寫入 Firestore 成功');
       const dot = document.getElementById('syncDot');
       if (dot) dot.className = 'sync-dot synced';
@@ -591,7 +600,7 @@ function _pushNotesEmergency(label) {
   try {
     const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
     window._fbSetDoc(ref, { notes: notesPayload }, { merge: true })
-      .then(() => { _notesDirty = false; _dbg('[notes] ' + label + ' 緊急推送成功'); })
+      .then(() => { _notesDirty = false; _notesPendingSet(false); _dbg('[notes] ' + label + ' 緊急推送成功'); })
       .catch(e => console.warn('[notes] ' + label + ' 推送失敗', e));
   } catch(e) {
     console.warn('[notes] ' + label + ' 例外', e);
@@ -875,6 +884,7 @@ async function _doSyncToCloud() {
     _lastSyncHash = _hash;
     if (dot) dot.className = 'sync-dot synced';
     _syncRetryCount = 0;
+    if (_notesDirty) _notesPendingSet(false);
     _notesDirty = false;
   } catch (e) {
     console.warn('雲端儲存失敗', e);
