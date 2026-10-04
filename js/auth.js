@@ -612,6 +612,28 @@ function _tokSet(codeText, statusText, copyCode) {
 window._setTokenMinutes = function(m) { _selectedTokenMinutes = m; };
 window._getTokenMinutes = function() { return _selectedTokenMinutes; };
 
+// ── 通行碼倒數：每秒更新「還剩 mm:ss」，到期自動清空 ──
+let _tokTimerId = null;
+function _tokTick() {
+  const t = window._tokenLast;
+  if (!t) return;
+  const ms = t.expiresAt - Date.now();
+  if (ms <= 0) {
+    window._tokenLast = null;
+    clearInterval(_tokTimerId);
+    _tokSet('——————', '通行碼已過期', null);
+    return;
+  }
+  const sec = Math.ceil(ms / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), ss = sec % 60;
+  const p2 = n => String(n).padStart(2, '0');
+  _tokSet(null, '還剩 ' + (h ? h + ':' + p2(m) : m) + ':' + p2(ss) + '，用過一次就失效');
+}
+// 設定視窗重新開啟時，把還沒過期的通行碼與倒數接回畫面
+window._tokRestore = function() {
+  const t = window._tokenLast;
+  if (t && t.expiresAt > Date.now()) { _tokSet(t.code, '', null); _tokTick(); }
+};
+
 async function generateToken() {
   if (window._fbGuestSessionActive) { _tokSet(null, '❌ 只有 Owner 才能產生通行碼'); return; }
   if (!window._fbUid || !window._fbDb) { _tokSet(null, '尚未連線 Firebase，請稍候再試'); return; }
@@ -625,9 +647,11 @@ async function generateToken() {
     : `${_selectedTokenMinutes / 60} 小時`;
   try {
     await window._fbSetDoc(window._fbDoc(window._fbDb, 'tokens', code), { ownerUid, expiresAt });
-    _tokSet(code, `${label}內有效 · 用完自動刪除 · 點數字複製`, code);
-    if (_tokenExpireTimer) clearTimeout(_tokenExpireTimer);
-    _tokenExpireTimer = setTimeout(() => { _tokSet('——————', '通行碼已過期'); }, TOKEN_DURATION);
+    window._tokenLast = { code, expiresAt };
+    _tokSet(code, '', null);
+    _tokTick();
+    clearInterval(_tokTimerId);
+    _tokTimerId = setInterval(_tokTick, 1000);
   } catch(e) {
     _tokSet(null, '產生失敗：' + e.message);
   }

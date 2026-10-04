@@ -128,16 +128,15 @@ $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
 let stab='gen';
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
   const row=(t,d,c)=>`<div class="srow"><div class="sx"><div class="st">${t}</div>${d?`<div class="sd">${d}</div>`:''}</div><div class="sc">${c}</div></div>`;
-  const TB=[['gen','⚙','一般'],['look','◐','外觀'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
+  const TB=[['gen','⚙','一般'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
   if(!TB.some(t=>t[0]===stab))stab=TB[0][0];
   const info=(window._fbAuthInfo&&window._fbAuthInfo())||{},email=info.email||(window._fbAuth&&window._fbAuth.currentUser&&window._fbAuth.currentUser.email)||'',
     hasG=(info.providers||[]).includes('google.com');
-  const P={gen:row('快到期提醒','截止日前這幾天，會列進「快到期」',o('soon',0,60)+'天')
-    +row('久放任務優先','沒有期限的任務放超過這麼久，會優先彈出來問你',o('stale',1,365)+'天')
-    +row('順手做一件','每天最多彈出幾次建議',o('sugMax',0,20)+'次')
-    +row('每日重置時間','過了這個時間才算新的一天，彈窗次數也會歸零',`<select data-c="reset">${Array.from({length:24},(_,i)=>`<option value="${i}">${pad(i)}:00</option>`).join('')}</select>`),
-  look:row('分頁位置','設定視窗裡，分頁按鈕放在哪裡（手機固定在上方）','<select data-c="tabPos"><option value="0">左側</option><option value="1">上方</option><option value="2">下方</option></select>')
-    +row('完成特效','勾掉任務時的閃光與碎片動畫','<select data-c="fx"><option value="1">開啟</option><option value="0">關閉</option></select>'),
+  const P={gen:row('快到期提醒','截止前幾天，列入「快到期」',o('soon',0,60)+'天')
+    +row('久放任務優先','沒期限的任務放太久，會優先彈出',o('stale',1,365)+'天')
+    +row('順手做一件','每天最多彈出幾次',o('sugMax',0,20)+'次')
+    +row('每日重置時間','過了這個時間才算新的一天',`<select data-c="reset">${Array.from({length:24},(_,i)=>`<option value="${i}">${pad(i)}:00</option>`).join('')}</select>`)
+    +row('完成特效','勾掉任務時的動畫','<select data-c="fx"><option value="1">開啟</option><option value="0">關閉</option></select>'),
   tok:`<div class="sh">有效時間</div>
 <div id="td-tkp" class="tkchips">${[[30,'30 分鐘'],[60,'1 小時'],[180,'3 小時'],[480,'8 小時']].map(([m,l])=>`<button class="b ${(window._getTokenMinutes?window._getTokenMinutes():30)===m?'dk':'q'}" data-a="s-tdur" data-m="${m}">${l}</button>`).join('')}</div>
 <div class="sh">通行碼</div>
@@ -153,9 +152,10 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
 <div class="sh">筆記</div>
 <div class="brow">${[['notesExportTxt','TXT'],['notesExportMd','MD'],['notesExportJson','JSON']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">匯出 ${l}</button>`).join('')}</div>
 <div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">從 JSON 匯入</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步到雲端</button></div>`};
-  $('ov').innerHTML=`<div class="box sb p${S.cfg.tabPos}" style="height:min(540px,88vh);max-height:none;overflow:hidden"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane" style="min-height:0"><div class="pc" style="min-height:0;overflow-y:auto">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
-  $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();if(k==='tabPos')openSet()}}});
+  $('ov').innerHTML=`<div class="box sb p1" style="height:clamp(380px,60vh,540px);max-height:92vh;overflow:hidden"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane" style="min-height:0"><div class="pc" style="min-height:0;overflow-y:auto">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
+  $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();}}});
   const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(s=>{try{const j=JSON.parse(s);if(!Array.isArray(j.tasks))throw 0;S=j;norm();save();render();$('inote').textContent='匯入完成'}catch(x){$('inote').textContent='檔案格式不對'}})};
+  if(typeof window._tokRestore==='function')window._tokRestore();
   $('ov').className='on'}
 $('gear').onclick=openSet;
 render();

@@ -41,7 +41,7 @@
 :is(#todoRoot,#todoFloat) .foot input{text-align:center;color:var(--blue)}
 :is(#todoRoot,#todoFloat) .row.shine::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,222,120,.9) 50%,transparent 70%);transform:translateX(-100%);animation:tdsh .43s ease-out forwards;pointer-events:none}
 :is(#todoRoot,#todoFloat) to{transform:translateX(100%)}
-:is(#todoRoot,#todoFloat) .box.sb{display:flex;max-width:460px;height:min(540px,88vh);max-height:none;overflow:hidden}
+:is(#todoRoot,#todoFloat) .box.sb{display:flex;max-width:460px;height:clamp(380px,60vh,540px);max-height:92vh;overflow:hidden}
 :is(#todoRoot,#todoFloat) .sb.p1{flex-direction:column}
 :is(#todoRoot,#todoFloat) .sb.p2{flex-direction:column-reverse}
 :is(#todoRoot,#todoFloat) .tabs{display:flex;flex-direction:column;gap:4px;padding:10px 6px;width:78px;flex:none;background:var(--bg);border-right:1px solid var(--line)}
@@ -86,14 +86,14 @@ body{overflow:auto}
 #todoRoot .chip.on{border-color:var(--blue);color:var(--blue);background:rgba(58,110,165,.08);font-weight:700}
 
 /* ── 設定視窗：列式排版（左：名稱＋說明，右：控制項） ── */
-:is(#todoRoot,#todoFloat) .srow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+:is(#todoRoot,#todoFloat) .srow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .srow:first-child{padding-top:4px}
 :is(#todoRoot,#todoFloat) .srow:last-child{border-bottom:0}
 :is(#todoRoot,#todoFloat) .srow .sx{flex:1;min-width:0}
 :is(#todoRoot,#todoFloat) .srow .st{font-size:14px;color:var(--text);line-height:1.4}
 :is(#todoRoot,#todoFloat) .srow .sd,:is(#todoRoot,#todoFloat) .sd{font-size:12px;color:var(--dim);line-height:1.55;margin-top:2px}
 :is(#todoRoot,#todoFloat) .srow .sc{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim)}
-:is(#todoRoot,#todoFloat) .srow input[type=number]{width:58px;text-align:center;padding:6px}
+:is(#todoRoot,#todoFloat) .srow input[type=number]{width:58px;text-align:center;padding:5px 6px}
 :is(#todoRoot,#todoFloat) .srow select{padding:6px 8px}
 :is(#todoRoot,#todoFloat) .sh{font-size:12px;font-weight:700;color:var(--gray);margin:14px 0 8px}
 :is(#todoRoot,#todoFloat) .sh:first-child{margin-top:2px}

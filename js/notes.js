@@ -1370,8 +1370,14 @@ document.addEventListener('visibilitychange', () => {
     // 15 秒是「快速切出去看一下又回來」跟「真的放到背景一陣子」的分界，可依實際使用調整。
     const _hiddenDuration = _lastHiddenAt ? Date.now() - _lastHiddenAt : 0;
     if (_hiddenDuration < 15000) return;
-    window._saveReloadRestoreState();
-    location.reload();
+    // ★ 不再整頁重整（會出現遮罩、閃一下）：改成在原地靜默重新拉一次雲端資料。
+    //   loadFromCloud() 內部會用 _pickNotes 合併筆記並更新畫面；任務區有自己的 pull()，
+    //   另外還有 onSnapshot 即時監聽，三者一起確保回到前景後資料是新的。
+    if (window._softResyncing) return;
+    window._softResyncing = true;
+    Promise.resolve(typeof loadFromCloud === 'function' ? loadFromCloud() : false)
+      .catch(() => {})
+      .finally(() => { window._softResyncing = false; });
   }
 });
 
