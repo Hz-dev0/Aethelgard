@@ -1074,9 +1074,6 @@ function notesShow() {
     if (tab) tab.currentPage = Math.min(tab.currentPage ?? 0, tab.pages.length - 1);
   }
   notesRenderTabs();
-  // Show the import/export button in the header
-  const ioBtn = document.getElementById('notes-io-btn');
-  if (ioBtn) ioBtn.style.display = 'inline-flex';
 }
 
 function notesHide() {
@@ -1085,10 +1082,6 @@ function notesHide() {
   clearTimeout(notesSaveTimer);
   notesSave();
   _notesIsVisible = false;
-  // Hide the import/export button
-  const ioBtn = document.getElementById('notes-io-btn');
-  if (ioBtn) ioBtn.style.display = 'none';
-  _notesCloseIoMenu();
 }
 
 // ── Override showPage to handle notes ─────────────────
@@ -1203,62 +1196,6 @@ function notesInitKeys() {
 function notesSizeMobile() {}
 window.notesSizeMobile = notesSizeMobile;
 
-// ── Import / Export ────────────────────────────────────
-let _ioMenu = null;
-
-function notesShowIoMenu() {
-  if (_ioMenu) { _ioMenu.remove(); _ioMenu = null; return; }
-  const btn = document.getElementById('notes-io-btn');
-  const rect = btn ? btn.getBoundingClientRect() : { left: 60, bottom: 56, right: 160 };
-
-  const menu = document.createElement('div');
-  menu.id = 'notes-io-menu';
-  menu.style.cssText = `
-    position:fixed;z-index:10010;
-    background:var(--bg2);border:1px solid var(--border);
-    border-radius:12px;padding:6px 0;
-    box-shadow:0 8px 28px rgba(58,110,165,0.18);
-    min-width:180px;animation:modalIn 0.15s ease;
-  `;
-  const items = [
-    { label: '📤 匯出為 .txt', fn: 'notesExportTxt()' },
-    { label: '📤 匯出為 .md',  fn: 'notesExportMd()' },
-    { label: '📤 匯出為 JSON', fn: 'notesExportJson()' },
-    { sep: true },
-    { label: '📥 從 JSON 匯入', fn: 'notesImportJson()' },
-    { sep: true },
-    { label: '☁ 強制同步至雲端', fn: 'forceSyncNotesFromMenu()' },
-  ];
-  menu.innerHTML = items.map(it => {
-    if (it.sep) return `<div style="height:1px;background:var(--border);margin:4px 8px"></div>`;
-    return `<div onclick="${it.fn};_notesCloseIoMenu()" class="logo-menu-item" style="font-size:13px">${it.label}</div>`;
-  }).join('');
-
-  document.body.appendChild(menu);
-  _ioMenu = menu;
-
-  // Position below the button
-  const mw = 190;
-  let left = rect.left;
-  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
-  menu.style.left = left + 'px';
-  menu.style.top  = (rect.bottom + 6) + 'px';
-
-  setTimeout(() => document.addEventListener('click', _notesIoOutside), 0);
-}
-
-function _notesCloseIoMenu() {
-  if (_ioMenu) { _ioMenu.remove(); _ioMenu = null; }
-  document.removeEventListener('click', _notesIoOutside);
-}
-
-function _notesIoOutside(e) {
-  if (_ioMenu && !_ioMenu.contains(e.target) && e.target.id !== 'notes-io-btn') {
-    _notesCloseIoMenu();
-  }
-}
-window.notesShowIoMenu = notesShowIoMenu;
-window._notesCloseIoMenu = _notesCloseIoMenu;
 
 async function forceSyncNotesFromMenu() {
   await forceSyncNotes();

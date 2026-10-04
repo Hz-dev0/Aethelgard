@@ -2,7 +2,7 @@
 (function(){
 
 const root=document.getElementById('todoRoot');
-root.innerHTML='<div class="topbar" id="td-topbar"><button class="tab" data-a="go" data-v="today">今天</button><button class="tab" data-a="go" data-v="all">全部</button><button class="tab" data-a="go" data-v="notes">筆記</button><span class="sp"></span><button class="tab" id="td-gear">設定</button></div><div class="tmain"><div id="td-app"></div></div>';
+root.innerHTML='<div class="topbar" id="td-topbar"><div class="seg"><button class="tab" data-a="go" data-v="today">今天</button><button class="tab" data-a="go" data-v="all">全部</button></div><span class="sp"></span><button class="chip" data-a="go" data-v="notes">筆記</button><button class="chip" id="td-gear">設定</button></div><div class="tmain"><div id="td-app"></div></div>';
 const fl=document.createElement('div');fl.id='todoFloat';
 fl.innerHTML='<div id="td-toast"></div><div id="td-fp"><button id="td-fpb" aria-label="完成紀錄">▲</button><div id="td-fpp"></div></div><div id="td-ov"></div>';
 document.body.appendChild(fl);
@@ -102,6 +102,7 @@ document.addEventListener('click',e=>{
   if(a==='fold'){S.fold[el.dataset.k]=S.fold[el.dataset.k]===false;save();return render()}
   if(a==='s-close'){$('ov').className='';return}
   if(a==='s-out'){$('ov').className='';if(typeof window.ownerSignOut==='function')window.ownerSignOut();return}
+  if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
   if(a==='s-tab'){stab=el.dataset.k;return openSet()}
   if(a==='s-exp'){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'})),x=document.createElement('a');x.href=u;x.download='tasks-'+today()+'.json';x.click();URL.revokeObjectURL(u);return}
   if(a==='c-no'){pend=null;$('ov').className='';return}
@@ -116,7 +117,9 @@ $('toast').onclick=()=>{const id=$('toast').dataset.id;if(id){$('toast').classLi
 $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
 let stab='gen';
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" style="width:64px">`;
-  const TB=[['gen','⚙','一般'],['look','◐','外觀'],['acct','◉','帳號'],['exp','⇩','匯出']];
+  const N=cur==='notes';
+  const TB=N?[['nio','⇅','匯入匯出'],['acct','◉','帳號']]:[['gen','⚙','一般'],['look','◐','外觀'],['acct','◉','帳號'],['exp','⇩','匯出']];
+  if(!TB.some(t=>t[0]===stab))stab=TB[0][0];
   const P={gen:`<label class="sl">快到期區：截止前 ${o('soon',0,60)} 天，開始列進「快到期」</label>
 <label class="sl">沒期限的任務超過 ${o('stale',1,365)} 天沒動，彈窗會優先出現它</label>
 <label class="sl">「順手做一件」彈窗：每天最多出現 ${o('sugMax',0,20)} 次</label>
@@ -125,7 +128,8 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
 <label class="sl">完成特效 <select data-c="fx"><option value="1">開</option><option value="0">關</option></select></label>`,
   acct:`<div class="sl">帳號：<b>${esc((window._fbAuth&&window._fbAuth.currentUser&&window._fbAuth.currentUser.email)||'（未取得）')}</b></div>
 <button class="b dk" style="width:100%;border-radius:8px" data-a="s-out">登出</button>
-<div class="meta" style="margin-top:12px">任務資料同步位置：Firestore 的 Aethelgard/todo。</div>`,
+${N?'':'<div class="meta" style="margin-top:12px">任務資料同步位置：Firestore 的 Aethelgard/todo。</div>'}`,
+  nio:`<div class="meta" style="margin-bottom:8px">筆記</div>${[['notesExportTxt','匯出為 .txt'],['notesExportMd','匯出為 .md'],['notesExportJson','匯出為 JSON'],['notesImportJson','從 JSON 匯入'],['forceSyncNotesFromMenu','強制同步至雲端']].map(([f,l])=>`<button class="b q" style="width:100%;border-radius:8px;margin-bottom:6px" data-a="s-n" data-f="${f}">${l}</button>`).join('')}`,
   exp:`<button class="b" style="width:100%;border-radius:8px" data-a="s-exp">匯出資料（JSON）</button>
 <label class="sl" style="margin-top:14px">匯入 <input type="file" id="td-imp" accept=".json"></label><div class="meta" id="td-inote">匯入會取代目前所有資料。</div>`};
   $('ov').innerHTML=`<div class="box sb p${S.cfg.tabPos}"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane"><div class="pc">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
@@ -155,7 +159,7 @@ function startCloud(){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudReady)pull()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
-function markTabs(c){cur=c;document.querySelectorAll('#td-topbar .tab[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
+function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
 function go(v){if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
   view=v;render();if(typeof window.showPage==='function')window.showPage('todo');markTabs(v)}
 window.todoGo=go;
@@ -163,7 +167,6 @@ function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._
   window.showPage=function(id,skip){if(OLD.includes(id))id='todo';const r=sp.call(this,id,skip);markTabs(id==='notes'?'notes':view);return r};window.showPage._td=1}
 function setTop(){const b=document.getElementById('td-topbar');if(b)document.documentElement.style.setProperty('--tdtop',b.offsetHeight+'px')}
 function boot(){wrapShowPage();
-  const io=document.getElementById('notes-io-btn'),sp=document.querySelector('#td-topbar .sp');if(io&&sp)sp.after(io);
   setTop();addEventListener('resize',setTop);go('today');startCloud()}
 
 boot();
