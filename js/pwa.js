@@ -66,31 +66,46 @@ if ('serviceWorker' in navigator) {
 
 // ── 下拉重整（Pull-to-Refresh）──────────────────────────────────────────
 // 手機 PWA 沒有網址列也沒有重整鍵，這裡自己做：頁面在最上方時往下拉超過門檻、放開就重整。
+// 手感：整個畫面會跟著手指被「拉下來」（越拉越有阻力），底下露出圓環，圓環隨距離填滿、
+// 過門檻時箭頭翻轉並震動一下；放開後畫面會停在上方轉圈，不夠力則彈回去。
 // 不會觸發的情況：還沒登入、設定/對話框開著、手指在輸入框或筆記編輯區、頁面或內層區塊沒捲到頂。
 (function() {
-  const THRESHOLD = 70;   // 拉超過這個距離（px）放開才會重整
-  const MAX_PULL  = 130;
-  let startY = 0, startX = 0, tracking = false, pulling = false, dist = 0, busy = false, ind = null;
+  const THRESHOLD = 64;    // 畫面被拉下超過這個距離（px）放開才會重整
+  const MAX_OFF   = 120;   // 畫面最多被拉下多少（阻尼的極限）
+  const HOLD      = 56;    // 重整中，畫面停留的位置
+  const DAMP      = 120;   // 阻尼係數：越大越好拉
+  const RING_C    = 2 * Math.PI * 15;   // 圓環周長
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let startY = 0, startX = 0, tracking = false, pulling = false, dy = 0, off = 0, armedPrev = false, busy = false, ind = null;
 
   const css = document.createElement('style');
   css.textContent = `
-    #ptrIndicator{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:100002;
-      display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:22px;font-size:13px;
-      background:var(--bg2,#fff);color:var(--text-dim,#555);border:1px solid var(--border,rgba(58,110,165,.2));
-      box-shadow:0 4px 16px rgba(58,110,165,.18);pointer-events:none;opacity:0;
-      transform:translate(-50%,-70px);transition:transform .22s ease,opacity .22s ease;white-space:nowrap}
-    #ptrIndicator.dragging{transition:none}
-    #ptrIndicator .ptr-ic{display:inline-block;transition:transform .15s}
-    #ptrIndicator.armed .ptr-ic{transform:rotate(180deg)}
-    #ptrIndicator.busy .ptr-ic{animation:ptrSpin .8s linear infinite}
-    @keyframes ptrSpin{to{transform:rotate(360deg)}}`;
+    #ptrIndicator{position:fixed;left:50%;top:env(safe-area-inset-top,0px);z-index:-1;width:36px;height:36px;margin-left:-18px;
+      border-radius:50%;background:var(--bg2,#fff);box-shadow:0 2px 10px rgba(58,110,165,.22);
+      display:grid;place-items:center;pointer-events:none;opacity:0;will-change:transform,opacity}
+    #ptrIndicator svg{position:absolute;inset:0;width:36px;height:36px;transform:rotate(-90deg)}
+    #ptrIndicator .ptr-bg{fill:none;stroke:rgba(58,110,165,.15);stroke-width:2.5}
+    #ptrIndicator .ptr-ring{fill:none;stroke:#3A6EA5;stroke-width:2.5;stroke-linecap:round;
+      stroke-dasharray:${RING_C.toFixed(2)};stroke-dashoffset:${RING_C.toFixed(2)}}
+    #ptrIndicator .ptr-ar{position:relative;font-size:15px;line-height:1;color:#3A6EA5;
+      transition:transform .28s cubic-bezier(.34,1.56,.64,1),opacity .15s}
+    #ptrIndicator.armed .ptr-ar{transform:rotate(180deg)}
+    #ptrIndicator.busy .ptr-ar{opacity:0}
+    #ptrIndicator.busy svg{animation:ptrSpin .8s linear infinite}
+    #ptrIndicator.busy .ptr-ring{stroke-dashoffset:${(RING_C * 0.72).toFixed(2)}!important}
+    #ptrIndicator.snap{transition:transform .38s cubic-bezier(.34,1.3,.64,1),opacity .25s}
+    body.ptr-snap #todoRoot,body.ptr-snap #page-notes{transition:transform .38s cubic-bezier(.34,1.3,.64,1)}
+    @keyframes ptrSpin{to{transform:rotate(270deg)}}`;
   document.head.appendChild(css);
+
+  const layers = () => document.querySelectorAll('#todoRoot, #page-notes');
 
   function getInd() {
     if (ind) return ind;
     ind = document.createElement('div');
     ind.id = 'ptrIndicator';
-    ind.innerHTML = '<span class="ptr-ic">↓</span><span class="ptr-tx">下拉重整</span>';
+    ind.setAttribute('aria-hidden', 'true');
+    ind.innerHTML = '<svg viewBox="0 0 36 36"><circle class="ptr-bg" cx="18" cy="18" r="15"/><circle class="ptr-ring" cx="18" cy="18" r="15"/></svg><span class="ptr-ar">↓</span>';
     document.body.appendChild(ind);
     return ind;
   }
@@ -116,22 +131,38 @@ if ('serviceWorker' in navigator) {
     return false;
   }
 
-  function render() {
+  // 把畫面與圓環放到 y（px）的位置
+  function place(y, progress) {
     const el = getInd();
-    const p = Math.min(dist, MAX_PULL);
-    el.classList.add('dragging');
-    el.style.opacity = String(Math.min(p / THRESHOLD, 1));
-    el.style.transform = 'translate(-50%,' + (Math.min(p * 0.6, 56) - 70) + 'px)';
-    const armed = dist >= THRESHOLD;
-    el.classList.toggle('armed', armed);
-    el.querySelector('.ptr-tx').textContent = armed ? '放開重整' : '下拉重整';
+    layers().forEach(l => { l.style.transform = y ? 'translate3d(0,' + y + 'px,0)' : ''; });
+    // 圓環坐在被拉開的空隙正中間；一開始被畫面蓋住，隨著拉開慢慢「浮」出來
+    const sc = 0.55 + 0.45 * Math.min(progress, 1);
+    el.style.transform = 'translate3d(0,' + (y / 2 - 18) + 'px,0) scale(' + sc + ')';
+    el.style.opacity = String(Math.min(progress * 1.5, 1));
+    el.querySelector('.ptr-ring').style.strokeDashoffset = String(RING_C * (1 - Math.min(progress, 1)));
   }
 
-  function hide() {
-    if (!ind) return;
-    ind.classList.remove('dragging', 'armed');
-    ind.style.opacity = '0';
-    ind.style.transform = 'translate(-50%,-70px)';
+  function render() {
+    off = MAX_OFF * (1 - Math.exp(-dy / DAMP));   // 阻尼：越往下越難拉
+    const armed = off >= THRESHOLD;
+    place(off, off / THRESHOLD);
+    getInd().classList.toggle('armed', armed);
+    if (armed && !armedPrev) { try { navigator.vibrate && navigator.vibrate(12); } catch (e) {} }
+    armedPrev = armed;
+  }
+
+  function springBack() {
+    const el = getInd();
+    if (!RM) { document.body.classList.add('ptr-snap'); el.classList.add('snap'); }
+    el.classList.remove('armed');
+    place(0, 0);
+    setTimeout(cleanup, 420);
+  }
+
+  function cleanup() {
+    document.body.classList.remove('ptr-snap');
+    layers().forEach(l => { l.style.transform = ''; });
+    if (ind) ind.classList.remove('snap');
   }
 
   // 真正重整前先把還沒送出的資料推上雲端，並記住目前在看的筆記頁
@@ -143,7 +174,7 @@ if ('serviceWorker' in navigator) {
   };
 
   document.addEventListener('touchstart', e => {
-    tracking = pulling = false; dist = 0;
+    tracking = pulling = false; dy = 0; off = 0; armedPrev = false;
     if (e.touches.length !== 1) return;
     if (blocked(e.target)) return;
     startY = e.touches[0].clientY;
@@ -153,37 +184,42 @@ if ('serviceWorker' in navigator) {
 
   document.addEventListener('touchmove', e => {
     if (!tracking) return;
-    const dy = e.touches[0].clientY - startY;
-    const dx = e.touches[0].clientX - startX;
+    const y = e.touches[0].clientY - startY;
+    const x = e.touches[0].clientX - startX;
     if (!pulling) {
-      if (dy < 0 || Math.abs(dx) > Math.abs(dy)) { if (dy < -6 || Math.abs(dx) > 12) tracking = false; return; }
-      if (dy < 10) return;
+      if (y < 0 || Math.abs(x) > Math.abs(y)) { if (y < -6 || Math.abs(x) > 12) tracking = false; return; }
+      if (y < 10) return;
       pulling = true;
+      document.body.classList.remove('ptr-snap');
+      getInd().classList.remove('snap', 'busy', 'armed');
     }
-    dist = dy;
+    dy = Math.max(0, y - 10);   // 扣掉起手的 10px，畫面才會「貼著手指」開始動
     if (e.cancelable) e.preventDefault();   // 擋掉瀏覽器自己的下拉動作，避免跟我們的重整疊在一起
     render();
   }, { passive: false });
 
   function end() {
     if (!tracking) return;
-    const wasPulling = pulling, armed = dist >= THRESHOLD;
+    const wasPulling = pulling, armed = off >= THRESHOLD;
     tracking = pulling = false;
     if (wasPulling && armed) {
       busy = true;
       const el = getInd();
-      el.classList.remove('dragging', 'armed');
+      if (!RM) { document.body.classList.add('ptr-snap'); el.classList.add('snap'); }
+      el.classList.remove('armed');
       el.classList.add('busy');
+      place(HOLD, 1);                     // 畫面停在上方，圓環轉圈
       el.style.opacity = '1';
-      el.style.transform = 'translate(-50%,0)';
-      el.querySelector('.ptr-ic').textContent = '⟳';
-      el.querySelector('.ptr-tx').textContent = '重整中…';
       window._ptrReload();
-    } else {
-      hide();
+    } else if (wasPulling) {
+      springBack();
     }
-    dist = 0;
+    dy = 0; off = 0; armedPrev = false;
   }
   document.addEventListener('touchend', end, { passive: true });
-  document.addEventListener('touchcancel', () => { tracking = pulling = false; dist = 0; hide(); }, { passive: true });
+  document.addEventListener('touchcancel', () => {
+    const was = pulling;
+    tracking = pulling = false; dy = 0; off = 0; armedPrev = false;
+    if (was && !busy) springBack();
+  }, { passive: true });
 })();

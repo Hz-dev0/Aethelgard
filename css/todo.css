@@ -6,7 +6,7 @@
 :is(#todoRoot,#todoFloat) .topbar{display:flex;gap:6px;align-items:center;margin-bottom:14px}
 :is(#todoRoot,#todoFloat) .tab{background:none;border:0;font:inherit;color:var(--dim);padding:6px 12px;border-radius:8px;cursor:pointer}
 :is(#todoRoot,#todoFloat) .tab.on{background:var(--bg3);color:var(--blue);font-weight:700}
-:is(#todoRoot,#todoFloat) nav .sp{flex:1}
+:is(#todoRoot,#todoFloat) .sp{flex:1}
 :is(#todoRoot,#todoFloat) h1{font-size:22px;margin:4px 0 2px}
 :is(#todoRoot,#todoFloat) h2{font-size:13px;font-weight:700;color:var(--gray);margin:20px 0 8px}
 :is(#todoRoot,#todoFloat) h2.fold{cursor:pointer;user-select:none}
@@ -82,5 +82,38 @@ body{overflow:auto}
 #todoRoot .seg{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px}
 #todoRoot .seg .tab{padding:5px 14px;border-radius:8px}
 #todoRoot .seg .tab.on{background:#fff;color:var(--blue);box-shadow:0 1px 3px rgba(30,45,69,.12)}
-#todoRoot .chip{font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:16px;padding:4px 13px;margin-left:6px;cursor:pointer}
+#todoRoot .chip{font:inherit;font-size:13px;background:none;border:1px solid var(--line);color:var(--dim);border-radius:16px;padding:4px 13px;margin-left:0;cursor:pointer;flex:none}
 #todoRoot .chip.on{border-color:var(--blue);color:var(--blue);background:rgba(58,110,165,.08);font-weight:700}
+
+/* ── 設定視窗：列式排版（左：名稱＋說明，右：控制項） ── */
+:is(#todoRoot,#todoFloat) .srow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+:is(#todoRoot,#todoFloat) .srow:first-child{padding-top:4px}
+:is(#todoRoot,#todoFloat) .srow:last-child{border-bottom:0}
+:is(#todoRoot,#todoFloat) .srow .sx{flex:1;min-width:0}
+:is(#todoRoot,#todoFloat) .srow .st{font-size:14px;color:var(--text);line-height:1.4}
+:is(#todoRoot,#todoFloat) .srow .sd,:is(#todoRoot,#todoFloat) .sd{font-size:12px;color:var(--dim);line-height:1.55;margin-top:2px}
+:is(#todoRoot,#todoFloat) .srow .sc{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim)}
+:is(#todoRoot,#todoFloat) .srow input[type=number]{width:58px;text-align:center;padding:6px}
+:is(#todoRoot,#todoFloat) .srow select{padding:6px 8px}
+:is(#todoRoot,#todoFloat) .sh{font-size:12px;font-weight:700;color:var(--gray);margin:14px 0 8px}
+:is(#todoRoot,#todoFloat) .sh:first-child{margin-top:2px}
+:is(#todoRoot,#todoFloat) .sbtn{display:block;width:100%;border-radius:10px;min-height:44px;margin-top:8px;font-size:14px}
+:is(#todoRoot,#todoFloat) .sbtn:first-child{margin-top:0}
+:is(#todoRoot,#todoFloat) .tkchips{display:flex;gap:6px;flex-wrap:wrap}
+:is(#todoRoot,#todoFloat) .tkchips .b{border-radius:16px;min-height:34px;font-size:13px;padding:0 14px}
+:is(#todoRoot,#todoFloat) .tkrow{display:flex;gap:8px;align-items:stretch}
+:is(#todoRoot,#todoFloat) .tkcode{flex:1;min-width:0;font-size:22px;font-family:ui-monospace,monospace;font-weight:700;letter-spacing:.16em;text-align:center;padding:8px 6px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+:is(#todoRoot,#todoFloat) .tkrow .b{border-radius:10px;flex:none;min-height:44px;padding:0 18px}
+:is(#todoRoot,#todoFloat) .okmark{color:#2e7d4f;font-size:13px}
+:is(#todoRoot,#todoFloat) .ver{margin-top:14px;font-size:11px;color:var(--faint);text-align:center}
+:is(#todoRoot,#todoFloat) .upl{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+:is(#todoRoot,#todoFloat) .upl input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+
+/* 手機：分頁標籤改成上方一整排，內容區才有足夠寬度（桌機維持原本的位置設定） */
+@media (max-width:520px){
+  :is(#todoRoot,#todoFloat) .sb.p0{flex-direction:column}
+  :is(#todoRoot,#todoFloat) .p0 .tabs{flex-direction:row;width:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px;justify-content:space-around}
+  :is(#todoRoot,#todoFloat) .p0 .tb{flex:1}
+  :is(#todoRoot,#todoFloat) .pc{padding:12px 16px 8px;min-height:200px}
+  :is(#todoRoot,#todoFloat) #td-ov{padding:14px}
+}
