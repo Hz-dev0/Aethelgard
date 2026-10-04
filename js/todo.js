@@ -2,7 +2,7 @@
 (function(){
 
 const root=document.getElementById('todoRoot');
-root.innerHTML='<div class="topbar" id="td-topbar"><div class="seg"><button class="tab" data-a="go" data-v="today">今天</button><button class="tab" data-a="go" data-v="all">全部</button></div><span class="sp"></span><button class="chip" data-a="go" data-v="notes">筆記</button><button class="chip" id="td-gear">設定</button></div><div class="tmain"><div id="td-app"></div></div>';
+root.innerHTML='<div class="topbar" id="td-topbar"><div class="seg"><button class="tab" data-a="go" data-v="today">今天</button><button class="tab" data-a="go" data-v="all">全部</button></div><span class="sp"></span><button class="syn wait" id="td-sync" data-a="s-sync"><i></i><span></span></button><button class="chip" data-a="go" data-v="notes">筆記</button><button class="chip" id="td-gear">設定</button></div><div class="tmain"><div id="td-app"></div></div>';
 const fl=document.createElement('div');fl.id='todoFloat';
 fl.innerHTML='<div id="td-toast"></div><div id="td-fp"><button id="td-fpb" aria-label="完成紀錄">▲</button><div id="td-fpp"></div></div><div id="td-ov"></div>';
 document.body.appendChild(fl);
@@ -11,7 +11,8 @@ const K='aeth_todo_v1';
 let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
 let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
-const save=()=>{S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
+let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
+const save=()=>{S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
@@ -101,6 +102,7 @@ document.addEventListener('click',e=>{
   if(a==='go')return go(el.dataset.v);
   if(a==='fold'){S.fold[el.dataset.k]=S.fold[el.dataset.k]===false;save();return render()}
   if(a==='s-close'){$('ov').className='';return}
+  if(a==='s-sync'){syncClick();return}
   if(a==='s-out'){$('ov').className='';if(typeof window.ownerSignOut==='function')window.ownerSignOut();return}
   if(a==='s-tdur'){const mm=parseInt(el.dataset.m);if(typeof window._setTokenMinutes==='function')window._setTokenMinutes(mm);
     document.querySelectorAll('#td-tkp [data-m]').forEach(x=>{const on=x===el;x.classList.toggle('dk',on);x.classList.toggle('q',!on)});return}
@@ -161,23 +163,58 @@ $('gear').onclick=openSet;
 render();
 
 /* ===== 與整個 app 的銜接 ===== */
-let cloudReady=false,pushT=0,pullTries=0;
 const REF=()=>window._fbDoc(window._fbDb,'Aethelgard','todo');
-async function push(){try{await window._fbSetDoc(REF(),{json:JSON.stringify(S),updatedAt:S.updatedAt||Date.now()},{merge:true})}catch(e){console.warn('[todo push]',e)}}
+/* 「待同步」判斷：本機最後修改時間 > 最後一次確認與雲端一致的時間。存在 localStorage，重開 App 也算得出來
+   （Firestore 離線時只把寫入暫存在記憶體，關掉 App 就沒了，所以不能靠它） */
+const KS=K+'_synced';
+function markSynced(){try{localStorage.setItem(KS,String(S.updatedAt||0))}catch(e){}dirty=false;statusUpd()}
+async function push(){const seq=saveSeq;
+  try{await window._fbSetDoc(REF(),{json:JSON.stringify(S),updatedAt:S.updatedAt||Date.now()},{merge:true});if(seq===saveSeq)markSynced()}
+  catch(e){console.warn('[todo push]',e)}
+  statusUpd()}
 async function pull(){
   if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
   try{const snap=await window._fbGetDoc(REF());
     if(snap.exists()){const d=snap.data(),cu=d.updatedAt||0,lu=S.updatedAt||0;
-      if(cu>lu){S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}render()}
-      else if(lu>cu)await push()}
+      if(cu>lu){S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced();render()}
+      else if(lu>cu)await push();
+      else markSynced()}
     else if((S.tasks&&S.tasks.length)||S.updatedAt)await push();
-    cloudReady=true;return true}catch(e){console.warn('[todo pull]',e);return false}}
+    else markSynced();
+    cloudReady=true;statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
+/* 立刻同步一次（連上網、切回前景、點狀態點時用）；剛恢復連線時 Firestore 可能還沒接上，失敗就稍後再試 */
+let syncAt=0;   // 同步鎖：離線時 Firestore 的寫入會一直「等待中」不回應，所以鎖要有逾時，不能永遠卡住
+async function syncNow(tries){if(syncAt&&Date.now()-syncAt<15000)return false;
+  if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
+  syncAt=Date.now();clearTimeout(pushT);let ok=false;
+  try{ok=await Promise.race([pull(),new Promise(r=>setTimeout(()=>r(false),15000))])}finally{syncAt=0}
+  if(!ok&&(tries||0)<3&&navigator.onLine!==false)setTimeout(()=>syncNow((tries||0)+1),3000);
+  if(ok){try{if(typeof _pushNotesEmergency==='function')_pushNotesEmergency('同步')}catch(e){}}
+  statusUpd();return ok}
+window._todoSyncNow=syncNow;window._todoToast=toast;
+
+/* ===== 同步狀態點（頂列）：已同步 / 待同步 / 離線 / 連線中 ===== */
+function stateNow(){
+  const nd=typeof _notesDirty!=='undefined'&&_notesDirty,pend=dirty||nd;
+  if(navigator.onLine===false)return[pend?'off pend':'off','離線'];   // 離線且有待同步：同樣顯示「離線」，圓點改橘色
+  if(pend)return['pend','待同步'];
+  if(!cloudReady)return['wait','連線中'];
+  return['ok','']}
+function statusUpd(){const el=document.getElementById('td-sync');if(!el)return;
+  const [c,t]=stateNow();el.className='syn '+c;el.querySelector('span').textContent=t;
+  el.setAttribute('aria-label','同步狀態：'+(t||'已同步'))}
+const SYNMSG={ok:'已同步到雲端',pend:'有修改還沒同步，連上網就會送出',off:'目前離線，修改都先存在手機，連上網會自動同步（橘點＝有修改還沒送出）',wait:'正在連線雲端…'};
+function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);if(navigator.onLine!==false)syncNow()}
+addEventListener('online',()=>{statusUpd();syncNow()});
+addEventListener('offline',statusUpd);
+setInterval(statusUpd,1500);
+
 function startCloud(){
   const t=setInterval(async()=>{
     if(!(window._fbIsOwner&&window._fbUid&&window._fbGetDoc))return;
     clearInterval(t);
     const go=async()=>{if(await pull()){setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudReady)pull()})}
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
@@ -188,6 +225,7 @@ function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._
   window.showPage=function(id,skip){if(OLD.includes(id))id='todo';const r=sp.call(this,id,skip);markTabs(id==='notes'?'notes':view);return r};window.showPage._td=1}
 function setTop(){const b=document.getElementById('td-topbar');if(b)document.documentElement.style.setProperty('--tdtop',b.offsetHeight+'px')}
 function boot(){wrapShowPage();
+  try{dirty=(S.updatedAt||0)>(Number(localStorage.getItem(KS))||0)}catch(e){}statusUpd();
   setTop();addEventListener('resize',setTop);go('today');startCloud()}
 
 boot();

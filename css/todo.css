@@ -119,3 +119,17 @@ body{overflow:auto}
   :is(#todoRoot,#todoFloat) .pc{padding:12px 16px 8px}
   :is(#todoRoot,#todoFloat) #td-ov{padding:14px}
 }
+
+/* ── 同步狀態點 ── */
+#todoRoot .syn{display:flex;align-items:center;gap:6px;flex:none;font:inherit;font-size:12px;color:var(--dim);background:none;border:0;padding:6px 8px;min-height:32px;cursor:pointer}
+#todoRoot .syn i{display:block;width:8px;height:8px;border-radius:50%;background:#4caf7a}
+#todoRoot .syn.ok span{display:none}
+#todoRoot .syn.ok i{opacity:.5}
+#todoRoot .syn.pend i,#todoRoot .syn.wait i{background:#e0a030}
+#todoRoot .syn.wait i{animation:tdPulse 1.2s ease-in-out infinite}
+#todoRoot .syn.off i{background:#9aa5b1}
+@keyframes tdPulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){#todoRoot .syn.wait i{animation:none}}
+#todoRoot .syn.off.pend i{background:#e0a030}
+#todoRoot .syn span,#todoRoot .tab{white-space:nowrap}
+#todoRoot .seg{flex:none}
