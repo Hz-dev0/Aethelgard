@@ -385,141 +385,128 @@ function notesRefreshPreviews() {
 
 let _tabPointerDrag = null; // 保留供外部相容，不再使用
 let _tabJustDragged = false; // 拖曳完成後短暫阻止 onclick
+let _lastTabTap = { idx: -1, t: 0 }; // 用來判斷「連點兩下同一個標籤」
 
 function _notesTabPointerDown(e, div, row) {
-  if (e.button !== undefined && e.button !== 0) return; // left button only
-  if (e.target.classList.contains('tab-del-btn')) return;
+  // 手勢分工（手機）：
+  //   點一下        → 切換標籤（在 onclick 處理）
+  //   連點兩下      → 修改名稱／刪除標籤（在 onclick 處理）
+  //   快速橫向滑動  → 捲動標籤列（完全交給瀏覽器原生捲動，這裡不攔截）
+  //   長按後再拖曳  → 調整標籤順序（拖到列的邊緣會自動捲動）
+  // 滑鼠：按住移動就直接拖曳排序（桌機沒有「捲動」的手勢衝突）
+  if (e.button !== undefined && e.button !== 0) return;
 
+  const LONG_MS = 350;   // 長按多久算「抓起來」
+  const SLOP = 8;        // 長按期間手指可以晃動的範圍（px），超過就當成想捲動
   const fromIdx = parseInt(div.dataset.tabIdx);
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const pointerId = e.pointerId;
-  let dragState = 'pending'; // 'pending' | 'dragging-tab' | 'scrolling' | 'cancelled'
-  let clone = null;
-  let insertMarker = null;
+  const startX = e.clientX, startY = e.clientY, pointerId = e.pointerId;
+  const isMouse = e.pointerType === 'mouse';
+  let state = 'pending';           // pending | dragging | ended
+  let clone = null, insertMarker = null, raf = 0;
+  let lastX = startX, lastY = startY;
+  let armedAt = 0;
 
-  // 長按才啟動拖曳：先等 300ms，期間若手指明顯移動則判斷為捲軸
-  let longPressTimer = setTimeout(() => {
-    if (dragState === 'pending') {
-      // 確認啟動 tab 拖曳：此時再做 pointer capture
-      dragState = 'dragging-tab';
-      if (navigator.vibrate) navigator.vibrate(25);
-      div.setPointerCapture && div.setPointerCapture(pointerId);
+  const longPressTimer = isMouse ? 0 : setTimeout(() => { if (state === 'pending') arm(); }, LONG_MS);
+
+  // 抓起標籤：從這一刻起擋掉原生捲動（此時手指還沒動，瀏覽器還沒開始捲，所以擋得住）
+  function blockScroll(ev) { if (ev.cancelable) ev.preventDefault(); }
+  function arm() {
+    state = 'dragging';
+    armedAt = Date.now();
+    _tabJustDragged = true;        // 放開手指時不要當成點擊去切換分頁
+    if (navigator.vibrate) navigator.vibrate(25);
+    try { div.setPointerCapture && div.setPointerCapture(pointerId); } catch (_) {}
+    document.addEventListener('touchmove', blockScroll, { passive: false });
+
+    const rect = div.getBoundingClientRect();
+    clone = div.cloneNode(true);
+    clone.style.cssText = [
+      'position:fixed', 'z-index:99999', 'pointer-events:none', 'opacity:0.9',
+      'width:' + rect.width + 'px', 'left:' + rect.left + 'px', 'top:' + (rect.top - 4) + 'px',
+      'border-radius:8px 8px 0 0', 'box-shadow:0 6px 18px rgba(58,110,165,0.35)',
+      'transition:none', 'background:var(--bg2)', 'border:1px solid rgba(58,110,165,0.35)',
+      'transform:scale(1.06)'
+    ].join(';');
+    document.body.appendChild(clone);
+    div.style.opacity = '0.3';
+
+    insertMarker = document.createElement('div');
+    insertMarker.style.cssText = 'width:3px;height:28px;background:var(--green);border-radius:3px;flex-shrink:0;pointer-events:none;position:fixed;display:none;';
+    document.body.appendChild(insertMarker);
+
+    // 拖到標籤列左右邊緣時自動捲動，標籤很多也拖得到後面
+    const step = () => {
+      if (state !== 'dragging') return;
+      const r = row.getBoundingClientRect(), edge = 40;
+      if (lastX < r.left + edge)       row.scrollLeft -= Math.min(16, (r.left + edge - lastX) / 2 + 2);
+      else if (lastX > r.right - edge) row.scrollLeft += Math.min(16, (lastX - (r.right - edge)) / 2 + 2);
+      updateTarget();
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+
+  function targetAt(x, y) {
+    const t = document.elementFromPoint(x, y)?.closest?.('.notes-tab');
+    return (t && t !== div) ? t : null;
+  }
+
+  function updateTarget() {
+    if (!clone) return;
+    clone.style.left = (lastX - div.getBoundingClientRect().width / 2) + 'px';
+    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    const target = targetAt(lastX, lastY);
+    if (target) {
+      target.classList.add('tab-drag-over');
+      const tr = target.getBoundingClientRect();
+      const before = lastX < tr.left + tr.width / 2;
+      insertMarker.style.top = (tr.top + 4) + 'px';
+      insertMarker.style.left = (before ? tr.left - 3 : tr.right - 1) + 'px';
+      insertMarker.style.display = 'block';
+    } else {
+      insertMarker.style.display = 'none';
     }
-  }, 300);
-
-  // 長按約 0.55 秒且手指沒有移動 → 開「修改名稱／刪除標籤」（開始拖曳的話就不會觸發）
-  let renameTimer = setTimeout(() => {
-    if (clone || dragState === 'scrolling' || dragState === 'cancelled') return;
-    _tabJustDragged = true;                       // 放開手指時不要當成點擊去切換分頁
-    setTimeout(() => { _tabJustDragged = false; }, 500);
-    if (navigator.vibrate) navigator.vibrate(40);
-    cleanup();
-    notesTabMenu(fromIdx);
-  }, 550);
+  }
 
   function cleanup() {
+    const wasArmed = state === 'dragging';
+    state = 'ended';
     clearTimeout(longPressTimer);
-    clearTimeout(renameTimer);
+    cancelAnimationFrame(raf);
     document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup',   onUp);
+    document.removeEventListener('pointerup', onUp);
     document.removeEventListener('pointercancel', onCancel);
+    document.removeEventListener('touchmove', blockScroll);
     if (clone)        { clone.remove();        clone = null; }
-    if (insertMarker) { insertMarker.remove();  insertMarker = null; }
+    if (insertMarker) { insertMarker.remove(); insertMarker = null; }
     div.style.opacity = '';
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
+    if (wasArmed) setTimeout(() => { _tabJustDragged = false; }, 350);
   }
 
   function onMove(ev) {
-    const dx = ev.clientX - startX;
-    const dy = ev.clientY - startY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dragState === 'pending') {
-      if (dist < 6) return; // 還沒動夠，等等
-      // TAB 為水平排列，水平移動即為拖曳方向，直接啟動拖曳
-      // 只有當垂直分量明顯大於水平分量時，才視為頁面捲動操作
-      if (Math.abs(dy) > Math.abs(dx) * 1.5) {
-        dragState = 'scrolling';
-        clearTimeout(longPressTimer);
-        cleanup();
-        return;
-      }
-      // 水平或斜向移動：直接啟動拖曳（不等長按）
-      dragState = 'dragging-tab';
-      clearTimeout(longPressTimer);
-      if (navigator.vibrate) navigator.vibrate(25);
-      div.setPointerCapture && div.setPointerCapture(pointerId);
+    if (ev.pointerId !== pointerId) return;
+    lastX = ev.clientX; lastY = ev.clientY;
+    if (state === 'pending') {
+      if (Math.hypot(lastX - startX, lastY - startY) < SLOP) return;
+      if (isMouse) arm();                // 滑鼠：移動就開始拖曳
+      else { cleanup(); return; }        // 手指：還沒長按就移動 → 想捲動，放手讓瀏覽器處理
     }
-
-    if (dragState !== 'dragging-tab') return;
-
-    // 第一次進入拖曳：建立 clone 和 marker
-    if (!clone) {
-      const rect = div.getBoundingClientRect();
-      clone = div.cloneNode(true);
-      clone.style.cssText = [
-        'position:fixed',
-        'z-index:99999',
-        'pointer-events:none',
-        'opacity:0.85',
-        'width:' + rect.width + 'px',
-        'left:' + rect.left + 'px',
-        'top:' + rect.top + 'px',
-        'border-radius:8px 8px 0 0',
-        'box-shadow:0 4px 16px rgba(58,110,165,0.3)',
-        'transition:none',
-        'cursor:grabbing',
-        'background:var(--bg2)',
-        'border:1px solid rgba(58,110,165,0.35)'
-      ].join(';');
-      document.body.appendChild(clone);
-      div.style.opacity = '0.3';
-
-      insertMarker = document.createElement('div');
-      insertMarker.style.cssText = 'width:3px;height:28px;background:var(--green);border-radius:3px;flex-shrink:0;pointer-events:none;align-self:center;display:none;';
-      document.body.appendChild(insertMarker);
-    }
-
-    // 移動 clone
-    clone.style.left = ev.clientX - (div.getBoundingClientRect().width / 2) + 'px';
-
-    // 找目標 tab
-    row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
-    const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.notes-tab');
-    if (target && target !== div) {
-      target.classList.add('tab-drag-over');
-      const tr = target.getBoundingClientRect();
-      const half = ev.clientX < tr.left + tr.width / 2;
-      insertMarker.style.cssText = insertMarker.style.cssText
-        .replace(/position:[^;]+;?/g, '')
-        .replace(/top:[^;]+;?/g, '')
-        .replace(/left:[^;]+;?/g, '');
-      insertMarker.style.cssText += ';position:fixed;top:' + (tr.top + 4) + 'px;left:' + (half ? tr.left - 3 : tr.right - 1) + 'px';
-      insertMarker.style.display = 'block';
-    } else {
-      if (insertMarker) insertMarker.style.display = 'none';
-    }
+    if (state === 'dragging') updateTarget();
   }
 
   function onUp(ev) {
-    const wasDragging = dragState === 'dragging-tab' && clone !== null;
-    const lastX = ev.clientX, lastY = ev.clientY;
+    if (ev.pointerId !== pointerId) return;
+    const dragging = state === 'dragging' && clone !== null;
+    const x = ev.clientX, y = ev.clientY;
+    const target = dragging ? targetAt(x, y) : null;
     cleanup();
-
-    if (!wasDragging) return; // was a click or scroll — onclick will handle it
-
-    const target = document.elementFromPoint(lastX, lastY)?.closest?.('.notes-tab');
-    if (!target || target === div) return;
+    if (!dragging || !target) return;   // 單純點擊／長按後放開：沒有要排序
 
     const toIdx = parseInt(target.dataset.tabIdx);
     const tr = target.getBoundingClientRect();
-    const insertBefore = lastX < tr.left + tr.width / 2;
+    const insertBefore = x < tr.left + tr.width / 2;
     const finalIdx = insertBefore ? toIdx : toIdx + (toIdx > fromIdx ? 0 : 1);
-
-    // 標記拖曳完成，阻止緊接的 onclick 切換分頁
-    _tabJustDragged = true;
-    setTimeout(() => { _tabJustDragged = false; }, 300);
 
     notesFlush();
     const [movedTab] = notesFolderData.splice(fromIdx, 1);
@@ -530,19 +517,18 @@ function _notesTabPointerDown(e, div, row) {
     notesSave();
   }
 
-  function onCancel() {
-    cleanup();
-  }
+  function onCancel(ev) { if (ev.pointerId === pointerId) cleanup(); }
 
-  document.addEventListener('pointermove',   onMove);
-  document.addEventListener('pointerup',     onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
   document.addEventListener('pointercancel', onCancel);
-  // 注意：不在 pointerdown 時做 setPointerCapture，讓原生捲軸先有機會處理
+  // 注意：pointerdown 時不做 setPointerCapture、也不 preventDefault，原生捲動才有機會運作
 }
 
 function notesRenderTabs() {
   const row = document.getElementById('notes-tabs-row');
   if (!row) return;
+  const _keepScroll = row.scrollLeft;   // 重畫前先記住捲動位置，不然每點一個標籤列都會跳回最左邊
   row.innerHTML = '';
   notesFolderData.forEach((tab, i) => {
     const div = document.createElement('div');
@@ -553,9 +539,15 @@ function notesRenderTabs() {
     div.addEventListener('pointerdown', e => _notesTabPointerDown(e, div, row));
 
     div.onclick = e => {
-      if (e.target.classList.contains('tab-del-btn')) return;
       if (_tabJustDragged) return; // suppress click after drag
       const idx = parseInt(div.dataset.tabIdx);
+      const now = Date.now();
+      if (_lastTabTap.idx === idx && now - _lastTabTap.t < 400) {   // 連點兩下 → 修改名稱／刪除標籤
+        _lastTabTap = { idx: -1, t: 0 };
+        notesTabMenu(idx);
+        return;
+      }
+      _lastTabTap = { idx, t: now };
       notesFlush();
       notesDropEmptyCurrentPage();
       notesTabIndex = idx;
@@ -572,7 +564,6 @@ function notesRenderTabs() {
       notesRenderTabs();
     };
 
-    div.ondblclick = e => { e.stopPropagation(); notesTabMenu(parseInt(div.dataset.tabIdx)); };
     div.addEventListener('contextmenu', e => e.preventDefault());   // 長按時不要跳出瀏覽器自己的選單
 
     const nameSpan = document.createElement('span');
@@ -580,6 +571,13 @@ function notesRenderTabs() {
     div.appendChild(nameSpan);
     row.appendChild(div);
   });
+  row.scrollLeft = _keepScroll;
+  const _act = row.querySelector('.notes-tab.active');   // 目前標籤若被捲到畫面外，就捲回來一點
+  if (_act) {
+    const rr = row.getBoundingClientRect(), ar = _act.getBoundingClientRect(), pad = 12;
+    if (ar.left - pad < rr.left) row.scrollLeft -= (rr.left - (ar.left - pad));
+    else if (ar.right + pad > rr.right) row.scrollLeft += (ar.right + pad) - rr.right;
+  }
 
   // Load current page content
   const tab = notesFolderData[notesTabIndex];
