@@ -43,8 +43,9 @@ function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" 
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
 const AF='aeth_todo_addfold';
 let addOpen=(()=>{try{return localStorage.getItem(AF)!=='1'}catch(e){return true}})();
-function addBox(){const hd=`<h2 class="fold" data-a="addfold">${addOpen?'▾':'▸'} 新增任務</h2>`;if(!addOpen)return hd;
-  return hd+`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
+const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-expanded="${addOpen}">${addOpen?'收起 ▴':'＋ 新增'}</button>`;
+function addBox(){if(!addOpen)return'';
+  return`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
 <select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
 <input type="date" id="td-dt"><input type="time" id="td-tm"></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
@@ -53,14 +54,14 @@ function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
   const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d).sort(byDate);
   const mine=open.filter(t=>!lapsed.includes(t)&&grp(t)==='today').sort((a,b)=>(a.kind==='dayonly'&&a.time||'99:99')<(b.kind==='dayonly'&&b.time||'99:99')?-1:1);
-  let h=`<h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
+  let h=`<div class="hrow"><h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1>${addTg()}</div><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
   if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>`<div class="card2"><div>${esc(t.name)}</div><div class="meta">${dueLabel(t)}</div><div class="foot"><input type="date" data-a="resched" data-id="${t.id}"><button class="b dk" data-a="del" data-id="${t.id}">不用做了</button></div></div>`).join('');
   h+='<h2>今天要做</h2>'+(mine.length?mine.map(t=>row(t,{unmark:1,inToday:1})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
   if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
   return h}
 function renderAll(){const G={week:[],month:[],later:[],today:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',later:'有空再說',today:'今天'};
   S.tasks.filter(t=>!t.done).forEach(t=>G[grp(t)].push(t));
-  let h=`<h1>全部</h1><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
+  let h=`<div class="hrow"><h1>全部</h1>${addTg()}</div><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
   for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t)).join(''):'<div class="empty">空的</div>');
   return h}
 function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,5);

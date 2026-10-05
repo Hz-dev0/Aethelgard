@@ -133,3 +133,9 @@ body{overflow:auto}
 #todoRoot .syn.off.pend i{background:#e0a030}
 #todoRoot .syn span,#todoRoot .tab{white-space:nowrap}
 #todoRoot .seg{flex:none}
+
+/* ── 標題列：日期／「全部」靠左，新增區塊的收合鈕靠右 ── */
+#todoRoot .hrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#todoRoot .hrow h1{min-width:0}
+#todoRoot .addtg{flex:none;font:inherit;font-size:13px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:16px;padding:4px 13px;min-height:30px;cursor:pointer;white-space:nowrap}
+#todoRoot .addtg.on{color:var(--gray)}
