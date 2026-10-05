@@ -39,8 +39,6 @@
 :is(#todoRoot,#todoFloat) .foot>*{flex:1;min-width:0;border:0;border-radius:0;min-height:46px;background:transparent}
 :is(#todoRoot,#todoFloat) .foot>*+*{border-left:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .foot input{text-align:center;color:var(--blue)}
-:is(#todoRoot,#todoFloat) .row.shine::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,222,120,.9) 50%,transparent 70%);transform:translateX(-100%);animation:tdsh .43s ease-out forwards;pointer-events:none}
-:is(#todoRoot,#todoFloat) to{transform:translateX(100%)}
 :is(#todoRoot,#todoFloat) .box.sb{display:flex;max-width:460px;height:clamp(380px,60vh,540px);max-height:92vh;overflow:hidden}
 :is(#todoRoot,#todoFloat) .sb.p1{flex-direction:column}
 :is(#todoRoot,#todoFloat) .sb.p2{flex-direction:column-reverse}
@@ -139,3 +137,14 @@ body{overflow:auto}
 #todoRoot .hrow h1{min-width:0}
 #todoRoot .addtg{flex:none;font:inherit;font-size:13px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:16px;padding:4px 13px;min-height:30px;cursor:pointer;white-space:nowrap}
 #todoRoot .addtg.on{color:var(--gray)}
+
+/* ── 完成任務：先「閃光掃過、卡片微微發亮」，再碎裂（碎裂在 todo.js 的 fx()） ── */
+:is(#todoRoot,#todoFloat) .row.shine{animation:tdglow .52s ease-out forwards}
+:is(#todoRoot,#todoFloat) .row.shine::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 18%,rgba(255,236,160,.55) 38%,rgba(255,252,225,.95) 50%,rgba(255,236,160,.55) 62%,transparent 82%);
+  transform:translateX(-110%);animation:tdsh .52s cubic-bezier(.4,0,.3,1) forwards}
+@keyframes tdsh{from{transform:translateX(-110%)}to{transform:translateX(110%)}}
+@keyframes tdglow{0%{box-shadow:0 0 0 rgba(232,195,90,0);transform:scale(1)}
+  45%{box-shadow:0 0 18px rgba(232,195,90,.75);transform:scale(1.025)}
+  100%{box-shadow:0 0 10px rgba(232,195,90,.45);transform:scale(1.01)}}
+@media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.shine{animation:none}}

@@ -85,7 +85,7 @@ function fx(r,cb){r.classList.add('shine');navigator.vibrate&&navigator.vibrate(
     for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=document.createElement('i');
       p.style.cssText=`position:fixed;z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]};pointer-events:none`;document.body.append(p);
       p.animate([{transform:'none',opacity:1},{transform:`translate(${(Math.random()-.5)*80}px,${140+Math.random()*120}px) rotate(${(Math.random()-.5)*160}deg)`,opacity:0}],{duration:650+Math.random()*350,delay:Math.random()*120,easing:'cubic-bezier(.5,0,1,.6)'}).onfinish=()=>p.remove()}
-    r.style.visibility='hidden';setTimeout(cb,350)},430)}
+    r.style.visibility='hidden';setTimeout(cb,350)},540)}   // 540ms：等閃光完整掃過卡片，再碎裂
 function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
