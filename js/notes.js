@@ -386,37 +386,40 @@ function notesRefreshPreviews() {
 let _tabPointerDrag = null; // 保留供外部相容，不再使用
 let _tabJustDragged = false; // 拖曳完成後短暫阻止 onclick
 let _lastTabTap = { idx: -1, t: 0 }; // 用來判斷「連點兩下同一個標籤」
-let _tabDragActive = false; // 標籤已被「抓起」：此時要擋掉原生捲動（見 notesRenderTabs 裡常駐的 touchmove 監聽）
+let _tabGlideRaf = 0;       // 標籤列慣性滑行的 requestAnimationFrame id
 
 function _notesTabPointerDown(e, div, row) {
   // 手勢分工（手機）：
   //   點一下        → 切換標籤（在 onclick 處理）
   //   連點兩下      → 修改名稱／刪除標籤（在 onclick 處理）
-  //   快速橫向滑動  → 捲動標籤列（完全交給瀏覽器原生捲動，這裡不攔截）
+  //   快速橫向滑動  → 捲動標籤列（程式自己捲，含慣性）
   //   長按後再拖曳  → 調整標籤順序（拖到列的邊緣會自動捲動）
-  // 滑鼠：按住移動就直接拖曳排序（桌機沒有「捲動」的手勢衝突）
+  // 滑鼠：按住移動就直接拖曳排序
+  //
+  // ★ 標籤列在 CSS 設了 touch-action:none，瀏覽器完全不會替它做原生捲動，
+  //   所以「滑動」和「拖曳」由這裡統一判斷，不會有「拖到一半被瀏覽器搶去捲動」的問題。
+  //   （之前用原生捲動時，Android 會在手指一動就接手捲動，長按拖曳因此失效。）
   if (e.button !== undefined && e.button !== 0) return;
+  cancelAnimationFrame(_tabGlideRaf);   // 手指按下就停掉上一次的慣性滑行
 
   const LONG_MS = 350;   // 長按多久算「抓起來」
   const SLOP = 8;        // 長按期間手指可以晃動的範圍（px），超過就當成想捲動
   const fromIdx = parseInt(div.dataset.tabIdx);
   const startX = e.clientX, startY = e.clientY, pointerId = e.pointerId;
   const isMouse = e.pointerType === 'mouse';
-  let state = 'pending';           // pending | dragging | ended
+  let state = 'pending';           // pending | scrolling | dragging | ended
   let clone = null, insertMarker = null, raf = 0;
   let lastX = startX, lastY = startY;
-  let armedAt = 0;
+  let scrollBaseX = 0, scrollBaseLeft = 0, samples = [], didScroll = false;
 
   const longPressTimer = isMouse ? 0 : setTimeout(() => { if (state === 'pending') arm(); }, LONG_MS);
 
-  // 抓起標籤：從這一刻起擋掉原生捲動（此時手指還沒動，瀏覽器還沒開始捲，所以擋得住）
+  // ── 抓起標籤（長按成功）──
   function arm() {
     state = 'dragging';
-    armedAt = Date.now();
     _tabJustDragged = true;        // 放開手指時不要當成點擊去切換分頁
     if (navigator.vibrate) navigator.vibrate(25);
     try { div.setPointerCapture && div.setPointerCapture(pointerId); } catch (_) {}
-    _tabDragActive = true;         // 常駐的 touchmove 監聽（非 passive）看到這個旗標就會 preventDefault
 
     const rect = div.getBoundingClientRect();
     clone = div.cloneNode(true);
@@ -444,6 +447,28 @@ function _notesTabPointerDown(e, div, row) {
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
+  }
+
+  // ── 手指滑動捲動標籤列 ──
+  function startScrolling() {
+    state = 'scrolling';
+    didScroll = true;
+    _tabJustDragged = true;        // 放開時不要當成點擊
+    clearTimeout(longPressTimer);
+    scrollBaseX = lastX;           // 從「開始判定為滑動」的位置接續，避免一開始跳一下
+    scrollBaseLeft = row.scrollLeft;
+    samples = [{ t: performance.now(), x: lastX }];
+  }
+  function glide(v) {              // v：scrollLeft 每毫秒的變化量，之後逐漸減速
+    let prev = performance.now();
+    const step = now => {
+      const dt = Math.min(now - prev, 32); prev = now;
+      const before = row.scrollLeft;
+      row.scrollLeft += v * dt;
+      v *= Math.exp(-dt / 325);
+      if (Math.abs(v) > 0.02 && row.scrollLeft !== before) _tabGlideRaf = requestAnimationFrame(step);
+    };
+    _tabGlideRaf = requestAnimationFrame(step);
   }
 
   function targetAt(x, y) {
@@ -476,12 +501,11 @@ function _notesTabPointerDown(e, div, row) {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
     document.removeEventListener('pointercancel', onCancel);
-    _tabDragActive = false;
     if (clone)        { clone.remove();        clone = null; }
     if (insertMarker) { insertMarker.remove(); insertMarker = null; }
     div.style.opacity = '';
     row.querySelectorAll('.notes-tab').forEach(el => el.classList.remove('tab-drag-over'));
-    if (wasArmed) setTimeout(() => { _tabJustDragged = false; }, 350);
+    if (wasArmed || didScroll) setTimeout(() => { _tabJustDragged = false; }, 350);
   }
 
   function onMove(ev) {
@@ -489,16 +513,31 @@ function _notesTabPointerDown(e, div, row) {
     lastX = ev.clientX; lastY = ev.clientY;
     if (state === 'pending') {
       if (Math.hypot(lastX - startX, lastY - startY) < SLOP) return;
-      if (isMouse) arm();                // 滑鼠：移動就開始拖曳
-      else { cleanup(); return; }        // 手指：還沒長按就移動 → 想捲動，放手讓瀏覽器處理
+      if (isMouse) arm();                  // 滑鼠：移動就開始拖曳
+      else startScrolling();               // 手指：還沒長按就移動 → 捲動標籤列
     }
-    if (state === 'dragging') updateTarget();
+    if (state === 'scrolling') {
+      row.scrollLeft = scrollBaseLeft - (lastX - scrollBaseX);
+      const now = performance.now();
+      samples.push({ t: now, x: lastX });
+      while (samples.length > 2 && now - samples[0].t > 100) samples.shift();   // 只看最後 0.1 秒算速度
+    } else if (state === 'dragging') {
+      updateTarget();
+    }
   }
 
   function onUp(ev) {
     if (ev.pointerId !== pointerId) return;
-    const dragging = state === 'dragging' && clone !== null;
     const x = ev.clientX, y = ev.clientY;
+    if (state === 'scrolling') {
+      const a = samples[0], b = samples[samples.length - 1];
+      const dt = b.t - a.t;
+      const v = dt > 0 ? -(b.x - a.x) / dt : 0;           // 手指往左滑 → scrollLeft 增加
+      cleanup();
+      if (Math.abs(v) > 0.05 && performance.now() - b.t < 80) glide(v);   // 放開前還在動才滑行
+      return;
+    }
+    const dragging = state === 'dragging' && clone !== null;
     const target = dragging ? targetAt(x, y) : null;
     cleanup();
     if (!dragging || !target) return;   // 單純點擊／長按後放開：沒有要排序
@@ -522,20 +561,11 @@ function _notesTabPointerDown(e, div, row) {
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
   document.addEventListener('pointercancel', onCancel);
-  // 注意：pointerdown 時不做 setPointerCapture、也不 preventDefault，原生捲動才有機會運作
 }
 
 function notesRenderTabs() {
   const row = document.getElementById('notes-tabs-row');
   if (!row) return;
-  // ★ 為什麼要常駐：Android Chrome 在手指按下的當下，就會依「這個位置有沒有非 passive 的 touch 監聽」
-  //   決定這次觸控能不能被取消。長按後才臨時加監聽是來不及的，瀏覽器已經開始捲動，
-  //   拖曳就會變成橫向滑動。所以這個監聽一開始就掛著，平常什麼都不做，只有標籤被抓起時才擋。
-  if (!row._tabTouchBound) {
-    row.addEventListener('touchmove', ev => { if (_tabDragActive && ev.cancelable) ev.preventDefault(); }, { passive: false });
-    row.addEventListener('touchstart', () => {}, { passive: false });
-    row._tabTouchBound = true;
-  }
   const _keepScroll = row.scrollLeft;   // 重畫前先記住捲動位置，不然每點一個標籤列都會跳回最左邊
   row.innerHTML = '';
   notesFolderData.forEach((tab, i) => {
