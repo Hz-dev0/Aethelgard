@@ -31,11 +31,12 @@
 :is(#todoRoot,#todoFloat) .dk{background:var(--dk)!important;color:#fff!important;font-weight:400}
 :is(#todoRoot,#todoFloat) .side .b{flex:1}
 :is(#todoRoot,#todoFloat) .del{width:42px;flex:none;border:0;font:inherit;font-size:12px;cursor:pointer}
-/* 「快到期」卡片：白金（香檳色）單色，跟「過了日期」同一組顏色 */
-:is(#todoRoot,#todoFloat) .soon .row{background:#FBF7EA;border-color:#E4D8AE}
-:is(#todoRoot,#todoFloat) .soon .ckz{background:#F1E8CA;border-color:#E0D3A6}
-:is(#todoRoot,#todoFloat) .soon .side{border-color:#E0D3A6}
-:is(#todoRoot,#todoFloat) .soon .side .b{background:#F1E8CA}
+/* 「快到期」卡片：淡藍色，比「今天要做」的白卡片深一點點，輕輕強調就好 */
+:is(#todoRoot,#todoFloat) .soon .row{background:#EAF1FA;border-color:rgba(58,110,165,.30)}
+:is(#todoRoot,#todoFloat) .soon .ckz{background:#DAE6F5;border-color:rgba(58,110,165,.22)}
+:is(#todoRoot,#todoFloat) .soon .side{border-color:rgba(58,110,165,.22)}
+:is(#todoRoot,#todoFloat) .soon .side .b{background:rgba(58,110,165,.12)}
+:is(#todoRoot,#todoFloat) .soon .warn{color:#3A6EA5}
 :is(#todoRoot,#todoFloat) .card2{background:var(--bg3);border-radius:12px;padding:12px 14px;margin-bottom:8px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .foot{display:flex;margin:12px -14px -12px;border-top:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .foot>*{flex:1;min-width:0;border:0;border-radius:0;min-height:46px;background:transparent}
