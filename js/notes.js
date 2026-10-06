@@ -1236,11 +1236,15 @@ function notesInitKeys() {
     }
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    // 正在輸入（標題、內文、搜尋框、對話框等）時，左右鍵留給游標移動
     const focused = document.activeElement;
-    if (!focused || !focused.classList.contains('notes-textarea')) {
-      e.preventDefault();
-      notesChangeSubPage(e.key === 'ArrowLeft' ? -1 : 1);
-    }
+    const editing = focused && (
+      focused.isContentEditable ||
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName)
+    );
+    if (editing) return;
+    e.preventDefault();
+    notesChangeSubPage(e.key === 'ArrowLeft' ? -1 : 1);
   });
 }
 
