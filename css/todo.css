@@ -138,11 +138,11 @@ body{overflow:auto}
 #todoRoot .addtg{flex:none;font:inherit;font-size:13px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:16px;padding:4px 13px;min-height:30px;cursor:pointer;white-space:nowrap}
 #todoRoot .addtg.on{color:var(--gray)}
 
-/* ── 「過了日期」卡片：任務、月曆鈕、「不用做了」同一列；金色強調，一眼看出這是需要你決定的 ── */
-:is(#todoRoot,#todoFloat) .row.lapsed{background:linear-gradient(90deg,#FFF1C9,#FFF9E9);border-color:rgba(214,160,40,.55);box-shadow:inset 4px 0 0 #E2AE2F}
+/* ── 「過了日期」卡片：任務、月曆鈕、「不用做了」同一列；白金（香檳色）單色強調，不用漸層 ── */
+:is(#todoRoot,#todoFloat) .row.lapsed{background:#FBF7EA;border-color:#E4D8AE;box-shadow:inset 4px 0 0 #D2BE80}
 :is(#todoRoot,#todoFloat) .row.lapsed .bd{padding:11px 12px 11px 16px}
-:is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#A8700F}
-:is(#todoRoot,#todoFloat) .cal{position:relative;width:56px;flex:none;border-left:1px solid rgba(180,130,20,.4);display:grid;place-items:center;background:linear-gradient(180deg,#F6D97F,#E2AE2F);color:#6B4A06;cursor:pointer}
-:is(#todoRoot,#todoFloat) .cal:active{background:linear-gradient(180deg,#EBC85F,#D49C1E)}
+:is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#9A7F3A}
+:is(#todoRoot,#todoFloat) .cal{position:relative;width:56px;flex:none;border-left:1px solid #E0D3A6;display:grid;place-items:center;background:#F1E8CA;color:#8A7236;cursor:pointer}
+:is(#todoRoot,#todoFloat) .cal:active{background:#E8DDB6}
 :is(#todoRoot,#todoFloat) .cal input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px}
 :is(#todoRoot,#todoFloat) .del.wide{width:74px;font-size:13px}
