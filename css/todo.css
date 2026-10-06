@@ -12,7 +12,7 @@
 :is(#todoRoot,#todoFloat) h2.fold{cursor:pointer;user-select:none}
 :is(#todoRoot,#todoFloat) .sub,:is(#todoRoot,#todoFloat) .meta{font-size:12px;color:var(--dim)}
 :is(#todoRoot,#todoFloat) .sub{font-size:13px;margin-bottom:10px}
-:is(#todoRoot,#todoFloat) .warn{color:#9a6b00}
+:is(#todoRoot,#todoFloat) .warn{color:#B8962E}
 :is(#todoRoot,#todoFloat) .empty{color:var(--dim);font-size:14px;padding:4px 2px}
 :is(#todoRoot,#todoFloat) select,:is(#todoRoot,#todoFloat) input[type=date],:is(#todoRoot,#todoFloat) input[type=time],:is(#todoRoot,#todoFloat) input[type=number]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;background:#fff;color:var(--text)}
 :is(#todoRoot,#todoFloat) .add{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -31,9 +31,11 @@
 :is(#todoRoot,#todoFloat) .dk{background:var(--dk)!important;color:#fff!important;font-weight:400}
 :is(#todoRoot,#todoFloat) .side .b{flex:1}
 :is(#todoRoot,#todoFloat) .del{width:42px;flex:none;border:0;font:inherit;font-size:12px;cursor:pointer}
-:is(#todoRoot,#todoFloat) .soon .row{background:#FFF8E6;border-color:rgba(200,150,40,.3)}
-:is(#todoRoot,#todoFloat) .soon .ckz{background:#FBEFCB;border-color:rgba(200,150,40,.3)}
-:is(#todoRoot,#todoFloat) .soon .side{border-color:rgba(200,150,40,.3)}
+/* 「快到期」卡片：白金（香檳色）單色，跟「過了日期」同一組顏色 */
+:is(#todoRoot,#todoFloat) .soon .row{background:#FBF7EA;border-color:#E4D8AE}
+:is(#todoRoot,#todoFloat) .soon .ckz{background:#F1E8CA;border-color:#E0D3A6}
+:is(#todoRoot,#todoFloat) .soon .side{border-color:#E0D3A6}
+:is(#todoRoot,#todoFloat) .soon .side .b{background:#F1E8CA}
 :is(#todoRoot,#todoFloat) .card2{background:var(--bg3);border-radius:12px;padding:12px 14px;margin-bottom:8px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .foot{display:flex;margin:12px -14px -12px;border-top:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .foot>*{flex:1;min-width:0;border:0;border-radius:0;min-height:46px;background:transparent}
@@ -139,10 +141,10 @@ body{overflow:auto}
 #todoRoot .addtg.on{color:var(--gray)}
 
 /* ── 「過了日期」卡片：任務、月曆鈕、「不用做了」同一列；白金（香檳色）單色強調，不用漸層 ── */
-:is(#todoRoot,#todoFloat) .row.lapsed{background:#FBF7EA;border-color:#E4D8AE;box-shadow:inset 4px 0 0 #D2BE80}
-:is(#todoRoot,#todoFloat) .row.lapsed .bd{padding:11px 12px 11px 16px}
-:is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#9A7F3A}
-:is(#todoRoot,#todoFloat) .cal{position:relative;width:56px;flex:none;border-left:1px solid #E0D3A6;display:grid;place-items:center;background:#F1E8CA;color:#8A7236;cursor:pointer}
+:is(#todoRoot,#todoFloat) .row.lapsed{background:#FBF7EA;border-color:#E4D8AE}
+:is(#todoRoot,#todoFloat) .row.lapsed .bd{padding:11px 12px}
+:is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#B8962E}
+:is(#todoRoot,#todoFloat) .cal{position:relative;width:56px;flex:none;border-left:1px solid #E0D3A6;display:grid;place-items:center;background:#F1E8CA;color:#B8962E;cursor:pointer}
 :is(#todoRoot,#todoFloat) .cal:active{background:#E8DDB6}
 :is(#todoRoot,#todoFloat) .cal input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px}
 :is(#todoRoot,#todoFloat) .del.wide{width:74px;font-size:13px}
