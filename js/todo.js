@@ -50,12 +50,15 @@ function addBox(){if(!addOpen)return'';
 <input type="date" id="td-dt"><input type="time" id="td-tm"></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
+/* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
+const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
+document.addEventListener('click',e=>{const i=e.target.closest&&e.target.closest('.cal input');if(i&&i.showPicker){try{i.showPicker()}catch(_){}}});   // 電腦版也能點圖示就開月曆
 function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
   const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d).sort(byDate);
   const mine=open.filter(t=>!lapsed.includes(t)&&grp(t)==='today').sort((a,b)=>(a.kind==='dayonly'&&a.time||'99:99')<(b.kind==='dayonly'&&b.time||'99:99')?-1:1);
   let h=`<div class="hrow"><h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1>${addTg()}</div><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
-  if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>`<div class="card2"><div>${esc(t.name)}</div><div class="meta">${dueLabel(t)}</div><div class="foot"><input type="date" data-a="resched" data-id="${t.id}"><button class="b dk" data-a="del" data-id="${t.id}">不用做了</button></div></div>`).join('');
+  if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>`<div class="row lapsed"><div class="bd"><div>${esc(t.name)}</div><span class="meta warn">${dueLabel(t)}</span></div><label class="cal" aria-label="改到別天"><span>${CAL}</span><input type="date" data-a="resched" data-id="${t.id}" min="${d}"></label><button class="del dk wide" data-a="del" data-id="${t.id}">不用做了</button></div>`).join('');
   h+='<h2>今天要做</h2>'+(mine.length?mine.map(t=>row(t,{unmark:1,inToday:1})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
   if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
   return h}
@@ -80,24 +83,26 @@ function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cf
   const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
   const t=old||pool[Math.floor(Math.random()*pool.length)];sugId=t.id;ovMode='sug';S.sug.n++;save();
   $('ov').innerHTML=`<div class="box"><div class="t"><div class="meta">順手做一件？（今天第 ${S.sug.n}／${S.cfg.sugMax} 次）</div><p style="font-size:18px;margin:8px 0 4px">${esc(t.name)}</p><div class="meta">${age(t)>=S.cfg.stale?'放了 '+age(t)+' 天了':'沒有急的期限'}</div></div><div class="foot"><button class="b" data-a="m-today">今天做</button><button class="b q" data-a="m-skip">改天</button><button class="b dk" data-a="m-del">放掉</button></div></div>`;$('ov').className='on'}
-/* 完成任務特效：① 卡片微微放大、金光掃過並發亮（約 0.52 秒）→ ② 碎成方塊落下 → ③ 卡片消失。
-   閃光用程式直接建立元素與動畫（跟碎片同一種做法），不依賴 CSS 檔，不會被舊快取或樣式蓋掉。 */
+/* 完成任務特效：① 整張卡片「瞬間」變成金色（並微微放大發光）→ ② 白光從左掃過 → ③ 碎成金色方塊落下 → ④ 卡片消失。
+   全部用程式直接建立元素與動畫（跟碎片同一種做法），不依賴 CSS 檔，不會被舊快取或樣式蓋掉。 */
 function fx(r,cb){navigator.vibrate&&navigator.vibrate(15);
-  const D=520,b0=r.getBoundingClientRect();
-  const o=document.createElement('div');   // 蓋在卡片上的發光層
-  o.style.cssText=`position:fixed;z-index:21;left:${b0.left}px;top:${b0.top}px;width:${b0.width}px;height:${b0.height}px;border-radius:10px;overflow:hidden;pointer-events:none`;
-  const sw=document.createElement('div');  // 掃過的光帶
-  sw.style.cssText='position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(105deg,transparent 15%,rgba(255,232,150,.65) 38%,rgba(255,253,228,.98) 50%,rgba(255,232,150,.65) 62%,transparent 85%);transform:translateX(-115%)';
+  const D=640,b0=r.getBoundingClientRect();
+  const o=document.createElement('div');   // 蓋在卡片上的金色層
+  o.style.cssText=`position:fixed;z-index:21;left:${b0.left}px;top:${b0.top}px;width:${b0.width}px;height:${b0.height}px;border-radius:10px;overflow:hidden;pointer-events:none;`
+    +'background:linear-gradient(135deg,rgba(250,226,128,.97),rgba(232,187,62,.97) 55%,rgba(246,214,104,.97));opacity:0';
+  const sw=document.createElement('div');  // 白光掃過的光帶
+  sw.style.cssText='position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(105deg,transparent 10%,rgba(255,255,255,.5) 36%,#fff 50%,rgba(255,255,255,.5) 64%,transparent 90%);transform:translateX(-120%)';
   o.append(sw);document.body.append(o);
-  const pop=[{transform:'scale(1)',boxShadow:'0 0 0 rgba(232,195,90,0)'},{transform:'scale(1.035)',boxShadow:'0 0 22px rgba(232,195,90,.85)',offset:.5},{transform:'scale(1.015)',boxShadow:'0 0 14px rgba(232,195,90,.55)'}];
-  const opt={duration:D,easing:'ease-out',fill:'forwards'};
-  sw.animate([{transform:'translateX(-115%)'},{transform:'translateX(115%)'}],{duration:D,easing:'cubic-bezier(.4,0,.3,1)',fill:'forwards'});
-  o.animate(pop,opt);r.animate(pop,opt);
-  setTimeout(()=>{o.remove();const b=r.getBoundingClientRect(),C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#fff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
+  const pop=[{transform:'scale(1)',boxShadow:'0 0 0 rgba(232,195,90,0)'},{transform:'scale(1.035)',boxShadow:'0 0 24px rgba(232,195,90,.9)',offset:.15},{transform:'scale(1.02)',boxShadow:'0 0 16px rgba(232,195,90,.6)'}];
+  o.animate([{opacity:0},{opacity:1,offset:.06},{opacity:1}],{duration:D,fill:'forwards'});   // 約 40ms 內變金色 = 瞬間
+  o.animate(pop,{duration:D,easing:'ease-out',fill:'forwards',composite:'replace'});
+  r.animate(pop,{duration:D,easing:'ease-out',fill:'forwards'});
+  sw.animate([{transform:'translateX(-120%)'},{transform:'translateX(120%)'}],{duration:D-110,delay:80,easing:'linear',fill:'forwards'});
+  setTimeout(()=>{o.remove();const b=r.getBoundingClientRect(),C=['#f6dc7a','#e8c35a','#d9a93a','#fff3c4','#ffffff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
     for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=document.createElement('i');
       p.style.cssText=`position:fixed;z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]};pointer-events:none`;document.body.append(p);
       p.animate([{transform:'none',opacity:1},{transform:`translate(${(Math.random()-.5)*80}px,${140+Math.random()*120}px) rotate(${(Math.random()-.5)*160}deg)`,opacity:0}],{duration:650+Math.random()*350,delay:Math.random()*120,easing:'cubic-bezier(.5,0,1,.6)'}).onfinish=()=>p.remove()}
-    r.style.visibility='hidden';setTimeout(cb,350)},D+30)}
+    r.style.visibility='hidden';setTimeout(cb,350)},D+20)}
 function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
