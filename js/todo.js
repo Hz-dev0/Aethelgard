@@ -80,12 +80,24 @@ function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cf
   const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
   const t=old||pool[Math.floor(Math.random()*pool.length)];sugId=t.id;ovMode='sug';S.sug.n++;save();
   $('ov').innerHTML=`<div class="box"><div class="t"><div class="meta">順手做一件？（今天第 ${S.sug.n}／${S.cfg.sugMax} 次）</div><p style="font-size:18px;margin:8px 0 4px">${esc(t.name)}</p><div class="meta">${age(t)>=S.cfg.stale?'放了 '+age(t)+' 天了':'沒有急的期限'}</div></div><div class="foot"><button class="b" data-a="m-today">今天做</button><button class="b q" data-a="m-skip">改天</button><button class="b dk" data-a="m-del">放掉</button></div></div>`;$('ov').className='on'}
-function fx(r,cb){r.classList.add('shine');navigator.vibrate&&navigator.vibrate(15);
-  setTimeout(()=>{const b=r.getBoundingClientRect(),C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#fff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
+/* 完成任務特效：① 卡片微微放大、金光掃過並發亮（約 0.52 秒）→ ② 碎成方塊落下 → ③ 卡片消失。
+   閃光用程式直接建立元素與動畫（跟碎片同一種做法），不依賴 CSS 檔，不會被舊快取或樣式蓋掉。 */
+function fx(r,cb){navigator.vibrate&&navigator.vibrate(15);
+  const D=520,b0=r.getBoundingClientRect();
+  const o=document.createElement('div');   // 蓋在卡片上的發光層
+  o.style.cssText=`position:fixed;z-index:21;left:${b0.left}px;top:${b0.top}px;width:${b0.width}px;height:${b0.height}px;border-radius:10px;overflow:hidden;pointer-events:none`;
+  const sw=document.createElement('div');  // 掃過的光帶
+  sw.style.cssText='position:absolute;top:0;bottom:0;left:0;width:100%;background:linear-gradient(105deg,transparent 15%,rgba(255,232,150,.65) 38%,rgba(255,253,228,.98) 50%,rgba(255,232,150,.65) 62%,transparent 85%);transform:translateX(-115%)';
+  o.append(sw);document.body.append(o);
+  const pop=[{transform:'scale(1)',boxShadow:'0 0 0 rgba(232,195,90,0)'},{transform:'scale(1.035)',boxShadow:'0 0 22px rgba(232,195,90,.85)',offset:.5},{transform:'scale(1.015)',boxShadow:'0 0 14px rgba(232,195,90,.55)'}];
+  const opt={duration:D,easing:'ease-out',fill:'forwards'};
+  sw.animate([{transform:'translateX(-115%)'},{transform:'translateX(115%)'}],{duration:D,easing:'cubic-bezier(.4,0,.3,1)',fill:'forwards'});
+  o.animate(pop,opt);r.animate(pop,opt);
+  setTimeout(()=>{o.remove();const b=r.getBoundingClientRect(),C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#fff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
     for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=document.createElement('i');
       p.style.cssText=`position:fixed;z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]};pointer-events:none`;document.body.append(p);
       p.animate([{transform:'none',opacity:1},{transform:`translate(${(Math.random()-.5)*80}px,${140+Math.random()*120}px) rotate(${(Math.random()-.5)*160}deg)`,opacity:0}],{duration:650+Math.random()*350,delay:Math.random()*120,easing:'cubic-bezier(.5,0,1,.6)'}).onfinish=()=>p.remove()}
-    r.style.visibility='hidden';setTimeout(cb,350)},540)}   // 540ms：等閃光完整掃過卡片，再碎裂
+    r.style.visibility='hidden';setTimeout(cb,350)},D+30)}
 function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
