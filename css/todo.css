@@ -178,8 +178,17 @@ body{overflow:auto}
 }
 @media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.cmp *{transition:none!important}}
 /* 新增任務：時＋分 */
-/* 滾輪時間選擇 */
-:is(#todoRoot,#todoFloat) .wheel{position:relative;display:inline-flex;align-items:center;gap:2px;height:96px;padding:0 10px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+/* 滾輪時間選擇（氣泡） */
+:is(#todoRoot,#todoFloat) .tbtn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer}
+#td-wb{position:fixed;inset:0;z-index:2000}
+#td-wp{position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
+#td-wp::before{content:'';position:absolute;left:calc(var(--ax) - 7px);width:12px;height:12px;background:#fff;transform:rotate(45deg)}
+#td-wp.dn::before{top:-7px;border-left:1px solid var(--line);border-top:1px solid var(--line)}
+#td-wp.up::before{bottom:-7px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+#td-wp .wbtns{display:flex;gap:8px;margin-top:8px}
+#td-wp .wbtns .b{flex:1;border-radius:10px;min-height:38px}
+@keyframes tdPop{from{opacity:0;transform:translateY(4px) scale(.97)}}
+:is(#todoRoot,#todoFloat) .wheel{position:relative;display:flex;justify-content:center;align-items:center;gap:2px;height:96px;padding:0 10px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .wheel::before{content:'';position:absolute;left:6px;right:6px;top:32px;height:32px;border-radius:8px;background:rgba(58,110,165,.12);pointer-events:none}
 :is(#todoRoot,#todoFloat) .wheel::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(var(--bg) 0,transparent 32%,transparent 68%,var(--bg) 100%)}
 :is(#todoRoot,#todoFloat) .wc{position:relative;z-index:1;width:48px;height:96px;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;scrollbar-width:none;padding:32px 0;touch-action:pan-y}

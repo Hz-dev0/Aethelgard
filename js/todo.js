@@ -49,17 +49,32 @@ const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
 <select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
-<input type="date" id="td-dt"><span class="wheel" id="td-wh" aria-label="時間"><div class="wc" data-k="h">${['--',...Array.from({length:24},(_,i)=>pad(i))].map((v,i)=>`<div class="wi${i?'':' on'}" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div><b>:</b><div class="wc" data-k="m">${MINS.map((v,i)=>`<div class="wi${i?'':' on'}" data-v="${v}">${v}</div>`).join('')}</div></span></div>
+<input type="date" id="td-dt"><button type="button" class="tbtn" data-a="wheel">🕘 ${tmVal||'選擇時間'}</button></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];
-/* 滾輪式時間選擇：上下滑動，停在中間那格就是選的值 */
-const WH=32,wheelCol=k=>document.querySelector('#td-wh [data-k="'+k+'"]');
+/* 滾輪式時間選擇：按「選擇時間」跳出氣泡，在氣泡裡上下滑動；停在中間高亮那格就是選的值 */
+let tmVal='';
+const WH=32,wheelCol=k=>document.querySelector('#td-wp [data-k="'+k+'"]');
 const wheelIdx=el=>Math.max(0,Math.min(el.children.length-1,Math.round(el.scrollTop/WH)));
 const wheelVal=k=>{const el=wheelCol(k);return el?el.children[wheelIdx(el)].dataset.v:''};
-document.addEventListener('scroll',e=>{const el=e.target;if(!el.classList||!el.classList.contains('wc'))return;
-  const i=wheelIdx(el);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))},true);
+const mark=el=>{const i=wheelIdx(el);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))};
+document.addEventListener('scroll',e=>{const el=e.target;if(el.classList&&el.classList.contains('wc'))mark(el)},true);
 document.addEventListener('click',e=>{const it=e.target.closest&&e.target.closest('.wc .wi');if(!it)return;
-  const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});   // 新增任務時「分」只給這幾個選項
+  const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});
+function closeWheel(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
+  if(commit==='ok'){const h=wheelVal('h');tmVal=h?h+':'+wheelVal('m'):''}else if(commit==='clr')tmVal='';
+  w.remove();bk&&bk.remove();const b=document.querySelector('#todoRoot .tbtn');if(b)b.textContent='🕘 '+(tmVal||'選擇時間')}
+function openWheel(btn){closeWheel();
+  const col=(k,list)=>`<div class="wc" data-k="${k}">${list.map(v=>`<div class="wi" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div>`;
+  const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
+  const w=document.createElement('div');w.id='td-wp';
+  w.innerHTML=`<div class="wheel">${col('h',['--',...Array.from({length:24},(_,i)=>pad(i))])}<b>:</b>${col('m',MINS)}</div><div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
+  const fl=document.getElementById('todoFloat');fl.append(bk,w);
+  const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
+  let left=Math.max(8,Math.min(r.left,innerWidth-ww-8)),below=r.bottom+10+wh<=innerHeight-8,top=below?r.bottom+10:Math.max(8,r.top-10-wh);
+  w.style.cssText=`left:${left}px;top:${top}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up');
+  const [h,m]=(tmVal||'').split(':');
+  const hc=wheelCol('h'),mc=wheelCol('m');hc.scrollTop=(h?parseInt(h)+1:0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH;mark(hc);mark(mc)}   // 新增任務時「分」只給這幾個選項
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
 /* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
 const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
@@ -85,9 +100,9 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
 function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
 function addTask(){const n=$('nm').value.trim();if(!n)return;
   const kind=$('kd').value;let date=$('dt').value||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'&&wheelVal('h')?wheelVal('h')+':'+wheelVal('m'):'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tmVal:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
-  S.tasks.push(t);save();render();$('nm').focus()}
+  S.tasks.push(t);tmVal='';save();render();$('nm').focus()}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
@@ -139,6 +154,9 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
   if(a==='peek'){if(!matchMedia('(hover:none)').matches)return;   // 電腦版用游標指上去，不用點
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
+  if(a==='wheel')return openWheel(el);
+  if(a==='w-ok')return closeWheel('ok');
+  if(a==='w-clr')return closeWheel('clr');
   if(a==='add')return addTask();
   if(a==='go')return go(el.dataset.v);
   if(a==='addfold'){addOpen=!addOpen;try{localStorage.setItem(AF,addOpen?'0':'1')}catch(e){}render();if(addOpen)setTimeout(()=>{const n=$('nm');if(n)n.focus()},0);return}
