@@ -218,9 +218,9 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .qhint button{border:0;background:none;color:var(--dim);font-size:13px;padding:2px 6px;cursor:pointer;border-radius:6px}
 
 /* 任務詳細面板（備註＋小步驟）：接在任務下方，左邊從白底開始（跳過圈選框），右邊到按鈕尾端 */
-:is(#todoRoot,#todoFloat) .row.dopen{margin-bottom:0;border-radius:10px 10px 0 10px}
+:is(#todoRoot,#todoFloat) .row.dopen{margin-bottom:0}   /* 卡片四個角維持圓角，面板右邊從刪除鈕圓角結束的地方（內縮 10px）往下長 */
 :is(#todoRoot,#todoFloat) .row.dopen .mt{display:none!important}
-:is(#todoRoot,#todoFloat) .dpanel{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;margin:0 0 6px 55px}
+:is(#todoRoot,#todoFloat) .dpanel{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;margin:0 10px 6px 55px}
 :is(#todoRoot,#todoFloat) .dpanel.on{grid-template-rows:1fr}
 :is(#todoRoot,#todoFloat) .dpin{min-height:0;overflow:hidden}
 :is(#todoRoot,#todoFloat) .dpc{background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:10px 12px 8px}
@@ -230,10 +230,6 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .dck{width:22px;height:22px;flex:none;border-radius:50%;border:2px solid var(--blue);background:none;display:grid;place-items:center;color:#fff;font-size:12px;cursor:pointer;padding:0}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn .dck{background:var(--blue)}
 :is(#todoRoot,#todoFloat) .dpc .dx{border:0;background:none;color:var(--faint);cursor:pointer;font-size:13px;padding:2px 6px}
-:is(#todoRoot,#todoFloat) .dpc .dadd{display:flex;gap:6px;margin:4px 0 8px}
-:is(#todoRoot,#todoFloat) .dpc .dadd input,.dpc #td-nt{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
-:is(#todoRoot,#todoFloat) .dpc .dadd input{flex:1;min-width:0}
-:is(#todoRoot,#todoFloat) .dpc .dadd button{width:38px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--blue);font-size:18px;cursor:pointer}
 :is(#todoRoot,#todoFloat) .dpc #td-nt{display:block;width:100%;resize:none;min-height:64px;max-height:160px}
 :is(#todoRoot,#todoFloat) .dpc .nv{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:6px 2px;cursor:text}
 :is(#todoRoot,#todoFloat) .dpc .nv a{color:var(--blue);text-decoration:underline;text-underline-offset:2px}
@@ -244,3 +240,11 @@ body{overflow:auto}
 @media (hover:none){#todoRoot .row .bd{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}}
 #td-dp .wbtns{display:flex;gap:8px}
 #td-dp .wbtns .b{flex:1;border-radius:10px;min-height:38px}
+/* 小步驟：「幽靈列」— 平常只有一行淡淡的「＋ 小步驟」，點下去才能輸入；備註框也是點了才出現邊框 */
+:is(#todoRoot,#todoFloat) .dpc .dghost{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:text}
+:is(#todoRoot,#todoFloat) .dpc .dghost .gp{width:22px;flex:none;text-align:center;font-size:16px;color:var(--faint);transition:color .15s}
+:is(#todoRoot,#todoFloat) .dpc .dghost:focus-within .gp{color:var(--blue)}
+:is(#todoRoot,#todoFloat) .dpc .dghost input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:15px;color:var(--text);padding:0}
+:is(#todoRoot,#todoFloat) .dpc .dghost input::placeholder,:is(#todoRoot,#todoFloat) .dpc #td-nt::placeholder{color:var(--faint)}
+:is(#todoRoot,#todoFloat) .dpc #td-nt{font:inherit;font-size:14px;line-height:1.6;padding:6px 8px;margin-top:4px;color:var(--text);border:1px solid transparent;border-radius:8px;background:transparent;outline:0;transition:border-color .15s,background .15s}
+:is(#todoRoot,#todoFloat) .dpc #td-nt:focus{border-color:var(--line);background:var(--bg)}

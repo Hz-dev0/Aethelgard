@@ -102,7 +102,7 @@ const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button 
 const linkify=txt=>esc(txt).replace(/(https?:\/\/[^\s<]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
   return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});   // 備註裡的網址變成可以點的連結
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><div class="dadd"><input id="td-sn" placeholder="加一個小步驟" autocomplete="off" enterkeyhint="done"><button type="button" data-a="d-add" aria-label="新增小步驟">＋</button></div><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea><div class="dfoot"><button type="button" class="b q" data-a="d-ok">收起</button></div></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea><div class="dfoot"><button type="button" class="b q" data-a="d-ok">收起</button></div></div></div></div>`}
 const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}
@@ -118,15 +118,15 @@ function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   const pn=row.nextElementSibling;requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t)};
-function detAdd(){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
-  detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';i.focus()}
+function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
+  detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
 function noteEdit(on){const nv=pq('#td-nv'),nt=pq('#td-nt');if(!nv||!nt)return;
   if(on){nv.classList.add('hid');nt.classList.remove('hid');nt.style.height='auto';nt.style.height=Math.min(160,Math.max(64,nt.scrollHeight))+'px';nt.focus();nt.setSelectionRange(nt.value.length,nt.value.length)}
   else{const t=by(detId);if(t){t.note=nt.value.trim()?nt.value:'';save();nv.innerHTML=linkify(t.note);
     if(t.note){nv.classList.remove('hid');nt.classList.add('hid')}}}}
 document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,Math.max(64,el.scrollHeight))+'px';
   const t=by(detId);if(!t)return;t.note=el.value;clearTimeout(detSave);detSave=setTimeout(save,500)});
-document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false)});   // 寫完離開輸入框，備註就變回可以點連結的樣子
+document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false);else if(e.target.id==='td-sn')detAdd(false)});   // 打到一半點別處，小步驟也先收進去   // 寫完離開輸入框，備註就變回可以點連結的樣子
 document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
 document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   if(t.closest&&t.closest('#td-nv')&&!t.closest('a')){noteEdit(true);return}            // 點備註的空白處 → 編輯；點連結 → 照常開連結
