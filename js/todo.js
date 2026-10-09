@@ -25,7 +25,7 @@ const key=t=>(t.date||'9999')+(t.time||''),byDate=(a,b)=>key(a)<key(b)?-1:1;
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':n<=30?'month':'later'}
 function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
-  if(t.kind==='dayonly')return d===0?'今天'+(t.time?' '+t.time+' ':'')+'才能做':d>0?'限 '+t.date+tm+'（剩 '+d+' 天）':'日子已過';
+  if(t.kind==='dayonly')return d===0?'今天'+(t.time?' '+t.time+' ':'')+'才能做':d>0?t.date+tm+'（剩 '+d+' 天）':'日子已過';
   return d===0?'今天截止':d>0?'剩 '+d+' 天（'+t.date+'）':'已過期 '+(-d)+' 天'}
 function toast(m,id){const t=$('toast');t.textContent=m;t.dataset.id=id||'';t.style.pointerEvents=id?'auto':'none';
   if(id){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}

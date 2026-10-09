@@ -166,6 +166,7 @@ body{overflow:auto}
   :is(#todoRoot,#todoFloat) .row.cmp .mt{display:contents}
   :is(#todoRoot,#todoFloat) .row.cmp:not(.show) .meta{display:none}
   :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{display:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .side,:is(#todoRoot,#todoFloat) .row.cmp.show .del{display:none}
 }
 /* 新增任務：時＋分 */
 :is(#todoRoot,#todoFloat) .tsel{display:inline-flex;align-items:center;gap:4px}
