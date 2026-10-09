@@ -48,7 +48,7 @@ window._onFirebaseReady = async function() {
     //   避免在 loadFromCloud() 完成前，OTP 輸入格一閃而過。
     const _card = document.getElementById('ownerLoginCard');
     if (_card && document.getElementById('guestTokenSection')) {
-      _card.innerHTML = window._avHtml ? window._avHtml('正在載入資料…') : '<div class="av-text">正在載入資料…</div>';
+      if (window._avSet) window._avSet(_card, '正在載入資料…'); else _card.textContent = '正在載入資料…';
     }
     _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') {
@@ -230,7 +230,7 @@ async function submitOwnerLogin() {
     // 切換鎖屏為載入狀態（登入成功後資料同步前不讓使用者看到背後介面）
     const _card = document.getElementById('ownerLoginCard');
     if (_card) {
-      _card.innerHTML = window._avHtml ? window._avHtml('Owner 已登入，正在載入資料…') : '<div class="av-text">Owner 已登入，正在載入資料…</div>';
+      if (window._avSet) window._avSet(_card, 'Owner 已登入，正在載入資料…'); else _card.textContent = 'Owner 已登入，正在載入資料…';
     }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // 重新觸發 ready 流程（init 完成後會呼叫 closeOwnerLoginOverlay）
@@ -265,7 +265,7 @@ async function submitGoogleLogin() {
     try { localStorage.setItem('aethelgard_fb_owner_uid', cred.user.uid); } catch(e2) {}
     const _card = document.getElementById('ownerLoginCard');
     if (_card) {
-      _card.innerHTML = window._avHtml ? window._avHtml('Owner 已登入，正在載入資料…') : '<div class="av-text">Owner 已登入，正在載入資料…</div>';
+      if (window._avSet) window._avSet(_card, 'Owner 已登入，正在載入資料…'); else _card.textContent = 'Owner 已登入，正在載入資料…';
     }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     _firebaseReadyFired = false;
@@ -785,7 +785,7 @@ async function submitGuestToken() {
       _loadingOverlay.style.display = 'flex';
       const _card = document.getElementById('ownerLoginCard');
       if (_card) {
-        _card.innerHTML = window._avHtml ? window._avHtml('訪客模式啟用中，正在載入資料…') : '<div class="av-text">訪客模式啟用中，正在載入資料…</div>';
+        if (window._avSet) window._avSet(_card, '訪客模式啟用中，正在載入資料…'); else _card.textContent = '訪客模式啟用中，正在載入資料…';
       }
     }
 

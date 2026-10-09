@@ -30,6 +30,11 @@
       + '<div class="av-text">' + text + '</div>'
       + '</div>';
   }
+  // 已經在轉的載入畫面只換文字，不重建元素：星星和圈圈的動畫才不會中斷、重新開始
+  window._avSet = function (card, text) {
+    var t = card.querySelector && card.querySelector('.av .av-text');
+    if (t) t.textContent = text; else card.innerHTML = avHtml(text);
+  };
   window._avHtml = avHtml;   // auth.js 的「正在載入資料」「訪客載入中」也用這個
   var AV_HTML = avHtml('正在驗證身份…');
 

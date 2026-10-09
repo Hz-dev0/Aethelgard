@@ -31,6 +31,7 @@ function toast(m,id,fn,ms){const t=$('toast');t.textContent=m;t.dataset.id=id||'
   if(id||fn){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||(id?3500:1400))}
 const peek=new Set();   // 手機上「已翻到時間那面」的卡片（只存在記憶體，不同步）
+const tmark=t=>{const a=t.subs||[],n=a.length;return (t.note?'<span class="nt">📝</span>':'')+(n?`<span class="nt">${a.filter(x=>x.done).length}/${n}</span>`:'')};   // 有備註／小步驟才多一個小標記
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
   if(dayToday&&o.inToday){if(t.time)m.push(`<span class="meta warn">${t.time}</span>`)}
@@ -40,15 +41,93 @@ function row(t,o={}){const m=[],d=today();
   if(auto||t.kind==='dayonly'){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
+  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
 const AF='aeth_todo_addfold';
 let addOpen=(()=>{try{return localStorage.getItem(AF)!=='1'}catch(e){return true}})();
 const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-expanded="${addOpen}">${addOpen?'收起 ▴':'＋ 新增'}</button>`;
 const CLK='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+/* ── 快速輸入：在名稱裡直接打「明天 15:30 寄報表」「週五前 回信」「每 3 天 澆水」，自動拆出日期／時間／重複 ──
+   純規則判斷（不用網路）。氣泡裡手動選的值優先；輸入框下方的小提示可以按 ✕ 取消這次的自動辨識。 */
+const QW='日一二三四五六';
+function qParse(txt){
+  let s=txt,out={date:'',time:'',repeat:0,kind:'',dl:false};
+  const cut=re=>{const m=re.exec(s);if(!m)return null;
+    let end=m.index+m[0].length;const tail=/^\s*(之前|以前|前|截止)/.exec(s.slice(end));   // 「週五前」的「前」一起拿掉
+    if(tail&&re.dateLike){out.dl=true;end+=tail[0].length}
+    s=s.slice(0,m.index)+' '+s.slice(end);return m};
+  const R=(re,dateLike)=>{re.dateLike=dateLike;return re};
+  let m=cut(R(/每\s*(\d{1,3})\s*天(?:\s*提醒(?:我)?)?|(\d{1,3})\s*天[後后]?\s*(?:再)?重複(?:\s*提醒(?:我)?)?/));
+  if(m)out.repeat=parseInt(m[1]||m[2]);
+  const base=new Date(today()+'T12:00:00'),add=n=>{const d=new Date(base);d.setDate(d.getDate()+n);return ymd(d)};
+  if(m=cut(R(/大[後后]天|[後后]天|明[天日]|今[天日]/,1)))out.date=add({大後天:3,大后天:3,後天:2,后天:2,明天:1,明日:1,今天:0,今日:0}[m[0]]);
+  else if(m=cut(R(/(下)?(?:週|周|星期|禮拜)([一二三四五六日天])/,1))){
+    const tg=QW.indexOf(m[2]==='天'?'日':m[2]),cur=base.getDay();
+    out.date=add(m[1]?((tg+6)%7-(cur+6)%7)+7:(tg-cur+7)%7)}
+  else if(m=cut(R(/(\d{1,2})\s*[\/月]\s*(\d{1,2})\s*[日號号]?(?![杯個个顆颗片份克斤匙瓶包\d])/,1))){
+    const mo=+m[1],dy=+m[2];let d=new Date(base.getFullYear(),mo-1,dy,12);
+    if(mo<1||mo>12||dy<1||dy>31||d.getMonth()!==mo-1){s=txt;out={date:'',time:'',repeat:out.repeat,kind:'',dl:false}}
+    else{if(d<base)d=new Date(base.getFullYear()+1,mo-1,dy,12);out.date=ymd(d)}}
+  else if(m=cut(R(/(\d{1,3})\s*天[後后]/,1)))out.date=add(+m[1]);
+  if(!out.dl){   // 有「前」代表是截止日，時間只有「當天限定」才用得到，所以不拆時間
+    const P='(早上|早晨|上午|中午|下午|晚上|晚間|凌晨)?',fix=(pre,h,mi)=>{
+      if((pre==='下午'||pre==='晚上'||pre==='晚間')&&h<12)h+=12;else if(pre==='中午'&&h<11)h+=12;
+      if(h>23||mi>59)return null;
+      const sn=[0,20,30,40,60].reduce((a,b)=>Math.abs(b-mi)<Math.abs(a-mi)?b:a);   // 分鐘靠到 00／20／30／40
+      if(sn===60){h+=1;if(h>23)return null}
+      return pad(h)+':'+pad(sn%60)};
+    if(m=cut(R(new RegExp(P+'\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{2})')))){const t=fix(m[1],+m[2],+m[3]);if(t)out.time=t;else s=txt}
+    else if(m=cut(R(new RegExp(P+'\\s*(\\d{1,2})\\s*點\\s*(半|\\d{1,2})?\\s*分?')))){
+      const t=fix(m[1],+m[2],m[3]==='半'?30:(parseInt(m[3])||0));if(t)out.time=t;else s=txt}}
+  if(!out.date&&!out.time&&!out.repeat)return null;
+  if(out.time&&!out.date)out.date=today();
+  out.kind=out.dl||(out.date&&!out.time)?'deadline':out.time?'dayonly':'';
+  const name=s.replace(/\s+/g,' ').replace(/^[\s,，、:：\-－]+|[\s,，、:：\-－]+$/g,'');
+  if(!name)return null;
+  const dd=out.date?Math.round((new Date(out.date+'T12:00:00')-base)/864e5):null,dt=out.date?new Date(out.date+'T12:00:00'):null;
+  const dl=out.date?(dd===0?'今天':dd===1?'明天':dd===2?'後天':(dt.getMonth()+1)+'/'+dt.getDate()+'（週'+QW[dt.getDay()]+'）'):'';
+  out.name=name;out.label=[out.date?'📅 '+dl+(out.time?' '+out.time:'')+(out.dl?' 前':''):'',out.repeat?'↻ 每 '+out.repeat+' 天':''].filter(Boolean).join('　');
+  return out}
+let qhOff=false;   // 這次輸入已按 ✕ 取消自動辨識
+function qHint(){const h=document.getElementById('td-qh'),i=document.getElementById('td-nm');if(!h||!i)return;
+  const q=qhOff?null:qParse(i.value);
+  if(!q){h.style.display='none';h.innerHTML='';return}
+  h.style.display='flex';h.innerHTML=`<span>${esc(q.label)}</span><button type="button" data-a="qh-x" aria-label="取消自動辨識">✕</button>`}
+document.addEventListener('input',e=>{if(e.target.id==='td-nm'){if(!e.target.value)qhOff=false;qHint()}});
+/* ── 任務詳細氣泡：備註＋小步驟。手機長按卡片、電腦右鍵卡片開啟；平常畫面不多任何按鈕 ── */
+let detId=null,detSave=0,lpT=null,lpPos=null,lpFired=false;
+const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✓':''}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
+function closeDet(){const w=document.getElementById('td-dp'),bk=document.getElementById('td-db');if(!w)return;
+  clearTimeout(detSave);const t=by(detId);if(t){const v=w.querySelector('#td-nt').value;t.note=v.trim()?v:'';if(!(t.subs||[]).length)delete t.subs;save()}
+  w.remove();bk&&bk.remove();detId=null;render()}
+function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');closeDet();detId=t.id;
+  const bk=document.createElement('div');bk.id='td-db';bk.dataset.a='d-ok';
+  const w=document.createElement('div');w.id='td-dp';
+  w.innerHTML=`<div class="dt">${esc(t.name)}</div><div id="td-ds">${detSubs(t)}</div><div class="dadd"><input id="td-sn" placeholder="加一個小步驟" autocomplete="off" enterkeyhint="done"><button type="button" data-a="d-add" aria-label="新增小步驟">＋</button></div><textarea id="td-nt" rows="3" placeholder="備註（連結、細節…）"></textarea><div class="wbtns"><button class="b" data-a="d-ok">完成</button></div>`;
+  document.getElementById('todoFloat').append(bk,w);
+  const nt=w.querySelector('#td-nt');nt.value=t.note||'';
+  const r=row.getBoundingClientRect(),ww=w.offsetWidth,wh=w.scrollHeight+2,left=Math.max(8,Math.min(r.left,innerWidth-ww-8));
+  const below=innerHeight-r.bottom-16,above=r.top-16,dn=wh<=below||below>=above;
+  w.style.cssText=`left:${left}px;${dn?'top:'+(r.bottom+8):'bottom:'+(innerHeight-r.top+8)}px;max-height:${Math.max(160,(dn?below:above))}px`}
+const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=document.getElementById('td-ds');if(l)l.innerHTML=detSubs(t)};
+function detAdd(){const i=document.getElementById('td-sn'),v=i&&i.value.trim();if(!v)return;
+  detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';i.focus()}
+document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,el.scrollHeight)+'px';
+  const t=by(detId);if(!t)return;t.note=el.value;clearTimeout(detSave);detSave=setTimeout(save,500)});
+document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
+/* 開啟方式：手機長按、電腦右鍵 */
+const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
+document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;
+  const r=bd.closest('.row');lpPos={x:e.clientX,y:e.clientY};clearTimeout(lpT);
+  lpT=setTimeout(()=>{lpT=null;const id=rowIdOf(r);if(id){lpFired=true;navigator.vibrate&&navigator.vibrate(10);openDet(id,r)}},480)});
+document.addEventListener('pointermove',e=>{if(lpT&&Math.hypot(e.clientX-lpPos.x,e.clientY-lpPos.y)>10){clearTimeout(lpT);lpT=null}});
+['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(lpT);lpT=null;if(lpFired)setTimeout(()=>{lpFired=false},400)}));
+document.addEventListener('click',e=>{if(lpFired){lpFired=false;e.stopPropagation();e.preventDefault()}},true);   // 長按放開後不要又當成一次點擊
+document.addEventListener('contextmenu',e=>{const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;e.preventDefault();
+  const r=bd.closest('.row'),id=rowIdOf(r);if(id&&detId!=id)openDet(id,r)});
 function addBox(){if(!addOpen)return'';
-  return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div></div><button class="addb" data-a="add">新增</button></div>`}
+  return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
 /* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
 let kdVal='',dtVal='',tmVal='',rpVal='';
@@ -109,11 +188,13 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
 function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
-function addTask(){const n=$('nm').value.trim();if(!n)return;closePop('ok');
-  const kind=effKd();let date=dtVal||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tmVal:'',repeat:parseInt(rpVal)||0,done:false,touched:Date.now()};
+function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
+  const q=qhOff?null:qParse(raw),n=q?q.name:raw;   // 氣泡裡手動選的優先，沒選的才用輸入框辨識出來的
+  const kind=kdVal||(q&&q.kind)||defKd(),tm=tmVal||(q&&q.time)||'',rp=parseInt(rpVal)||(q&&q.repeat)||0;
+  let date=dtVal||(q&&q.date)||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tm:'',repeat:rp,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
-  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';save();render();$('nm').focus();
+  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';qhOff=false;save();render();$('nm').focus();
   toast('已新增',null,()=>{S.tasks=S.tasks.filter(x=>x!==t);save();render()},5000)}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
@@ -200,6 +281,11 @@ document.addEventListener('click',e=>{
   if(a==='peek'){if(!matchMedia('(hover:none)').matches)return;   // 電腦版用游標指上去，不用點
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
   if(a==='opts')return openPop(el);
+  if(a==='d-ok')return closeDet();
+  if(a==='d-add')return detAdd();
+  if(a==='d-tg'){detSet(t=>{const x=(t.subs||[]).find(v=>v.id==el.dataset.sid);if(x)x.done=!x.done});return}
+  if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
+  if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
   if(a==='w-ok')return closePop('ok');
   if(a==='w-clr')return closePop('clr');
   if(a==='add')return addTask();
@@ -358,7 +444,7 @@ function startCloud(){
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
-function go(v){closePop('ok');if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
+function go(v){closePop('ok');closeDet();if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
   view=v;render();if(typeof window.showPage==='function')window.showPage('todo');markTabs(v)}
 window.todoGo=go;
 function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._td)return;
