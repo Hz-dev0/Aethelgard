@@ -227,8 +227,6 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .ds{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}
 :is(#todoRoot,#todoFloat) .dpc .ds span{flex:1;min-width:0;word-break:break-word}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn span{color:var(--faint);text-decoration:line-through}
-:is(#todoRoot,#todoFloat) .dpc .dck{width:22px;height:22px;flex:none;border-radius:50%;border:2px solid var(--blue);background:none;display:grid;place-items:center;color:#fff;font-size:12px;cursor:pointer;padding:0}
-:is(#todoRoot,#todoFloat) .dpc .ds.dn .dck{background:var(--blue)}
 :is(#todoRoot,#todoFloat) .dpc .dx{border:0;background:none;color:var(--faint);cursor:pointer;font-size:13px;padding:2px 6px}
 :is(#todoRoot,#todoFloat) .dpc #td-nt{display:block;width:100%;resize:none;min-height:64px;max-height:160px}
 :is(#todoRoot,#todoFloat) .dpc .nv{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:6px 2px;cursor:text}
@@ -246,3 +244,8 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .dghost input::placeholder,:is(#todoRoot,#todoFloat) .dpc #td-nt::placeholder{color:var(--faint)}
 :is(#todoRoot,#todoFloat) .dpc #td-nt{font:inherit;font-size:14px;line-height:1.6;padding:6px 8px;margin-top:4px;color:var(--text);border:1px solid transparent;border-radius:8px;background:transparent;outline:0;transition:border-color .15s,background .15s}
 :is(#todoRoot,#todoFloat) .dpc #td-nt:focus{border-color:var(--line);background:var(--bg)}
+/* 小步驟的勾選：空心星 ✧ → 實心金星 ✦（跟載入畫面、完成特效同一套星星） */
+:is(#todoRoot,#todoFloat) .dpc .dck{width:22px;height:22px;flex:none;border:0;background:none;padding:0;display:grid;place-items:center;font-size:18px;line-height:1;color:var(--gray);cursor:pointer;transition:color .2s}
+:is(#todoRoot,#todoFloat) .dpc .ds.dn .dck{color:#e8c35a;text-shadow:0 0 8px rgba(232,195,90,.75)}
+:is(#todoRoot,#todoFloat) .dpc .dck.pop{animation:dckPop .45s ease-out}
+@keyframes dckPop{0%{transform:scale(.5) rotate(-40deg)}55%{transform:scale(1.5) rotate(15deg)}100%{transform:scale(1) rotate(0)}}

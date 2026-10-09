@@ -98,7 +98,7 @@ function qHint(){const h=document.getElementById('td-qh'),i=document.getElementB
 document.addEventListener('input',e=>{if(e.target.id==='td-nm'){if(!e.target.value)qhOff=false;qHint()}});
 /* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
 let detId=null,detSave=0,lpT=null,lpPos=null,lpFired=false;
-const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✓':''}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
+const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
 const linkify=txt=>esc(txt).replace(/(https?:\/\/[^\s<]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
   return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});   // 備註裡的網址變成可以點的連結
 function detPanel(t,on){const hasN=!!t.note;
@@ -299,7 +299,8 @@ document.addEventListener('click',e=>{
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
   if(a==='d-add')return detAdd();
-  if(a==='d-tg'){detSet(t=>{const x=(t.subs||[]).find(v=>v.id==el.dataset.sid);if(x)x.done=!x.done});return}
+  if(a==='d-tg'){const sid=el.dataset.sid;detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(x)x.done=!x.done});
+    const b=pq('.dck[data-sid="'+sid+'"]');if(b&&b.parentNode.classList.contains('dn'))b.classList.add('pop');return}   // 勾起來的星星閃一下
   if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
   if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
   if(a==='w-ok')return closePop('ok');
