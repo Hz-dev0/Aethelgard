@@ -102,7 +102,7 @@ const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button 
 const linkify=txt=>esc(txt).replace(/(https?:\/\/[^\s<]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
   return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});   // 備註裡的網址變成可以點的連結
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea><div class="dfoot"><button type="button" class="b q" data-a="d-ok">收起</button></div></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea></div></div></div>`}
 const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}

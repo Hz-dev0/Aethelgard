@@ -224,7 +224,7 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpanel.on{grid-template-rows:1fr}
 :is(#todoRoot,#todoFloat) .dpin{min-height:0;overflow:hidden}
 :is(#todoRoot,#todoFloat) .dpc{background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:10px 12px 8px}
-:is(#todoRoot,#todoFloat) .dpc .ds{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:15px}
+:is(#todoRoot,#todoFloat) .dpc .ds{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}
 :is(#todoRoot,#todoFloat) .dpc .ds span{flex:1;min-width:0;word-break:break-word}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn span{color:var(--faint);text-decoration:line-through}
 :is(#todoRoot,#todoFloat) .dpc .dck{width:22px;height:22px;flex:none;border-radius:50%;border:2px solid var(--blue);background:none;display:grid;place-items:center;color:#fff;font-size:12px;cursor:pointer;padding:0}
@@ -234,17 +234,15 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .nv{font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:6px 2px;cursor:text}
 :is(#todoRoot,#todoFloat) .dpc .nv a{color:var(--blue);text-decoration:underline;text-underline-offset:2px}
 :is(#todoRoot,#todoFloat) .dpc .hid{display:none!important}
-:is(#todoRoot,#todoFloat) .dpc .dfoot{display:flex;justify-content:flex-end;margin-top:6px}
-:is(#todoRoot,#todoFloat) .dpc .dfoot .b{border-radius:8px;min-height:30px;padding:0 14px;font-size:13px}
 :is(#todoRoot,#todoFloat) .nt{margin-left:6px;font-size:12px;color:var(--dim);font-weight:400;white-space:nowrap}
 @media (hover:none){#todoRoot .row .bd{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}}
 #td-dp .wbtns{display:flex;gap:8px}
 #td-dp .wbtns .b{flex:1;border-radius:10px;min-height:38px}
 /* 小步驟：「幽靈列」— 平常只有一行淡淡的「＋ 小步驟」，點下去才能輸入；備註框也是點了才出現邊框 */
 :is(#todoRoot,#todoFloat) .dpc .dghost{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:text}
-:is(#todoRoot,#todoFloat) .dpc .dghost .gp{width:22px;flex:none;text-align:center;font-size:16px;color:var(--faint);transition:color .15s}
+:is(#todoRoot,#todoFloat) .dpc .dghost .gp{width:22px;flex:none;text-align:center;font-size:15px;color:var(--faint);transition:color .15s}
 :is(#todoRoot,#todoFloat) .dpc .dghost:focus-within .gp{color:var(--blue)}
-:is(#todoRoot,#todoFloat) .dpc .dghost input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:15px;color:var(--text);padding:0}
+:is(#todoRoot,#todoFloat) .dpc .dghost input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--text);padding:0}
 :is(#todoRoot,#todoFloat) .dpc .dghost input::placeholder,:is(#todoRoot,#todoFloat) .dpc #td-nt::placeholder{color:var(--faint)}
 :is(#todoRoot,#todoFloat) .dpc #td-nt{font:inherit;font-size:14px;line-height:1.6;padding:6px 8px;margin-top:4px;color:var(--text);border:1px solid transparent;border-radius:8px;background:transparent;outline:0;transition:border-color .15s,background .15s}
 :is(#todoRoot,#todoFloat) .dpc #td-nt:focus{border-color:var(--line);background:var(--bg)}
