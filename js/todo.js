@@ -131,13 +131,13 @@ function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cf
 const fxR=(a,b)=>a+Math.random()*(b-a);
 const fxMk=(css,txt)=>{const e=document.createElement('i');e.style.cssText='position:fixed;pointer-events:none;font-style:normal;line-height:1;'+css;if(txt)e.textContent=txt;document.body.append(e);return e};
 const fxGo=(e,kf,o)=>{e.animate(kf,Object.assign({fill:'forwards'},o)).onfinish=()=>e.remove()};
-const fxStar=(x,y,sz,col)=>fxMk(`left:${x}px;top:${y}px;font-size:${sz}px;color:${col||'#e8c35a'};text-shadow:0 0 6px rgba(232,195,90,.8);z-index:22`,'✦');
+const fxStar=(x,y,sz,col)=>fxMk(`left:${x}px;top:${y}px;font-size:${sz}px;color:${col||'#e8c35a'};text-shadow:0 0 8px rgba(232,195,90,.95),0 0 16px rgba(232,195,90,.6);z-index:22`,'✦');
 function fxTwinkle(b,n){   // 1～2 件：原地閃，快速小幅放大縮小，然後淡出
-  for(let i=0;i<4+n*2;i++){const st=fxStar(b.left-10+fxR(0,b.width+20),b.top-12+fxR(0,b.height+24),fxR(10,18),i%3?'#e8c35a':'#fff');
+  for(let i=0;i<6+n*2;i++){const st=fxStar(b.left-10+fxR(0,b.width+20),b.top-14+fxR(0,b.height+28),fxR(18,28),i%3?'#e8c35a':'#fff');
     fxGo(st,[{opacity:0,transform:'scale(.3)'},{opacity:1,transform:'scale(1)',offset:.15},{opacity:1,transform:'scale(1.3)',offset:.3},{opacity:.85,transform:'scale(.8)',offset:.45},
-      {opacity:1,transform:'scale(1.25)',offset:.6},{opacity:.85,transform:'scale(.85)',offset:.75},{opacity:0,transform:'scale(.5)'}],{duration:fxR(850,1150),delay:fxR(0,350),easing:'ease-in-out'})}}
+      {opacity:1,transform:'scale(1.25)',offset:.6},{opacity:.85,transform:'scale(.85)',offset:.75},{opacity:0,transform:'scale(.5)'}],{duration:fxR(1150,1500),delay:fxR(0,400),easing:'ease-in-out'})}}
 function fxRise(b,big){   // 金色小星星從卡片往上迸出（big：3～5 件用，比 1～2 件大一點點）
-  for(let k=0;k<6;k++){const st=fxStar(b.left+b.width*fxR(.1,.9),b.top+b.height*fxR(.2,.7),big?fxR(16,26):fxR(10,20));
+  for(let k=0;k<6;k++){const st=fxStar(b.left+b.width*fxR(.1,.9),b.top+b.height*fxR(.2,.7),big?fxR(24,36):fxR(10,20));
     fxGo(st,[{transform:'translate(0,0) scale(.3) rotate(0)',opacity:0},{transform:`translate(${fxR(-25,25)}px,${fxR(-54,-24)}px) scale(1.2) rotate(40deg)`,opacity:1,offset:.35},{transform:`translate(${fxR(-35,35)}px,${fxR(-90,-50)}px) scale(.5) rotate(90deg)`,opacity:0}],{duration:fxR(700,1000),delay:fxR(0,150),easing:'ease-out'})}}
 function fxBurst(b,n,rec){const L=rec?12:n-5,cx=b.left+b.width/2,cy=b.top+b.height/2,N=Math.min(16+L*6,rec?90:68),far=Math.min(100+L*16,rec?300:230);
   for(let i=0;i<N;i++){const a=fxR(0,6.283),d=fxR(far*.4,far),big=i%4===0,st=fxStar(cx,cy,big?fxR(20,32):fxR(10,18),i%3?'#e8c35a':(i%2?'#fff':'#9ec1ea'));
@@ -152,8 +152,9 @@ function fxRecord(b){fxBurst(b,0,true);
     fxGo(st,[{transform:'translate(0,0) rotate(0)',opacity:0},{opacity:1,offset:.12},{opacity:.4,offset:.35},{opacity:1,offset:.55},{opacity:.4,offset:.75},{transform:`translate(${x}px,${innerHeight+60}px) rotate(${fxR(-120,120)}deg)`,opacity:0}],{duration:fxR(2200,3600),delay:fxR(200,1600),easing:'linear'})}
   const t=fxMk('left:50%;top:38%;z-index:30;font-size:26px;font-weight:700;letter-spacing:.12em;color:#fff;white-space:nowrap;text-shadow:0 0 18px rgba(232,195,90,.95),0 2px 10px rgba(0,0,0,.35)','✦ 今日新紀錄 ✦');
   fxGo(t,[{transform:'translate(-50%,-50%) scale(.5)',opacity:0},{transform:'translate(-50%,-50%) scale(1.15)',opacity:1,offset:.2},{transform:'translate(-50%,-50%) scale(1)',opacity:1,offset:.75},{transform:'translate(-50%,-70%) scale(1)',opacity:0}],{duration:2200,delay:300,easing:'ease-out'})}
-function fx(r,cb,n,rec){
-  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return cb();   // 系統設定減少動態效果就直接完成
+function fx(r,cb,n,rec){let ok=0;const fin=()=>{if(!ok){ok=1;cb()}};
+  try{fxRun(r,fin,n,rec)}catch(e){console.error('fx',e);fin()}}
+function fxRun(r,cb,n,rec){
   navigator.vibrate&&navigator.vibrate(rec?[20,40,20,40,40]:15);
   const shatter=rec,D=640,b0=r.getBoundingClientRect();
   const o=document.createElement('div');   // 蓋在卡片上的白金色薄紗（半透明：底下的字還看得到）
