@@ -154,11 +154,16 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row.cmp .bd>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:default}
 @media (hover:hover){
-  :is(#todoRoot,#todoFloat) .row.cmp .meta{display:none}
-  :is(#todoRoot,#todoFloat) .row.cmp:hover .meta{display:inline}
+  :is(#todoRoot,#todoFloat) .row.cmp{overflow:visible}
+  :is(#todoRoot,#todoFloat) .row.cmp>:first-child{border-radius:10px 0 0 10px}
+  :is(#todoRoot,#todoFloat) .row.cmp>:last-child{border-radius:0 10px 10px 0}
+  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:none;position:absolute;left:64px;top:calc(100% + 2px);z-index:6;background:var(--dk);padding:4px 10px;border-radius:8px;white-space:nowrap;box-shadow:0 4px 14px rgba(30,45,69,.22);pointer-events:none}
+  :is(#todoRoot,#todoFloat) .row.cmp .mt .meta{color:#fff}
+  :is(#todoRoot,#todoFloat) .row.cmp:hover .mt{display:block}
 }
 @media (hover:none){
   :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
+  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:contents}
   :is(#todoRoot,#todoFloat) .row.cmp:not(.show) .meta{display:none}
   :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{display:none}
 }

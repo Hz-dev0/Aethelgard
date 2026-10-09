@@ -40,7 +40,7 @@ function row(t,o={}){const m=[],d=today();
   if(auto){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}</div>${m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
+  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
 const AF='aeth_todo_addfold';
@@ -149,10 +149,13 @@ document.addEventListener('click',e=>{
         'auth/operation-not-allowed':'Firebase 後台尚未啟用 Google 登入方式','auth/unauthorized-domain':'這個網址尚未加入 Firebase 授權網域'};
       say('❌ '+(m[err.code]||('綁定失敗：'+(err.code||err.message))))});return}
   if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
-  if(a==='s-tab'){stab=el.dataset.k;bkMsg='';return openSet()}
-  if(a==='s-exp'){dl('tasks-'+today()+'.json',JSON.stringify(S,null,1));bkMsg='已下載任務備份';return openSet()}
-  if(a==='s-full'){dl('aethelgard-backup-'+today()+'.json',JSON.stringify(fullBackup(),null,1));bkMsg='已下載完整備份（任務＋筆記）';return openSet()}
-  if(a==='s-undo'){const pv=readPrev();if(!pv)return;ask('復原上次還原？\n會把任務'+(pv.tabs?'和筆記':'')+'換回還原之前的樣子。',()=>{bkMsg=applyBackup({tasks:pv.tasks,tabs:pv.tabs})+'（已復原）';openSet()},openSet);return}
+  if(a==='s-tab'){stab=el.dataset.k;bkMsg='';bkUndo=false;return openSet()}
+  if(a==='s-do'){const v=$('bk').value;
+    if(v==='full')dl('aethelgard-backup-'+today()+'.json',JSON.stringify(fullBackup(),null,1));
+    else if(v==='tasks')dl('tasks-'+today()+'.json',JSON.stringify(S,null,1));
+    else{const f=window[{notesJson:'notesExportJson',notesMd:'notesExportMd',notesTxt:'notesExportTxt'}[v]];if(typeof f==='function')f()}
+    return}
+  if(a==='s-undo'){const pv=readPrev();if(!pv)return;ask('復原上次還原？\n會把任務'+(pv.tabs?'和筆記':'')+'換回還原之前的樣子。',()=>{bkMsg=applyBackup({tasks:pv.tasks,tabs:pv.tabs})+'（已復原）';bkUndo=false;openSet()},openSet);return}
   if(a==='c-no'){pend=null;$('ov').className='';if(askBack){const b=askBack;askBack=null;b()}return}
   if(a==='c-yes'){const f=pend;pend=null;askBack=null;$('ov').className='';f&&f();return}
   if(a.startsWith('m-')){const t=by(sugId);$('ov').className='';if(!t)return;
@@ -163,7 +166,7 @@ $('ov').addEventListener('click',e=>{if(e.target.id!=='td-ov')return;if(ovMode==
 document.addEventListener('change',e=>{const el=e.target;if(el.matches('input[type=date][data-a]'))act(el.dataset.a,el.dataset.id,el.value)});
 $('toast').onclick=()=>{const id=$('toast').dataset.id;if(id){$('toast').classList.remove('on');act('chk',id)}};
 $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
-let stab='gen',bkMsg='';
+let stab='gen',bkMsg='',bkUndo=false;
 /* ── 備份／還原 ── */
 const KB=K+'_lastbak',KP=K+'_prev';   // 上次備份時間、還原前自動留的一份
 const notesTabs=()=>{try{const p=typeof window._notesGetSyncPayload==='function'&&window._notesGetSyncPayload();return p&&Array.isArray(p.tabs)?p.tabs:null}catch(e){return null}};
@@ -184,21 +187,13 @@ function applyBackup(b){   // 還原前先把目前的資料留一份，之後�
   return '已還原：'+out.join('、')}
 const ago=ts=>{if(!ts)return null;const n=Math.floor((Date.now()-ts)/864e5);return n<=0?'今天':n===1?'昨天':n+' 天前'};
 function backupPane(){
-  const last=parseInt((()=>{try{return localStorage.getItem(KB)}catch(e){return ''}})())||0,lg=ago(last),open=S.tasks.filter(t=>!t.done).length,nt=notesTabs(),pv=readPrev();
-  const stale=!last||Date.now()-last>14*864e5;
-  const adv=`<details class="sadv"><summary>只匯出／匯入單一項目</summary>
-<div class="sh">任務</div><div class="brow"><button class="b q sbtn" data-a="s-exp">只下載任務</button></div>
-<div class="sh">筆記</div>
-<div class="brow">${[['notesExportTxt','TXT'],['notesExportMd','MD'],['notesExportJson','JSON']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">匯出 ${l}</button>`).join('')}</div>
-<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">只匯入筆記</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步筆記</button></div></details>`;
-  return `<div class="bkst"><div>目前資料：任務 ${S.tasks.length} 件（未完成 ${open}）${nt?'・筆記 '+nt.length+' 個標籤':''}</div><div class="${stale?'warn':''}">上次備份：${lg||'還沒備份過'}${last&&stale?'，建議再備份一次':''}</div></div>
-<button class="b dk sbtn" data-a="s-full" style="margin-top:12px">下載完整備份</button>
-<div class="sd" style="margin-top:4px">任務和筆記放在同一個檔案。</div>
-<label class="b q sbtn upl" style="margin-top:12px">還原備份…<input type="file" id="td-imp" accept=".json,application/json"></label>
-<div class="sd" style="margin-top:4px">選檔後會先顯示備份內容，確認才會取代目前資料；還原前會自動留一份目前的，可以復原。</div>
+  const pv=readPrev();
+  return `<div class="sh">匯出</div>
+<div class="brow"><select id="td-bk" style="flex:1;min-width:0;padding:8px"><option value="full">任務＋筆記（完整備份）</option><option value="tasks">只有任務</option><option value="notesJson">筆記 JSON</option><option value="notesMd">筆記 MD</option><option value="notesTxt">筆記 TXT</option></select><button class="b dk" data-a="s-do" style="border-radius:10px;padding:0 18px">匯出</button></div>
+<div class="sh">還原</div>
+<label class="b q sbtn upl">選擇備份檔…<input type="file" id="td-imp" accept=".json,application/json"></label>
 ${bkMsg?`<div class="bkmsg">${esc(bkMsg)}</div>`:''}
-${pv?`<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-undo">復原上次還原（${ago(pv.at)}留的）</button></div>`:''}
-${adv}`}
+${bkMsg&&bkUndo&&pv?`<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-undo">復原</button></div>`:''}`}
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
   const row=(t,d,c)=>`<div class="srow"><div class="sx"><div class="st">${t}</div>${d?`<div class="sd">${d}</div>`:''}</div><div class="sc">${c}</div></div>`;
   const TB=[['gen','⚙','一般'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
@@ -230,7 +225,7 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
       if(b.tasks)L.push('任務：目前 '+S.tasks.length+' 件 → 備份裡 '+b.tasks.tasks.length+' 件');
       if(b.tabs)L.push('筆記：目前 '+(nt?nt.length:0)+' 個標籤 → 備份裡 '+b.tabs.length+' 個標籤');
       L.push('這些會取代目前的資料。');
-      ask(L.join('\n'),()=>{bkMsg=applyBackup(b);openSet()},openSet)})};
+      ask(L.join('\n'),()=>{bkMsg=applyBackup(b);bkUndo=true;openSet()},openSet)})};
   if(typeof window._tokRestore==='function')window._tokRestore();
   $('ov').className='on'}
 $('gear').onclick=openSet;
