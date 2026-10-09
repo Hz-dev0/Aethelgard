@@ -99,10 +99,14 @@ document.addEventListener('input',e=>{if(e.target.id==='td-nm'){if(!e.target.val
 /* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
 let detId=null,detSave=0,lpT=null,lpPos=null,lpFired=false;
 const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
-const linkify=txt=>esc(txt).replace(/(https?:\/\/[^\s<]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
-  return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});   // 備註裡的網址變成可以點的連結
+const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、[文字](網址)、直接貼的網址，都會變成可以點的連結
+  let h=esc(txt).replace(/\((https?:\/\/[^\s()]+)\)\[([^\]\n]+)\]|\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,(m,u1,t1,t2,u2)=>{
+    keep.push(`<a href="${u1||u2}" target="_blank" rel="noopener noreferrer">${t1||t2}</a>`);return '\u0000'+(keep.length-1)+'\u0000'});
+  h=h.replace(/(https?:\/\/[^\s<\u0000]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
+    return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});
+  return h.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i])};
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div>`}
 const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}
