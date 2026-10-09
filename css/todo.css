@@ -179,7 +179,17 @@ body{overflow:auto}
 @media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.cmp *{transition:none!important}}
 /* 新增任務：時＋分 */
 /* 滾輪時間選擇（氣泡） */
-:is(#todoRoot,#todoFloat) .tbtn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer}
+:is(#todoRoot,#todoFloat) .nmrow{display:flex;align-items:center;gap:4px}
+:is(#todoRoot,#todoFloat) .nmrow .nm{flex:1;min-width:0}
+:is(#todoRoot,#todoFloat) .tbtn{position:relative;flex:none;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;background:none;color:var(--gray);cursor:pointer}
+:is(#todoRoot,#todoFloat) .tbtn.has{color:var(--blue);background:rgba(58,110,165,.1)}
+:is(#todoRoot,#todoFloat) .tbtn.has::after{content:'';position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--blue)}
+#td-wp .prow{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:14px;color:var(--text)}
+#td-wp .prow select,#td-wp .prow input[type=date]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+#td-wp .rp input{flex:none;width:64px;font:inherit;font-size:14px;padding:6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+#td-wp .r-tm{margin-bottom:0}
+#td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=deadline] .r-tm{display:none}
+#td-wp .r-tm+.rp{margin-top:8px}
 #td-wb{position:fixed;inset:0;z-index:2000}
 #td-wp{position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
 #td-wp::before{content:'';position:absolute;left:calc(var(--ax) - 7px);width:12px;height:12px;background:#fff;transform:rotate(45deg)}

@@ -46,14 +46,14 @@ function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" 
 const AF='aeth_todo_addfold';
 let addOpen=(()=>{try{return localStorage.getItem(AF)!=='1'}catch(e){return true}})();
 const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-expanded="${addOpen}">${addOpen?'收起 ▴':'＋ 新增'}</button>`;
+const CLK='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 function addBox(){if(!addOpen)return'';
-  return`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
-<select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
-<input type="date" id="td-dt"><button type="button" class="tbtn" data-a="wheel">🕘 ${tmVal||'選擇時間'}</button></div>
-<div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
-const MINS=['00','20','30','40'];
-/* 滾輪式時間選擇：按「選擇時間」跳出氣泡，在氣泡裡上下滑動；停在中間高亮那格就是選的值 */
-let tmVal='';
+  return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div></div><button class="addb" data-a="add">新增</button></div>`}
+const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
+/* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
+let kdVal='',dtVal='',tmVal='',rpVal='';
+const defKd=()=>view==='today'?'dayonly':'none',effKd=()=>kdVal||defKd();
+const optSet=()=>!!(dtVal||tmVal||rpVal||(kdVal&&kdVal!==defKd()));
 const WH=32,wheelCol=k=>document.querySelector('#td-wp [data-k="'+k+'"]');
 const wheelIdx=el=>Math.max(0,Math.min(el.children.length-1,Math.round(el.scrollTop/WH)));
 const wheelVal=k=>{const el=wheelCol(k);return el?el.children[wheelIdx(el)].dataset.v:''};
@@ -61,20 +61,31 @@ const mark=el=>{const i=wheelIdx(el);[...el.children].forEach((c,j)=>c.classList
 document.addEventListener('scroll',e=>{const el=e.target;if(el.classList&&el.classList.contains('wc'))mark(el)},true);
 document.addEventListener('click',e=>{const it=e.target.closest&&e.target.closest('.wc .wi');if(!it)return;
   const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});
-function closeWheel(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
-  if(commit==='ok'){const h=wheelVal('h');tmVal=h?h+':'+wheelVal('m'):''}else if(commit==='clr')tmVal='';
-  w.remove();bk&&bk.remove();const b=document.querySelector('#todoRoot .tbtn');if(b)b.textContent='🕘 '+(tmVal||'選擇時間')}
-function openWheel(btn){closeWheel();
+const popIn=e=>{const t=e.target;if(!t.id)return;
+  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt')dtVal=t.value;else if(t.id==='td-rp')rpVal=t.value};
+document.addEventListener('input',popIn);document.addEventListener('change',popIn);
+function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k=effKd();w.dataset.kd=k;   // 依類型顯示／隱藏日期和時間
+  if(k==='dayonly'){const [h,m]=(tmVal||'').split(':'),hc=wheelCol('h'),mc=wheelCol('m');
+    hc.scrollTop=(h?parseInt(h)+1:0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH;mark(hc);mark(mc)}}
+function closePop(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
+  if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=''}
+  else if(effKd()==='dayonly'){const h=wheelVal('h');tmVal=h?h+':'+wheelVal('m'):''}
+  w.remove();bk&&bk.remove();const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
+function openPop(btn){closePop('ok');
   const col=(k,list)=>`<div class="wc" data-k="${k}">${list.map(v=>`<div class="wi" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div>`;
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
-  w.innerHTML=`<div class="wheel">${col('h',['--',...Array.from({length:24},(_,i)=>pad(i))])}<b>:</b>${col('m',MINS)}</div><div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
-  const fl=document.getElementById('todoFloat');fl.append(bk,w);
+  w.innerHTML=`<div class="prow"><select id="td-kd"><option value="dayonly">當天限定</option><option value="deadline">有截止日</option><option value="none">沒有期限</option></select></div>
+<div class="prow r-dt"><input type="date" id="td-dt"></div>
+<div class="r-tm"><div class="wheel">${col('h',['--',...Array.from({length:24},(_,i)=>pad(i))])}<b>:</b>${col('m',MINS)}</div></div>
+<label class="prow rp"><input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="—"> 天後重複提醒我</label>
+<div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
+  document.getElementById('todoFloat').append(bk,w);
+  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;
+  popFill();
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
-  let left=Math.max(8,Math.min(r.left,innerWidth-ww-8)),below=r.bottom+10+wh<=innerHeight-8,top=below?r.bottom+10:Math.max(8,r.top-10-wh);
-  w.style.cssText=`left:${left}px;top:${top}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up');
-  const [h,m]=(tmVal||'').split(':');
-  const hc=wheelCol('h'),mc=wheelCol('m');hc.scrollTop=(h?parseInt(h)+1:0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH;mark(hc);mark(mc)}   // 新增任務時「分」只給這幾個選項
+  const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),below=r.bottom+10+wh<=innerHeight-8;
+  w.style.cssText=`left:${left}px;${below?'top:'+(r.bottom+10):'bottom:'+(innerHeight-r.top+10)}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up')}
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
 /* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
 const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
@@ -98,11 +109,11 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
 function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
-function addTask(){const n=$('nm').value.trim();if(!n)return;
-  const kind=$('kd').value;let date=$('dt').value||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tmVal:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
+function addTask(){const n=$('nm').value.trim();if(!n)return;closePop('ok');
+  const kind=effKd();let date=dtVal||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tmVal:'',repeat:parseInt(rpVal)||0,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
-  S.tasks.push(t);tmVal='';save();render();$('nm').focus()}
+  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';save();render();$('nm').focus()}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
@@ -154,9 +165,9 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
   if(a==='peek'){if(!matchMedia('(hover:none)').matches)return;   // 電腦版用游標指上去，不用點
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
-  if(a==='wheel')return openWheel(el);
-  if(a==='w-ok')return closeWheel('ok');
-  if(a==='w-clr')return closeWheel('clr');
+  if(a==='opts')return openPop(el);
+  if(a==='w-ok')return closePop('ok');
+  if(a==='w-clr')return closePop('clr');
   if(a==='add')return addTask();
   if(a==='go')return go(el.dataset.v);
   if(a==='addfold'){addOpen=!addOpen;try{localStorage.setItem(AF,addOpen?'0':'1')}catch(e){}render();if(addOpen)setTimeout(()=>{const n=$('nm');if(n)n.focus()},0);return}
@@ -313,7 +324,7 @@ function startCloud(){
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
-function go(v){if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
+function go(v){closePop('ok');if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
   view=v;render();if(typeof window.showPage==='function')window.showPage('todo');markTabs(v)}
 window.todoGo=go;
 function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._td)return;
