@@ -162,12 +162,21 @@ body{overflow:auto}
   :is(#todoRoot,#todoFloat) .row.cmp:hover .mt{display:block}
 }
 @media (hover:none){
-  :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
-  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:contents}
-  :is(#todoRoot,#todoFloat) .row.cmp:not(.show) .meta{display:none}
-  :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{display:none}
-  :is(#todoRoot,#todoFloat) .row.cmp.show .side,:is(#todoRoot,#todoFloat) .row.cmp.show .del{display:none}
+  :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:pointer;display:grid;align-items:center;overflow:hidden;-webkit-tap-highlight-color:transparent}
+  /* 名稱與時間疊在同一格，往右推：名稱被推出去，時間從左邊滑進來，按鈕被推出右邊 */
+  :is(#todoRoot,#todoFloat) .row.cmp{--e:.3s cubic-bezier(.4,0,.2,1)}
+  :is(#todoRoot,#todoFloat) .row.cmp .bd>div:first-child,:is(#todoRoot,#todoFloat) .row.cmp .mt{grid-area:1/1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity var(--e),transform var(--e)}
+  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:block;opacity:0;transform:translateX(-32px);pointer-events:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .mt{opacity:1;transform:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{opacity:0;transform:translateX(32px)}
+  :is(#todoRoot,#todoFloat) .row.cmp .bd{transition:margin-right var(--e)}
+  :is(#todoRoot,#todoFloat) .row.cmp .side,:is(#todoRoot,#todoFloat) .row.cmp .del{white-space:nowrap;transition:transform var(--e),opacity var(--e)}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .bd{margin-right:-120px}
+  :is(#todoRoot,#todoFloat) .row.cmp.show:not(:has(.side)) .bd{margin-right:-42px}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .side{transform:translateX(130px);opacity:0;pointer-events:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .del{transform:translateX(50px);opacity:0;pointer-events:none}
 }
+@media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.cmp *{transition:none!important}}
 /* 新增任務：時＋分 */
 :is(#todoRoot,#todoFloat) .tsel{display:inline-flex;align-items:center;gap:4px}
 /* 設定 > 備份 */
