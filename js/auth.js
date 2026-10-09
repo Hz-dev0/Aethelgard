@@ -48,9 +48,7 @@ window._onFirebaseReady = async function() {
     //   避免在 loadFromCloud() 完成前，OTP 輸入格一閃而過。
     const _card = document.getElementById('ownerLoginCard');
     if (_card && document.getElementById('guestTokenSection')) {
-      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
-        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
-        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">正在載入資料…</div>';
+      _card.innerHTML = window._avHtml ? window._avHtml('正在載入資料…') : '<div class="av-text">正在載入資料…</div>';
     }
     _firebaseReadyFired = true;
     if (typeof window._onFirebaseReadyCallback === 'function') {
@@ -232,9 +230,7 @@ async function submitOwnerLogin() {
     // 切換鎖屏為載入狀態（登入成功後資料同步前不讓使用者看到背後介面）
     const _card = document.getElementById('ownerLoginCard');
     if (_card) {
-      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
-        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
-        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">Owner 已登入，正在載入資料…</div>';
+      _card.innerHTML = window._avHtml ? window._avHtml('Owner 已登入，正在載入資料…') : '<div class="av-text">Owner 已登入，正在載入資料…</div>';
     }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     // 重新觸發 ready 流程（init 完成後會呼叫 closeOwnerLoginOverlay）
@@ -269,9 +265,7 @@ async function submitGoogleLogin() {
     try { localStorage.setItem('aethelgard_fb_owner_uid', cred.user.uid); } catch(e2) {}
     const _card = document.getElementById('ownerLoginCard');
     if (_card) {
-      _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔐</div>'
-        + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
-        + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">Owner 已登入，正在載入資料…</div>';
+      _card.innerHTML = window._avHtml ? window._avHtml('Owner 已登入，正在載入資料…') : '<div class="av-text">Owner 已登入，正在載入資料…</div>';
     }
     if (typeof _lastSyncHash !== 'undefined') _lastSyncHash = '';
     _firebaseReadyFired = false;
@@ -791,9 +785,7 @@ async function submitGuestToken() {
       _loadingOverlay.style.display = 'flex';
       const _card = document.getElementById('ownerLoginCard');
       if (_card) {
-        _card.innerHTML = '<div style="font-size:40px;margin-bottom:16px">🔑</div>'
-          + '<div style="font-family:\'DM Serif Display\',serif;font-size:20px;color:var(--green);margin-bottom:8px">Aethelgard</div>'
-          + '<div style="font-size:13px;color:var(--text-dim);letter-spacing:0.04em">訪客模式啟用中，正在載入資料…</div>';
+        _card.innerHTML = window._avHtml ? window._avHtml('訪客模式啟用中，正在載入資料…') : '<div class="av-text">訪客模式啟用中，正在載入資料…</div>';
       }
     }
 

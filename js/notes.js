@@ -1360,6 +1360,17 @@ function notesImportJson() {
 }
 window.notesImportJson = notesImportJson;
 
+// 給「還原備份／復原」用：直接套用一整組標籤頁（不跳確認，確認由呼叫端處理）
+function notesApplyTabs(tabs) {
+  notesFlush();
+  notesFolderData = tabs;
+  notesTabIndex = 0;
+  notesEnsureDefaults();
+  notesSave();
+  notesRenderTabs();
+}
+window.notesApplyTabs = notesApplyTabs;
+
 function _notesDownload(filename, content, type) {
   const blob = new Blob([content], { type });
   const a = document.createElement('a');

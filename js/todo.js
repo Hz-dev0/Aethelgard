@@ -30,6 +30,7 @@ function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
 function toast(m,id){const t=$('toast');t.textContent=m;t.dataset.id=id||'';t.style.pointerEvents=id?'auto':'none';
   if(id){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),id?3500:1400)}
+const peek=new Set();   // 手機上「已翻到時間那面」的卡片（只存在記憶體，不同步）
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
   if(dayToday&&o.inToday){if(t.time)m.push(`<span class="meta warn">${t.time}</span>`)}
@@ -38,7 +39,8 @@ function row(t,o={}){const m=[],d=today();
   let side='';
   if(auto){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
-  return `<div class="row"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"><div>${esc(t.name)}</div>${m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
+  const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
+  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}</div>${m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
 const AF='aeth_todo_addfold';
@@ -47,8 +49,9 @@ const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
 <select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
-<input type="date" id="td-dt"><input type="time" id="td-tm"></div>
+<input type="date" id="td-dt"><span class="tsel"><select id="td-th" aria-label="時"><option value="">時</option>${Array.from({length:24},(_,i)=>`<option value="${pad(i)}">${pad(i)}</option>`).join('')}</select><b>:</b><select id="td-mn" aria-label="分">${MINS.map(m=>`<option value="${m}">${m}</option>`).join('')}</select></span></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
+const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
 /* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
 const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
@@ -65,7 +68,7 @@ function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
 function renderAll(){const G={week:[],month:[],later:[],today:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',later:'有空再說',today:'今天'};
   S.tasks.filter(t=>!t.done).forEach(t=>G[grp(t)].push(t));
   let h=`<div class="hrow"><h1>全部</h1>${addTg()}</div><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
-  for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t)).join(''):'<div class="empty">空的</div>');
+  for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t,{cmp:1})).join(''):'<div class="empty">空的</div>');
   return h}
 function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,5);
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
@@ -74,10 +77,11 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
 function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
 function addTask(){const n=$('nm').value.trim();if(!n)return;
   const kind=$('kd').value;let date=$('dt').value||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?$('tm').value:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'&&$('th').value?$('th').value+':'+$('mn').value:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
   S.tasks.push(t);save();render();$('nm').focus()}
-function ask(msg,ok){pend=ok;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
+let askBack=null;
+function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
   const pool=S.tasks.filter(t=>!t.done&&grp(t)==='later'&&S.skip[t.id]!==d);if(!pool.length)return;
   const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
@@ -125,6 +129,8 @@ document.addEventListener('click',e=>{
   if(fpOpen&&!e.target.closest('#td-fp')){fpOpen=false;renderFp()}
   if(!e.target.closest('#todoRoot,#todoFloat'))return;
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
+  if(a==='peek'){if(!matchMedia('(hover:none)').matches)return;   // 電腦版用游標指上去，不用點
+    const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
   if(a==='add')return addTask();
   if(a==='go')return go(el.dataset.v);
   if(a==='addfold'){addOpen=!addOpen;try{localStorage.setItem(AF,addOpen?'0':'1')}catch(e){}render();if(addOpen)setTimeout(()=>{const n=$('nm');if(n)n.focus()},0);return}
@@ -143,10 +149,12 @@ document.addEventListener('click',e=>{
         'auth/operation-not-allowed':'Firebase 後台尚未啟用 Google 登入方式','auth/unauthorized-domain':'這個網址尚未加入 Firebase 授權網域'};
       say('❌ '+(m[err.code]||('綁定失敗：'+(err.code||err.message))))});return}
   if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
-  if(a==='s-tab'){stab=el.dataset.k;return openSet()}
-  if(a==='s-exp'){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'})),x=document.createElement('a');x.href=u;x.download='tasks-'+today()+'.json';x.click();URL.revokeObjectURL(u);return}
-  if(a==='c-no'){pend=null;$('ov').className='';return}
-  if(a==='c-yes'){const f=pend;pend=null;$('ov').className='';f&&f();return}
+  if(a==='s-tab'){stab=el.dataset.k;bkMsg='';return openSet()}
+  if(a==='s-exp'){dl('tasks-'+today()+'.json',JSON.stringify(S,null,1));bkMsg='已下載任務備份';return openSet()}
+  if(a==='s-full'){dl('aethelgard-backup-'+today()+'.json',JSON.stringify(fullBackup(),null,1));bkMsg='已下載完整備份（任務＋筆記）';return openSet()}
+  if(a==='s-undo'){const pv=readPrev();if(!pv)return;ask('復原上次還原？\n會把任務'+(pv.tabs?'和筆記':'')+'換回還原之前的樣子。',()=>{bkMsg=applyBackup({tasks:pv.tasks,tabs:pv.tabs})+'（已復原）';openSet()},openSet);return}
+  if(a==='c-no'){pend=null;$('ov').className='';if(askBack){const b=askBack;askBack=null;b()}return}
+  if(a==='c-yes'){const f=pend;pend=null;askBack=null;$('ov').className='';f&&f();return}
   if(a.startsWith('m-')){const t=by(sugId);$('ov').className='';if(!t)return;
     if(a==='m-today')act('today',t.id);else if(a==='m-skip'){S.skip[t.id]=today();save()}else act('del',t.id);return}
   const t=by(id);if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r)return fx(r,()=>act(a,id))}
@@ -155,7 +163,42 @@ $('ov').addEventListener('click',e=>{if(e.target.id!=='td-ov')return;if(ovMode==
 document.addEventListener('change',e=>{const el=e.target;if(el.matches('input[type=date][data-a]'))act(el.dataset.a,el.dataset.id,el.value)});
 $('toast').onclick=()=>{const id=$('toast').dataset.id;if(id){$('toast').classList.remove('on');act('chk',id)}};
 $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
-let stab='gen';
+let stab='gen',bkMsg='';
+/* ── 備份／還原 ── */
+const KB=K+'_lastbak',KP=K+'_prev';   // 上次備份時間、還原前自動留的一份
+const notesTabs=()=>{try{const p=typeof window._notesGetSyncPayload==='function'&&window._notesGetSyncPayload();return p&&Array.isArray(p.tabs)?p.tabs:null}catch(e){return null}};
+function dl(name,text){const u=URL.createObjectURL(new Blob([text],{type:'application/json'})),x=document.createElement('a');x.href=u;x.download=name;document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  try{localStorage.setItem(KB,String(Date.now()))}catch(e){}}
+function fullBackup(){const tabs=notesTabs();return Object.assign({app:'aethelgard',exportedAt:new Date().toISOString()},S,tabs?{notes:{tabs}}:{})}
+/* 看懂各種備份檔：完整備份、舊版只有任務的備份、只有筆記的備份 */
+function parseBackup(j){if(!j||typeof j!=='object')return null;let tasks=null,tabs=null;
+  if(Array.isArray(j.tasks)){tasks=Object.assign({},j);delete tasks.notes;delete tasks.exportedAt;delete tasks.app}
+  const nt=(j.notes&&j.notes.tabs)||j.tabs||(Array.isArray(j)?j:null);if(Array.isArray(nt)&&nt.length)tabs=nt;
+  return tasks||tabs?{tasks,tabs,at:j.exportedAt||''}:null}
+const readPrev=()=>{try{return JSON.parse(localStorage.getItem(KP))}catch(e){return null}};
+function applyBackup(b){   // 還原前先把目前的資料留一份，之後可以按「復原」
+  try{localStorage.setItem(KP,JSON.stringify({at:Date.now(),tasks:S,tabs:notesTabs()}))}catch(e){}
+  const out=[];
+  if(b.tasks){S=b.tasks;norm();save();render();out.push('任務 '+S.tasks.length+' 件')}
+  if(b.tabs&&typeof window.notesApplyTabs==='function'){window.notesApplyTabs(b.tabs);out.push('筆記 '+b.tabs.length+' 個標籤')}
+  return '已還原：'+out.join('、')}
+const ago=ts=>{if(!ts)return null;const n=Math.floor((Date.now()-ts)/864e5);return n<=0?'今天':n===1?'昨天':n+' 天前'};
+function backupPane(){
+  const last=parseInt((()=>{try{return localStorage.getItem(KB)}catch(e){return ''}})())||0,lg=ago(last),open=S.tasks.filter(t=>!t.done).length,nt=notesTabs(),pv=readPrev();
+  const stale=!last||Date.now()-last>14*864e5;
+  const adv=`<details class="sadv"><summary>只匯出／匯入單一項目</summary>
+<div class="sh">任務</div><div class="brow"><button class="b q sbtn" data-a="s-exp">只下載任務</button></div>
+<div class="sh">筆記</div>
+<div class="brow">${[['notesExportTxt','TXT'],['notesExportMd','MD'],['notesExportJson','JSON']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">匯出 ${l}</button>`).join('')}</div>
+<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">只匯入筆記</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步筆記</button></div></details>`;
+  return `<div class="bkst"><div>目前資料：任務 ${S.tasks.length} 件（未完成 ${open}）${nt?'・筆記 '+nt.length+' 個標籤':''}</div><div class="${stale?'warn':''}">上次備份：${lg||'還沒備份過'}${last&&stale?'，建議再備份一次':''}</div></div>
+<button class="b dk sbtn" data-a="s-full" style="margin-top:12px">下載完整備份</button>
+<div class="sd" style="margin-top:4px">任務和筆記放在同一個檔案。</div>
+<label class="b q sbtn upl" style="margin-top:12px">還原備份…<input type="file" id="td-imp" accept=".json,application/json"></label>
+<div class="sd" style="margin-top:4px">選檔後會先顯示備份內容，確認才會取代目前資料；還原前會自動留一份目前的，可以復原。</div>
+${bkMsg?`<div class="bkmsg">${esc(bkMsg)}</div>`:''}
+${pv?`<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-undo">復原上次還原（${ago(pv.at)}留的）</button></div>`:''}
+${adv}`}
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
   const row=(t,d,c)=>`<div class="srow"><div class="sx"><div class="st">${t}</div>${d?`<div class="sd">${d}</div>`:''}</div><div class="sc">${c}</div></div>`;
   const TB=[['gen','⚙','一般'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
@@ -176,15 +219,18 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
     +(hasG?row('Google 登入','已綁定，用 Google 登入會看到同一份資料','<span class="okmark">✓ 已綁定</span>')
           :row('Google 登入','綁定後，也能用 Google 登入並看到同一份資料','<button class="b q" data-a="s-link" style="border-radius:8px;min-height:36px;padding:0 14px">綁定</button>'))
     +`<button class="b dk sbtn" data-a="s-out" style="margin-top:14px">登出</button><div class="ver">版本 ${esc(window._BUILD||'—')}</div>`,
-  exp:`<div class="sh">任務</div>
-<div class="brow"><button class="b sbtn" data-a="s-exp">下載備份</button><label class="b q sbtn upl">匯入備份<input type="file" id="td-imp" accept=".json"></label></div>
-<div class="sd" id="td-inote" style="margin-top:6px">匯入後，會取代目前所有任務資料。</div>
-<div class="sh">筆記</div>
-<div class="brow">${[['notesExportTxt','TXT'],['notesExportMd','MD'],['notesExportJson','JSON']].map(([f,l])=>`<button class="b q sbtn" data-a="s-n" data-f="${f}">匯出 ${l}</button>`).join('')}</div>
-<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-n" data-f="notesImportJson">從 JSON 匯入</button><button class="b q sbtn" data-a="s-n" data-f="forceSyncNotesFromMenu">立即同步到雲端</button></div>`};
+  exp:backupPane()};
   $('ov').innerHTML=`<div class="box sb p1" style="height:clamp(380px,60vh,540px);max-height:92vh;overflow:hidden"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane" style="min-height:0"><div class="pc" style="min-height:0;overflow-y:auto">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
   $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();}}});
-  const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(s=>{try{const j=JSON.parse(s);if(!Array.isArray(j.tasks))throw 0;S=j;norm();save();render();$('inote').textContent='匯入完成'}catch(x){$('inote').textContent='檔案格式不對'}})};
+  const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+    f.text().then(txt=>{let j;try{j=JSON.parse(txt)}catch(x){}const b=parseBackup(j);
+      if(!b){bkMsg='這個檔案看不出是備份檔（需要是從這裡下載的 .json）';return openSet()}
+      const when=b.at&&!isNaN(new Date(b.at))?'（'+new Date(b.at).toLocaleDateString()+' 的備份）':'';
+      const nt=notesTabs(),L=['還原「'+f.name+'」'+when+'？'];
+      if(b.tasks)L.push('任務：目前 '+S.tasks.length+' 件 → 備份裡 '+b.tasks.tasks.length+' 件');
+      if(b.tabs)L.push('筆記：目前 '+(nt?nt.length:0)+' 個標籤 → 備份裡 '+b.tabs.length+' 個標籤');
+      L.push('這些會取代目前的資料。');
+      ask(L.join('\n'),()=>{bkMsg=applyBackup(b);openSet()},openSet)})};
   if(typeof window._tokRestore==='function')window._tokRestore();
   $('ov').className='on'}
 $('gear').onclick=openSet;

@@ -19,14 +19,19 @@
     + '@keyframes avTwinkle{0%,100%{opacity:.15;transform:scale(.55) rotate(0)}50%{opacity:1;transform:scale(1.2) rotate(30deg)}}'
     + '@media (prefers-reduced-motion:reduce){.av-ring{animation-duration:2.4s}.av-star{animation:none;opacity:.8}}';
 
-  var AV_HTML = '<div class="av">'
-    + '<div class="av-stage">'
-    +   '<svg class="av-ring" viewBox="0 0 56 56" aria-hidden="true"><circle class="t" cx="28" cy="28" r="22"/><circle class="a" cx="28" cy="28" r="22"/></svg>'
-    +   '<span class="av-star a">✦</span><span class="av-star b">✦</span><span class="av-star c">✦</span>'
-    + '</div>'
-    + '<div class="av-title">Aethelgard</div>'
-    + '<div class="av-text">正在驗證身份…</div>'
-    + '</div>';
+  // 所有載入畫面共用同一個外觀（轉圈圈＋閃爍星星），只有底下那行字不同
+  function avHtml(text) {
+    return '<div class="av">'
+      + '<div class="av-stage">'
+      +   '<svg class="av-ring" viewBox="0 0 56 56" aria-hidden="true"><circle class="t" cx="28" cy="28" r="22"/><circle class="a" cx="28" cy="28" r="22"/></svg>'
+      +   '<span class="av-star a">✦</span><span class="av-star b">✦</span><span class="av-star c">✦</span>'
+      + '</div>'
+      + '<div class="av-title">Aethelgard</div>'
+      + '<div class="av-text">' + text + '</div>'
+      + '</div>';
+  }
+  window._avHtml = avHtml;   // auth.js 的「正在載入資料」「訪客載入中」也用這個
+  var AV_HTML = avHtml('正在驗證身份…');
 
   var st = document.createElement('style'); st.textContent = AV_CSS; (document.head || document.documentElement).appendChild(st);
 

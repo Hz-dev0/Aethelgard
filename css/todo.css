@@ -149,3 +149,24 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .cal:active{background:#E8DDB6}
 :is(#todoRoot,#todoFloat) .cal input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px}
 :is(#todoRoot,#todoFloat) .del.wide{width:74px;font-size:13px}
+
+/* ── 全部頁：卡片只留一列。電腦版游標指上去顯示第二列；手機點卡片白色部分切換 ── */
+:is(#todoRoot,#todoFloat) .row.cmp .bd>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:default}
+@media (hover:hover){
+  :is(#todoRoot,#todoFloat) .row.cmp .meta{display:none}
+  :is(#todoRoot,#todoFloat) .row.cmp:hover .meta{display:inline}
+}
+@media (hover:none){
+  :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
+  :is(#todoRoot,#todoFloat) .row.cmp:not(.show) .meta{display:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{display:none}
+}
+/* 新增任務：時＋分 */
+:is(#todoRoot,#todoFloat) .tsel{display:inline-flex;align-items:center;gap:4px}
+/* 設定 > 備份 */
+:is(#todoRoot,#todoFloat) .bkst{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7}
+:is(#todoRoot,#todoFloat) .bkst .warn{color:#B8962E}
+:is(#todoRoot,#todoFloat) .bkmsg{margin-top:10px;font-size:13px;color:#2e7d4f;line-height:1.5}
+:is(#todoRoot,#todoFloat) .sadv summary{font-size:12px;color:var(--faint);cursor:pointer;margin-top:16px}
+:is(#todoRoot,#todoFloat) .box .t{white-space:pre-line}
