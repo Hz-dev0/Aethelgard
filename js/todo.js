@@ -41,7 +41,8 @@ function row(t,o={}){const m=[],d=today();
   if(auto||t.kind==='dayonly'){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
+  const h=`<div class="row${t.id===detId?' dopen':''}${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`;
+  return h+(t.id===detId?detPanel(t,true):'')}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
 const AF='aeth_todo_addfold';
@@ -95,27 +96,42 @@ function qHint(){const h=document.getElementById('td-qh'),i=document.getElementB
   if(!q){h.style.display='none';h.innerHTML='';return}
   h.style.display='flex';h.innerHTML=`<span>${esc(q.label)}</span><button type="button" data-a="qh-x" aria-label="取消自動辨識">✕</button>`}
 document.addEventListener('input',e=>{if(e.target.id==='td-nm'){if(!e.target.value)qhOff=false;qHint()}});
-/* ── 任務詳細氣泡：備註＋小步驟。手機長按卡片、電腦右鍵卡片開啟；平常畫面不多任何按鈕 ── */
+/* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
 let detId=null,detSave=0,lpT=null,lpPos=null,lpFired=false;
 const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✓':''}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
-function closeDet(){const w=document.getElementById('td-dp'),bk=document.getElementById('td-db');if(!w)return;
-  clearTimeout(detSave);const t=by(detId);if(t){const v=w.querySelector('#td-nt').value;t.note=v.trim()?v:'';if(!(t.subs||[]).length)delete t.subs;save()}
-  w.remove();bk&&bk.remove();detId=null;render()}
-function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');closeDet();detId=t.id;
-  const bk=document.createElement('div');bk.id='td-db';bk.dataset.a='d-ok';
-  const w=document.createElement('div');w.id='td-dp';
-  w.innerHTML=`<div class="dt">${esc(t.name)}</div><div id="td-ds">${detSubs(t)}</div><div class="dadd"><input id="td-sn" placeholder="加一個小步驟" autocomplete="off" enterkeyhint="done"><button type="button" data-a="d-add" aria-label="新增小步驟">＋</button></div><textarea id="td-nt" rows="3" placeholder="備註（連結、細節…）"></textarea><div class="wbtns"><button class="b" data-a="d-ok">完成</button></div>`;
-  document.getElementById('todoFloat').append(bk,w);
-  const nt=w.querySelector('#td-nt');nt.value=t.note||'';
-  const r=row.getBoundingClientRect(),ww=w.offsetWidth,wh=w.scrollHeight+2,left=Math.max(8,Math.min(r.left,innerWidth-ww-8));
-  const below=innerHeight-r.bottom-16,above=r.top-16,dn=wh<=below||below>=above;
-  w.style.cssText=`left:${left}px;${dn?'top:'+(r.bottom+8):'bottom:'+(innerHeight-r.top+8)}px;max-height:${Math.max(160,(dn?below:above))}px`}
-const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=document.getElementById('td-ds');if(l)l.innerHTML=detSubs(t)};
-function detAdd(){const i=document.getElementById('td-sn'),v=i&&i.value.trim();if(!v)return;
+const linkify=txt=>esc(txt).replace(/(https?:\/\/[^\s<]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
+  return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});   // 備註裡的網址變成可以點的連結
+function detPanel(t,on){const hasN=!!t.note;
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><div class="dadd"><input id="td-sn" placeholder="加一個小步驟" autocomplete="off" enterkeyhint="done"><button type="button" data-a="d-add" aria-label="新增小步驟">＋</button></div><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結、細節…）">${esc(t.note||'')}</textarea><div class="dfoot"><button type="button" class="b q" data-a="d-ok">收起</button></div></div></div></div>`}
+const P=()=>document.getElementById('td-dpn');
+const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
+function closeDet(imm){const pn=P();if(!pn){detId=null;return}
+  clearTimeout(detSave);const t=by(detId),row=pn.previousElementSibling;
+  if(t){const nt=pn.querySelector('#td-nt');if(nt)t.note=nt.value.trim()?nt.value:'';if(!(t.subs||[]).length)delete t.subs;save()}
+  detId=null;pn.removeAttribute('id');
+  if(row){row.classList.remove('dopen');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
+  if(imm){pn.remove();return}
+  pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
+function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
+  if(detId===t.id)return closeDet();   // 再按一次就收起
+  closeDet(true);detId=t.id;row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
+  const pn=row.nextElementSibling;requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
+  setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
+const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t)};
+function detAdd(){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';i.focus()}
-document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,el.scrollHeight)+'px';
+function noteEdit(on){const nv=pq('#td-nv'),nt=pq('#td-nt');if(!nv||!nt)return;
+  if(on){nv.classList.add('hid');nt.classList.remove('hid');nt.style.height='auto';nt.style.height=Math.min(160,Math.max(64,nt.scrollHeight))+'px';nt.focus();nt.setSelectionRange(nt.value.length,nt.value.length)}
+  else{const t=by(detId);if(t){t.note=nt.value.trim()?nt.value:'';save();nv.innerHTML=linkify(t.note);
+    if(t.note){nv.classList.remove('hid');nt.classList.add('hid')}}}}
+document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,Math.max(64,el.scrollHeight))+'px';
   const t=by(detId);if(!t)return;t.note=el.value;clearTimeout(detSave);detSave=setTimeout(save,500)});
+document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false)});   // 寫完離開輸入框，備註就變回可以點連結的樣子
 document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
+document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
+  if(t.closest&&t.closest('#td-nv')&&!t.closest('a')){noteEdit(true);return}            // 點備註的空白處 → 編輯；點連結 → 照常開連結
+  if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')))return;
+  closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
 /* 開啟方式：手機長按、電腦右鍵 */
 const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
 document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;
@@ -125,7 +141,7 @@ document.addEventListener('pointermove',e=>{if(lpT&&Math.hypot(e.clientX-lpPos.x
 ['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(lpT);lpT=null;if(lpFired)setTimeout(()=>{lpFired=false},400)}));
 document.addEventListener('click',e=>{if(lpFired){lpFired=false;e.stopPropagation();e.preventDefault()}},true);   // 長按放開後不要又當成一次點擊
 document.addEventListener('contextmenu',e=>{const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;e.preventDefault();
-  const r=bd.closest('.row'),id=rowIdOf(r);if(id&&detId!=id)openDet(id,r)});
+  const r=bd.closest('.row'),id=rowIdOf(r);if(id)openDet(id,r)});
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
@@ -444,7 +460,7 @@ function startCloud(){
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
-function go(v){closePop('ok');closeDet();if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
+function go(v){closePop('ok');closeDet(true);if(v==='notes'){if(typeof window.showPage==='function')window.showPage('notes');markTabs('notes');return}
   view=v;render();if(typeof window.showPage==='function')window.showPage('todo');markTabs(v)}
 window.todoGo=go;
 function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._td)return;
