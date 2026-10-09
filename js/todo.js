@@ -27,9 +27,9 @@ function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))retur
 function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
   if(t.kind==='dayonly')return d===0?'今天'+(t.time?' '+t.time+' ':'')+'才能做':d>0?t.date+tm+'（剩 '+d+' 天）':'日子已過';
   return d===0?'今天截止':d>0?'剩 '+d+' 天（'+t.date+'）':'已過期 '+(-d)+' 天'}
-function toast(m,id){const t=$('toast');t.textContent=m;t.dataset.id=id||'';t.style.pointerEvents=id?'auto':'none';
-  if(id){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
-  t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),id?3500:1400)}
+function toast(m,id,fn,ms){const t=$('toast');t.textContent=m;t.dataset.id=id||'';toast.fn=fn||null;t.style.pointerEvents=id||fn?'auto':'none';   // fn：點「復原」要做的事（刪除／新增的撤銷）
+  if(id||fn){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
+  t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||(id?3500:1400))}
 const peek=new Set();   // 手機上「已翻到時間那面」的卡片（只存在記憶體，不同步）
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
@@ -37,7 +37,7 @@ function row(t,o={}){const m=[],d=today();
   else if(t.kind!=='none'&&t.date)m.push(`<span class="meta ${diff(t.date)<=S.cfg.soon?'warn':''}">${dueLabel(t)}</span>`);
   if(t.repeat)m.push(`<span class="meta">↻ 每 ${t.repeat} 天</span>`);
   let side='';
-  if(auto){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
+  if(auto||t.kind==='dayonly'){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
   return `<div class="row${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`}
@@ -113,7 +113,8 @@ function addTask(){const n=$('nm').value.trim();if(!n)return;closePop('ok');
   const kind=effKd();let date=dtVal||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
   const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tmVal:'',repeat:parseInt(rpVal)||0,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
-  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';save();render();$('nm').focus()}
+  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';save();render();$('nm').focus();
+  toast('已新增',null,()=>{S.tasks=S.tasks.filter(x=>x!==t);save();render()},5000)}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
@@ -124,8 +125,37 @@ function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cf
 /* 完成任務特效：① 卡片「瞬間」罩上一層半透明的白金色（任務名稱仍看得到），並微微放大發光
    → ② 白光從左掃過 → ③ 碎成藍／金／白交雜的方塊落下，同時迸出幾顆金色小星星 → ④ 卡片消失。
    全部用程式直接建立元素與動畫（不依賴 CSS 檔，不會被舊快取或樣式蓋掉）。 */
-function fx(r,cb){navigator.vibrate&&navigator.vibrate(15);
-  const D=640,b0=r.getBoundingClientRect();
+/* ── 完成動畫：依「今天第幾件」換不同的版本（只有破紀錄才會碎裂） ──
+   1～2 件：星星原地快速放大縮小、淡出　3～5 件：星星往上飄出（比 1～2 件大一點點）
+   6 件以上：往上飄的星星＋爆開（越多件越強）　破今日紀錄：碎裂＋最大版＋星星雨＋文字 */
+const fxR=(a,b)=>a+Math.random()*(b-a);
+const fxMk=(css,txt)=>{const e=document.createElement('i');e.style.cssText='position:fixed;pointer-events:none;font-style:normal;line-height:1;'+css;if(txt)e.textContent=txt;document.body.append(e);return e};
+const fxGo=(e,kf,o)=>{e.animate(kf,Object.assign({fill:'forwards'},o)).onfinish=()=>e.remove()};
+const fxStar=(x,y,sz,col)=>fxMk(`left:${x}px;top:${y}px;font-size:${sz}px;color:${col||'#e8c35a'};text-shadow:0 0 6px rgba(232,195,90,.8);z-index:22`,'✦');
+function fxTwinkle(b,n){   // 1～2 件：原地閃，快速小幅放大縮小，然後淡出
+  for(let i=0;i<4+n*2;i++){const st=fxStar(b.left-10+fxR(0,b.width+20),b.top-12+fxR(0,b.height+24),fxR(10,18),i%3?'#e8c35a':'#fff');
+    fxGo(st,[{opacity:0,transform:'scale(.3)'},{opacity:1,transform:'scale(1)',offset:.15},{opacity:1,transform:'scale(1.3)',offset:.3},{opacity:.85,transform:'scale(.8)',offset:.45},
+      {opacity:1,transform:'scale(1.25)',offset:.6},{opacity:.85,transform:'scale(.85)',offset:.75},{opacity:0,transform:'scale(.5)'}],{duration:fxR(850,1150),delay:fxR(0,350),easing:'ease-in-out'})}}
+function fxRise(b,big){   // 金色小星星從卡片往上迸出（big：3～5 件用，比 1～2 件大一點點）
+  for(let k=0;k<6;k++){const st=fxStar(b.left+b.width*fxR(.1,.9),b.top+b.height*fxR(.2,.7),big?fxR(16,26):fxR(10,20));
+    fxGo(st,[{transform:'translate(0,0) scale(.3) rotate(0)',opacity:0},{transform:`translate(${fxR(-25,25)}px,${fxR(-54,-24)}px) scale(1.2) rotate(40deg)`,opacity:1,offset:.35},{transform:`translate(${fxR(-35,35)}px,${fxR(-90,-50)}px) scale(.5) rotate(90deg)`,opacity:0}],{duration:fxR(700,1000),delay:fxR(0,150),easing:'ease-out'})}}
+function fxBurst(b,n,rec){const L=rec?12:n-5,cx=b.left+b.width/2,cy=b.top+b.height/2,N=Math.min(16+L*6,rec?90:68),far=Math.min(100+L*16,rec?300:230);
+  for(let i=0;i<N;i++){const a=fxR(0,6.283),d=fxR(far*.4,far),big=i%4===0,st=fxStar(cx,cy,big?fxR(20,32):fxR(10,18),i%3?'#e8c35a':(i%2?'#fff':'#9ec1ea'));
+    fxGo(st,[{transform:'translate(-50%,-50%) scale(.2)',opacity:0},{transform:`translate(calc(-50% + ${Math.cos(a)*d*.7}px),calc(-50% + ${Math.sin(a)*d*.7}px)) scale(1.2) rotate(${fxR(-90,90)}deg)`,opacity:1,offset:.4},
+      {transform:`translate(calc(-50% + ${Math.cos(a)*d}px),calc(-50% + ${Math.sin(a)*d+30}px)) scale(.3) rotate(${fxR(-180,180)}deg)`,opacity:0}],{duration:fxR(900,1500),delay:fxR(0,120),easing:'cubic-bezier(.2,.7,.3,1)'})}
+  const rings=1+(L>=3)+(L>=6)+(rec?1:0);
+  for(let k=0;k<rings;k++){const o=fxMk(`left:${cx}px;top:${cy}px;width:20px;height:20px;border:${3-(k>1)}px solid ${k%2?'#fff':'#e8c35a'};border-radius:50%;z-index:19;box-shadow:0 0 14px rgba(232,195,90,.7)`);
+    fxGo(o,[{transform:'translate(-50%,-50%) scale(.3)',opacity:.9},{transform:`translate(-50%,-50%) scale(${far/10+k*3})`,opacity:0}],{duration:900+k*200,delay:k*140,easing:'ease-out'})}
+  if(L>=4||rec){const f=fxMk(`inset:0;z-index:18;background:radial-gradient(circle at ${cx}px ${cy}px,rgba(255,244,200,${rec?.7:.35}),transparent 65%)`);fxGo(f,[{opacity:0},{opacity:1,offset:.15},{opacity:0}],{duration:rec?1400:700})}}
+function fxRecord(b){fxBurst(b,0,true);
+  for(let i=0;i<46;i++){const st=fxStar(fxR(0,innerWidth),-30,fxR(12,28),i%3?'#e8c35a':'#fff'),x=fxR(-30,30);
+    fxGo(st,[{transform:'translate(0,0) rotate(0)',opacity:0},{opacity:1,offset:.12},{opacity:.4,offset:.35},{opacity:1,offset:.55},{opacity:.4,offset:.75},{transform:`translate(${x}px,${innerHeight+60}px) rotate(${fxR(-120,120)}deg)`,opacity:0}],{duration:fxR(2200,3600),delay:fxR(200,1600),easing:'linear'})}
+  const t=fxMk('left:50%;top:38%;z-index:30;font-size:26px;font-weight:700;letter-spacing:.12em;color:#fff;white-space:nowrap;text-shadow:0 0 18px rgba(232,195,90,.95),0 2px 10px rgba(0,0,0,.35)','✦ 今日新紀錄 ✦');
+  fxGo(t,[{transform:'translate(-50%,-50%) scale(.5)',opacity:0},{transform:'translate(-50%,-50%) scale(1.15)',opacity:1,offset:.2},{transform:'translate(-50%,-50%) scale(1)',opacity:1,offset:.75},{transform:'translate(-50%,-70%) scale(1)',opacity:0}],{duration:2200,delay:300,easing:'ease-out'})}
+function fx(r,cb,n,rec){
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return cb();   // 系統設定減少動態效果就直接完成
+  navigator.vibrate&&navigator.vibrate(rec?[20,40,20,40,40]:15);
+  const shatter=rec,D=640,b0=r.getBoundingClientRect();
   const o=document.createElement('div');   // 蓋在卡片上的白金色薄紗（半透明：底下的字還看得到）
   o.style.cssText=`position:fixed;z-index:21;left:${b0.left}px;top:${b0.top}px;width:${b0.width}px;height:${b0.height}px;border-radius:10px;overflow:hidden;pointer-events:none;`
     +'background:rgba(236,224,184,.5);opacity:0';
@@ -137,14 +167,16 @@ function fx(r,cb){navigator.vibrate&&navigator.vibrate(15);
   o.animate(pop,{duration:D,easing:'ease-out',fill:'forwards'});
   r.animate(pop,{duration:D,easing:'ease-out',fill:'forwards'});
   sw.animate([{transform:'translateX(-120%)'},{transform:'translateX(120%)'}],{duration:D-110,delay:80,easing:'linear',fill:'forwards'});
-  setTimeout(()=>{o.remove();const b=r.getBoundingClientRect(),C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#ffffff'],cols=12,rows=3,w=b.width/cols,h=b.height/rows;
-    for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=document.createElement('i');
-      p.style.cssText=`position:fixed;z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]};pointer-events:none`;document.body.append(p);
-      p.animate([{transform:'none',opacity:1},{transform:`translate(${(Math.random()-.5)*80}px,${140+Math.random()*120}px) rotate(${(Math.random()-.5)*160}deg)`,opacity:0}],{duration:650+Math.random()*350,delay:Math.random()*120,easing:'cubic-bezier(.5,0,1,.6)'}).onfinish=()=>p.remove()}
-    for(let k=0;k<6;k++){const st=document.createElement('span');st.textContent='✦';   // 金色小星星往上迸出
-      const sz=10+Math.random()*10;
-      st.style.cssText=`position:fixed;z-index:22;left:${b.left+b.width*(.1+.8*Math.random())}px;top:${b.top+b.height*(.2+.5*Math.random())}px;font-size:${sz}px;line-height:1;color:#e8c35a;text-shadow:0 0 6px rgba(232,195,90,.8);pointer-events:none`;document.body.append(st);
-      st.animate([{transform:'translate(0,0) scale(.3) rotate(0)',opacity:0},{transform:`translate(${(Math.random()-.5)*50}px,${-24-Math.random()*30}px) scale(1.2) rotate(40deg)`,opacity:1,offset:.35},{transform:`translate(${(Math.random()-.5)*70}px,${-50-Math.random()*40}px) scale(.5) rotate(90deg)`,opacity:0}],{duration:700+Math.random()*300,delay:Math.random()*150,easing:'ease-out'}).onfinish=()=>st.remove()}
+  setTimeout(()=>{o.remove();
+    if(!shatter){   // 不碎：卡片輕輕縮小淡出，畫面留給星星
+      r.animate([{opacity:1,transform:'scale(1.02)'},{opacity:0,transform:'scale(.96)'}],{duration:380,easing:'ease-in',fill:'forwards'});
+      if(n<3)fxTwinkle(b0,n);else if(n<6)fxRise(b0,true);else{fxRise(b0);fxBurst(b0,n)}
+      setTimeout(cb,360);return}
+    const b=r.getBoundingClientRect(),cols=12,rows=3,w=b.width/cols,h=b.height/rows,C=['#e8c35a','#f3dc8f','#3A6EA5','#b9c9dd','#ffffff'];
+    for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const p=fxMk(`z-index:20;left:${b.left+i*w}px;top:${b.top+j*h}px;width:${w}px;height:${h}px;background:${C[(i*7+j*3)%5]}`);
+      fxGo(p,[{transform:'none',opacity:1},{transform:`translate(${fxR(-40,40)}px,${fxR(140,260)}px) rotate(${fxR(-80,80)}deg)`,opacity:0}],{duration:fxR(650,1000),delay:fxR(0,120),easing:'cubic-bezier(.5,0,1,.6)'})}
+    fxRise(b);
+    if(rec)fxRecord(b);
     r.style.visibility='hidden';setTimeout(cb,350)},D+20)}
 function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
@@ -156,7 +188,8 @@ function act(a,id,val){const t=by(id);if(!t)return;
   else if(a==='today'){t.on=today();t.touched=Date.now()}
   else if(a==='untoday')t.on=null;
   else if(a==='resched'){if(!val)return;t.date=val;t.touched=Date.now()}
-  else if(a==='del'){ask('確定要刪除「'+t.name+'」嗎？',()=>{S.tasks=S.tasks.filter(x=>x!==t);save();render()});return}
+  else if(a==='del'){const i=S.tasks.indexOf(t);S.tasks=S.tasks.filter(x=>x!==t);save();render();   // 直接刪，5 秒內可按「復原」放回原位
+    toast('已刪除',null,()=>{S.tasks.splice(Math.min(i,S.tasks.length),0,t);save();render()},5000);return}
   else return;save();render()}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.closest&&e.target.closest('.add'))addTask()});
 document.addEventListener('click',e=>{
@@ -197,11 +230,11 @@ document.addEventListener('click',e=>{
   if(a==='c-yes'){const f=pend;pend=null;askBack=null;$('ov').className='';f&&f();return}
   if(a.startsWith('m-')){const t=by(sugId);$('ov').className='';if(!t)return;
     if(a==='m-today')act('today',t.id);else if(a==='m-skip'){S.skip[t.id]=today();save()}else act('del',t.id);return}
-  const t=by(id);if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r)return fx(r,()=>act(a,id))}
+  const t=by(id);if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r){const n=dayStats()+1;return fx(r,()=>act(a,id),n,S.best>0&&n>S.best)}}
   act(a,id)});
 $('ov').addEventListener('click',e=>{if(e.target.id!=='td-ov')return;if(ovMode==='sug'){const t=by(sugId);if(t){S.skip[t.id]=today();save()}}pend=null;$('ov').className=''});
 document.addEventListener('change',e=>{const el=e.target;if(el.matches('input[type=date][data-a]'))act(el.dataset.a,el.dataset.id,el.value)});
-$('toast').onclick=()=>{const id=$('toast').dataset.id;if(id){$('toast').classList.remove('on');act('chk',id)}};
+$('toast').onclick=()=>{if(toast.fn){const f=toast.fn;toast.fn=null;$('toast').classList.remove('on');f();return}const id=$('toast').dataset.id;if(id){$('toast').classList.remove('on');act('chk',id)}};
 $('fpb').onclick=e=>{e.stopPropagation();fpOpen=!fpOpen;renderFp()};
 let stab='gen',bkMsg='',bkUndo=false;
 /* ── 備份／還原 ── */
