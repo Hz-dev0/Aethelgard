@@ -49,9 +49,17 @@ const addTg=()=>`<button class="addtg ${addOpen?'on':''}" data-a="addfold" aria-
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><details><summary>期限／時間（選填）</summary><div class="opts">
 <select id="td-kd"><option value="dayonly"${view==='today'?' selected':''}>當天限定</option><option value="deadline">有截止日</option><option value="none"${view==='all'?' selected':''}>沒有期限</option></select>
-<input type="date" id="td-dt"><span class="tsel"><select id="td-th" aria-label="時"><option value="">時</option>${Array.from({length:24},(_,i)=>`<option value="${pad(i)}">${pad(i)}</option>`).join('')}</select><b>:</b><select id="td-mn" aria-label="分">${MINS.map(m=>`<option value="${m}">${m}</option>`).join('')}</select></span></div>
+<input type="date" id="td-dt"><span class="wheel" id="td-wh" aria-label="時間"><div class="wc" data-k="h">${['--',...Array.from({length:24},(_,i)=>pad(i))].map((v,i)=>`<div class="wi${i?'':' on'}" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div><b>:</b><div class="wc" data-k="m">${MINS.map((v,i)=>`<div class="wi${i?'':' on'}" data-v="${v}">${v}</div>`).join('')}</div></span></div>
 <div class="opts"><label class="meta">完成後 <input type="number" id="td-rp" min="1" max="365" placeholder="—" style="width:64px"> 天再提醒我（重複的事才填）</label></div></details></div><button class="addb" data-a="add">新增</button></div>`}
-const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
+const MINS=['00','20','30','40'];
+/* 滾輪式時間選擇：上下滑動，停在中間那格就是選的值 */
+const WH=32,wheelCol=k=>document.querySelector('#td-wh [data-k="'+k+'"]');
+const wheelIdx=el=>Math.max(0,Math.min(el.children.length-1,Math.round(el.scrollTop/WH)));
+const wheelVal=k=>{const el=wheelCol(k);return el?el.children[wheelIdx(el)].dataset.v:''};
+document.addEventListener('scroll',e=>{const el=e.target;if(!el.classList||!el.classList.contains('wc'))return;
+  const i=wheelIdx(el);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))},true);
+document.addEventListener('click',e=>{const it=e.target.closest&&e.target.closest('.wc .wi');if(!it)return;
+  const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});   // 新增任務時「分」只給這幾個選項
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
 /* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
 const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
@@ -77,7 +85,7 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
 function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
 function addTask(){const n=$('nm').value.trim();if(!n)return;
   const kind=$('kd').value;let date=$('dt').value||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'&&$('th').value?$('th').value+':'+$('mn').value:'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
+  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'&&wheelVal('h')?wheelVal('h')+':'+wheelVal('m'):'',repeat:parseInt($('rp').value)||0,done:false,touched:Date.now()};
   if(view==='today'&&(k==='none'||date===today()))t.on=today();
   S.tasks.push(t);save();render();$('nm').focus()}
 let askBack=null;

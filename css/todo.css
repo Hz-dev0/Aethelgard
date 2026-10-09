@@ -178,7 +178,15 @@ body{overflow:auto}
 }
 @media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.cmp *{transition:none!important}}
 /* 新增任務：時＋分 */
-:is(#todoRoot,#todoFloat) .tsel{display:inline-flex;align-items:center;gap:4px}
+/* 滾輪時間選擇 */
+:is(#todoRoot,#todoFloat) .wheel{position:relative;display:inline-flex;align-items:center;gap:2px;height:96px;padding:0 10px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+:is(#todoRoot,#todoFloat) .wheel::before{content:'';position:absolute;left:6px;right:6px;top:32px;height:32px;border-radius:8px;background:rgba(58,110,165,.12);pointer-events:none}
+:is(#todoRoot,#todoFloat) .wheel::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(var(--bg) 0,transparent 32%,transparent 68%,var(--bg) 100%)}
+:is(#todoRoot,#todoFloat) .wc{position:relative;z-index:1;width:48px;height:96px;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior:contain;scrollbar-width:none;padding:32px 0;touch-action:pan-y}
+:is(#todoRoot,#todoFloat) .wc::-webkit-scrollbar{display:none}
+:is(#todoRoot,#todoFloat) .wi{height:32px;line-height:32px;text-align:center;scroll-snap-align:center;font-size:17px;color:var(--dim);cursor:pointer;user-select:none;transition:color .15s}
+:is(#todoRoot,#todoFloat) .wi.on{color:var(--text);font-weight:700}
+:is(#todoRoot,#todoFloat) .wheel>b{z-index:1;color:var(--dim)}
 /* 設定 > 備份 */
 :is(#todoRoot,#todoFloat) .bkst{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7}
 :is(#todoRoot,#todoFloat) .bkst .warn{color:#B8962E}
