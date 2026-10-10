@@ -712,10 +712,59 @@ function notesChangeSubPage(dir) {
   }
 
   notesRenderTabs();
+  notesFlipIn(dir);
   clearTimeout(notesSaveTimer);
   notesSaveTimer = setTimeout(notesSave, 800);
 }
 window.notesChangeSubPage = notesChangeSubPage;
+
+// ── 翻頁特效 ──────────────────────────────────────────
+// 翻頁：新頁面以書頁翻過來的樣子落下（next＝書脊在左、prev＝書脊在右）。
+// 手機拖曳標題時，頁面會跟著手指翻到一半（越拖角度越大、有陰影），過了門檻震動一下＝放開就會翻頁。
+const _FLIP_PX = 60;
+function _flipBoxes() { return [...document.querySelectorAll('.notes-folder-content .notes-note-box')]; }
+function _flipHinge(box, side) {   // 書脊：整個內容區的左邊或右邊（兩欄並排時兩欄一起像一本書）
+  const wrap = box.parentElement.getBoundingClientRect(), r = box.getBoundingClientRect();
+  return ((side === 'left' ? wrap.left : wrap.right) - r.left) + 'px 50%';
+}
+function _flipReset(box) { box.style.transition = ''; box.style.transform = ''; box.style.transformOrigin = ''; box.style.boxShadow = ''; box.style.opacity = ''; }
+function notesFlipIn(dir) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const side = dir > 0 ? 'left' : 'right', deg = dir > 0 ? -26 : 26;
+  _flipBoxes().forEach(box => {
+    if (!box.animate) return;
+    box.style.transformOrigin = _flipHinge(box, side);
+    const an = box.animate([
+      { transform: `perspective(1000px) rotateY(${deg}deg) translateX(${dir * 24}px)`, opacity: .15, boxShadow: `${-dir * 14}px 0 24px rgba(0,0,0,.22)` },
+      { transform: 'perspective(1000px) rotateY(0) translateX(0)', opacity: 1, boxShadow: '0 0 0 rgba(0,0,0,0)' }
+    ], { duration: 280, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    an.onfinish = an.oncancel = () => { box.style.transformOrigin = ''; };
+  });
+}
+function notesFlipDrag(dx) {   // 手指拖曳中：頁面跟著翻到一半
+  const tab = notesFolderData[notesTabIndex];
+  const dir = dx < 0 ? 1 : -1;   // 往左拖＝下一頁
+  const atEdge = tab && ((dir < 0 && tab.currentPage === 0) || (dir > 0 && tab.currentPage >= tab.pages.length - 1));
+  const k = atEdge ? .18 : .5;   // 已經是第一頁／最後一頁：只翻一點點（有阻力），讓人知道到底了
+  const deg = Math.max(-38, Math.min(38, dx * k * .55));
+  const t = Math.min(1, Math.abs(dx) / _FLIP_PX);
+  _flipBoxes().forEach(box => {
+    box.style.transition = 'none';
+    box.style.transformOrigin = _flipHinge(box, dir > 0 ? 'left' : 'right');
+    box.style.transform = `perspective(1000px) rotateY(${deg}deg) translateX(${dx * k * .35}px)`;
+    box.style.boxShadow = `${-dir * (6 + 12 * t)}px 0 ${12 + 16 * t}px rgba(0,0,0,${(.08 + .14 * t).toFixed(3)})`;
+    box.style.opacity = String(1 - .25 * t);
+  });
+  return !atEdge && Math.abs(dx) >= _FLIP_PX;
+}
+function notesFlipRelease(commit, dir) {
+  _flipBoxes().forEach(box => {
+    if (commit) { _flipReset(box); }      // 翻頁成功：交給 notesFlipIn 接著播落下動畫
+    else { box.style.transition = 'transform .25s cubic-bezier(.2,.9,.3,1.2), box-shadow .25s, opacity .25s'; box.style.transform = ''; box.style.boxShadow = ''; box.style.opacity = '';
+      setTimeout(() => _flipReset(box), 270); }   // 沒過門檻：彈回原位
+  });
+  if (commit) notesChangeSubPage(dir);
+}
 
 function notesHandleRightZone() {
   const tab = notesFolderData[notesTabIndex];
@@ -1210,19 +1259,29 @@ function notesRewireLogo() {
 }
 // ── Swipe left/right on notes page tabs (title inputs only) ───────────
 function notesInitSwipe() {
-  // Only title inputs support swipe-to-change-page (textareas use native scroll)
+  // 只有標題欄支援拖曳翻頁（內文維持原生捲動）
   const titles = [document.getElementById('notesTitleA'), document.getElementById('notesTitleB')];
   titles.forEach(el => {
     if (!el) return;
-    el.addEventListener('touchstart', e => {
-      el._startX = e.touches[0].clientX;
+    let sx = 0, sy = 0, active = false, armed = false, drag = false;
+    el.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; active = true; armed = false; drag = false; }, { passive: true });
+    el.addEventListener('touchmove', e => {
+      if (!active) return;
+      const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+      if (!drag && (Math.abs(dx) < 8 || Math.abs(dy) > Math.abs(dx))) return;   // 還不確定是橫拖
+      drag = true;
+      const now = notesFlipDrag(dx);
+      if (now && !armed && navigator.vibrate) navigator.vibrate(8);   // 過門檻：輕震一下，放開就會翻頁
+      armed = now;
     }, { passive: true });
-    el.addEventListener('touchend', e => {
-      const deltaX = e.changedTouches[0].clientX - (el._startX || 0);
-      if (Math.abs(deltaX) > 60) {
-        notesChangeSubPage(deltaX > 0 ? -1 : 1);
-      }
-    }, { passive: true });
+    const end = e => {
+      if (!active) return; active = false;
+      if (!drag) return;
+      const dx = (e.changedTouches ? e.changedTouches[0].clientX : sx) - sx;
+      notesFlipRelease(armed && e.type === 'touchend', dx < 0 ? 1 : -1);
+    };
+    el.addEventListener('touchend', end, { passive: true });
+    el.addEventListener('touchcancel', end, { passive: true });
   });
 }
 

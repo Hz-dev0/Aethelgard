@@ -145,14 +145,18 @@ const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   clearTimeout(detSave);const t=by(detId),row=pn.previousElementSibling;
-  if(t){const nt=pn.querySelector('#td-nt');if(nt)t.note=nt.value.trim()?nt.value:'';if(!(t.subs||[]).length)delete t.subs;save()}
+  if(t){const nt=pn.querySelector('#td-nt');let ch=false;   // 沒有真的改到內容就不存檔，免得只是游標滑過、切頁就變成「待同步」
+    if(nt){const v=nt.value.trim()?nt.value:'';if(v!==(t.note||'')){t.note=v;ch=true}}
+    if(t.subs&&!t.subs.length){delete t.subs;ch=true}
+    if(ch)save()}
   detId=null;pn.removeAttribute('id');if(pn._ro)pn._ro.disconnect();
   if(row){row.classList.remove('dopen','show');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
   if(imm){pn.remove();return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
-  closeDet(true);detId=t.id;detNm=!!(t.note&&t.note.trim());row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');row.insertAdjacentHTML('afterend',detPanel(t));
+  closeDet();detId=t.id;detNm=!!(t.note&&t.note.trim())||!(t.subs||[]).length;   // 舊的收合動畫和新的展開動畫同時進行；備註跟小步驟都沒有時，先顯示備註
+  hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   if(matchMedia('(hover:none)').matches)setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
@@ -160,7 +164,7 @@ function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
 function noteEdit(on){const nv=pq('#td-nv'),nt=pq('#td-nt');if(!nv||!nt)return;
   if(on){nv.classList.add('hid');nt.classList.remove('hid');nt.style.height='auto';nt.style.height=Math.min(160,Math.max(64,nt.scrollHeight))+'px';nt.focus();nt.setSelectionRange(nt.value.length,nt.value.length)}
-  else{const t=by(detId);if(t){t.note=nt.value.trim()?nt.value:'';save();nv.innerHTML=linkify(t.note);detTint();
+  else{const t=by(detId);if(t){const v=nt.value.trim()?nt.value:'';if(v!==(t.note||'')){t.note=v;save()}nv.innerHTML=linkify(t.note||'');detTint();
     if(t.note){nv.classList.remove('hid');nt.classList.add('hid')}}}}
 document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,Math.max(64,el.scrollHeight))+'px';
   const t=by(detId);if(!t)return;t.note=el.value;detTint();clearTimeout(detSave);detSave=setTimeout(save,500)});
@@ -172,14 +176,21 @@ document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
 /* 開啟方式：手機＝點一下任務白色區塊（展開時日期資訊也一起出現）；電腦＝游標停在白色區塊一下就展開，離開才收起 */
 const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
-let hovT=0,hovLeave=0;
+let hovT=0,hovLeave=0,hovLock=0,hovXY=null;
 const inPanelFocus=()=>{const p=P(),a=document.activeElement;return !!(p&&a&&p.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName))};
-document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matches)return;const t=e.target;if(!t.closest)return;
+function hoverEval(t){if(!t||!t.closest)return;
   const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||(bd&&bd.closest('.row.dopen'));
   clearTimeout(hovT);hovT=0;
-  if(bd&&!inZone){const r=bd.closest('.row'),id=rowIdOf(r);clearTimeout(hovLeave);hovLeave=0;if(id)hovT=setTimeout(()=>{hovT=0;openDet(id,r)},260);return}   // 停一下才展開，滑鼠只是路過不會讓畫面跳動
+  if(bd&&!inZone){const r=bd.closest('.row'),id=rowIdOf(r);clearTimeout(hovLeave);hovLeave=0;if(id)hovT=setTimeout(()=>{hovT=0;openDet(id,r)},HOV_MS);return}   // 稍微停一下（50ms）才展開，快速掃過不會跳動
   if(inZone){clearTimeout(hovLeave);hovLeave=0;return}
-  if(detId&&!hovLeave)hovLeave=setTimeout(()=>{hovLeave=0;if(detId&&!inPanelFocus()&&!document.getElementById('td-wp'))closeDet()},240)});
+  if(detId&&!hovLeave)hovLeave=setTimeout(()=>{hovLeave=0;if(detId&&!inPanelFocus()&&!document.getElementById('td-wp'))closeDet()},200)}
+const HOV_MS=50;
+document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matches)return;hovXY=[e.clientX,e.clientY];
+  const wait=hovLock-Date.now();
+  if(wait>0){   // 動畫進行中卡片會位移，先不判斷；動畫結束後再用游標目前的位置判斷一次
+    clearTimeout(hovT);clearTimeout(hovLeave);hovLeave=0;clearTimeout(hoverEval._r);
+    hoverEval._r=setTimeout(()=>{if(hovXY)hoverEval(document.elementFromPoint(hovXY[0],hovXY[1]))},wait+10);return}
+  hoverEval(e.target)});
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><textarea class="nm" id="td-nm" rows="1" placeholder="想到什麼，打字" autocomplete="off"></textarea><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
@@ -350,7 +361,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#todoRoot,#todoFloat'))return;
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
   if(a==='tog'){if(!matchMedia('(hover:none)').matches)return;openDet(id,el.closest('.row'));return}   // 電腦版用游標停留展開，不用點
-  if(a==='del'&&matchMedia('(hover:none)').matches&&el.closest('.row.dopen'))return openPop(el,id);   // 手機：展開時刪除鈕變成修改鈕
+  if(a==='del'&&el.closest('.row.dopen'))return openPop(el,id);   // 展開時刪除鈕變成修改鈕（手機、電腦都一樣）
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
   if(a==='d-edit')return openPop(el,detId);   // 電腦版面板頂端的小鈕：修改（名稱／期限／時間／重複）
