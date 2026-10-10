@@ -17,7 +17,8 @@
 :is(#todoRoot,#todoFloat) select,:is(#todoRoot,#todoFloat) input[type=date],:is(#todoRoot,#todoFloat) input[type=time],:is(#todoRoot,#todoFloat) input[type=number]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;background:#fff;color:var(--text)}
 :is(#todoRoot,#todoFloat) .add{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .add .in{flex:1;min-width:0;padding:8px 10px}
-:is(#todoRoot,#todoFloat) .add input.nm{width:100%;border:0;outline:0;font:inherit;background:none;padding:6px 2px}
+:is(#todoRoot,#todoFloat) .add textarea.nm{display:block;resize:none;overflow:hidden;line-height:1.5;max-height:150px}
+:is(#todoRoot,#todoFloat) .add textarea.nm,:is(#todoRoot,#todoFloat) .add input.nm{width:100%;border:0;outline:0;font:inherit;background:none;padding:6px 2px}
 :is(#todoRoot,#todoFloat) .add summary{font-size:12px;color:var(--faint);cursor:pointer}
 :is(#todoRoot,#todoFloat) .opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
 :is(#todoRoot,#todoFloat) .addb{width:78px;flex:none;border:0;border-left:1px solid var(--line);background:rgba(58,110,165,.09);color:var(--blue);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
@@ -151,29 +152,30 @@ body{overflow:auto}
 
 /* ── 全部頁：卡片只留一列。電腦版游標指上去顯示第二列；手機點卡片白色部分切換 ── */
 :is(#todoRoot,#todoFloat) .row.cmp .bd>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-:is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:default}
 @media (hover:hover){
-  :is(#todoRoot,#todoFloat) .row.cmp{overflow:visible}
-  :is(#todoRoot,#todoFloat) .row.cmp>:first-child{border-radius:10px 0 0 10px}
-  :is(#todoRoot,#todoFloat) .row.cmp>:last-child{border-radius:0 10px 10px 0}
-  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:none;position:absolute;left:64px;top:calc(100% + 2px);z-index:6;background:var(--dk);padding:4px 10px;border-radius:8px;white-space:nowrap;box-shadow:0 4px 14px rgba(30,45,69,.22);pointer-events:none}
-  :is(#todoRoot,#todoFloat) .row.cmp .mt .meta{color:#fff}
-  :is(#todoRoot,#todoFloat) .row.cmp:hover .mt{display:block}
+  :is(#todoRoot,#todoFloat) .row.cmp .mt{display:none}
+  :is(#todoRoot,#todoFloat) .row.cmp.dopen .mt{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* 電腦版：游標停住展開時，名稱換成日期資訊（跟手機一樣） */
+  :is(#todoRoot,#todoFloat) .row.cmp.dopen .bd>div:first-child{display:none}
 }
 @media (hover:none){
-  :is(#todoRoot,#todoFloat) .row.cmp .bd{cursor:pointer;display:grid;align-items:center;overflow:hidden;-webkit-tap-highlight-color:transparent}
-  /* 名稱與時間疊在同一格，往右推：名稱被推出去，時間從左邊滑進來，按鈕被推出右邊 */
-  :is(#todoRoot,#todoFloat) .row.cmp{--e:.3s cubic-bezier(.4,0,.2,1)}
+  :is(#todoRoot,#todoFloat) .row .bd{cursor:pointer;-webkit-tap-highlight-color:transparent}
+  :is(#todoRoot,#todoFloat) .row{--e:.3s cubic-bezier(.4,0,.2,1)}
+  :is(#todoRoot,#todoFloat) .row.cmp .bd{display:grid;align-items:center;overflow:hidden}
+  /* 點一下展開：名稱與日期資訊疊在同一格往右推（名稱被推出去、資訊從左邊滑進來） */
   :is(#todoRoot,#todoFloat) .row.cmp .bd>div:first-child,:is(#todoRoot,#todoFloat) .row.cmp .mt{grid-area:1/1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity var(--e),transform var(--e)}
   :is(#todoRoot,#todoFloat) .row.cmp .mt{display:block;opacity:0;transform:translateX(-32px);pointer-events:none}
   :is(#todoRoot,#todoFloat) .row.cmp.show .mt{opacity:1;transform:none}
   :is(#todoRoot,#todoFloat) .row.cmp.show .bd>div:first-child{opacity:0;transform:translateX(32px)}
-  :is(#todoRoot,#todoFloat) .row.cmp .bd{transition:margin-right var(--e)}
-  :is(#todoRoot,#todoFloat) .row.cmp .side,:is(#todoRoot,#todoFloat) .row.cmp .del{white-space:nowrap;transition:transform var(--e),opacity var(--e)}
-  :is(#todoRoot,#todoFloat) .row.cmp.show .bd{margin-right:-120px}
-  :is(#todoRoot,#todoFloat) .row.cmp.show:not(:has(.side)) .bd{margin-right:-42px}
-  :is(#todoRoot,#todoFloat) .row.cmp.show .side{transform:translateX(130px);opacity:0;pointer-events:none}
-  :is(#todoRoot,#todoFloat) .row.cmp.show .del{transform:translateX(50px);opacity:0;pointer-events:none}
+  /* 「今天做」被推出右邊，「刪除」留在原位變成「修改」 */
+  :is(#todoRoot,#todoFloat) .row .bd{transition:margin-right var(--e)}
+  :is(#todoRoot,#todoFloat) .row .side{white-space:nowrap;transition:transform var(--e),opacity var(--e)}
+  :is(#todoRoot,#todoFloat) .row.dopen:has(.side) .bd{margin-right:-78px}
+  :is(#todoRoot,#todoFloat) .row.dopen .side{transform:translateX(130px);opacity:0;pointer-events:none}
+  :is(#todoRoot,#todoFloat) .row .del{position:relative;z-index:2;transition:background .3s}
+  :is(#todoRoot,#todoFloat) .row.dopen .del{background:var(--blue)}
+  :is(#todoRoot,#todoFloat) .row.dopen .del .dl{opacity:0}
+  :is(#todoRoot,#todoFloat) .row.dopen .del .ed2{opacity:1}
+  :is(#todoRoot,#todoFloat) .dpc .dtab{display:none}
 }
 /* 新增任務：時＋分 */
 /* 滾輪時間選擇（氣泡） */
@@ -217,11 +219,10 @@ body{overflow:auto}
 
 /* 任務詳細面板（備註＋小步驟）：接在任務下方，左邊從白底開始（跳過圈選框），右邊到按鈕尾端 */
 :is(#todoRoot,#todoFloat) .row.dopen{margin-bottom:0}   /* 卡片四個角維持圓角，面板右邊從刪除鈕圓角結束的地方（內縮 10px）往下長 */
-@media (hover:hover){:is(#todoRoot,#todoFloat) .row.dopen .mt{display:none!important}}   /* 只有電腦版的氣泡需要避開面板 */
 :is(#todoRoot,#todoFloat) .dpanel{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;margin:0 10px 6px 55px}
 :is(#todoRoot,#todoFloat) .dpanel.on{grid-template-rows:1fr}
 :is(#todoRoot,#todoFloat) .dpin{min-height:0;overflow:hidden}
-:is(#todoRoot,#todoFloat) .dpc{display:flex;background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden}
+:is(#todoRoot,#todoFloat) .dpc{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .dpc .ds{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}
 :is(#todoRoot,#todoFloat) .dpc .ds span{flex:1;min-width:0;word-break:break-word}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn span{color:var(--faint);text-decoration:line-through}
@@ -251,16 +252,25 @@ body{overflow:auto}
 /* 面板：左邊一條跟面板等高的箭頭，按下去在「小步驟」和「備註」之間左右推動切換 */
 :is(#todoRoot,#todoFloat) .dpc .dvp{flex:1;min-width:0;overflow:hidden;transition:height .3s cubic-bezier(.4,0,.2,1)}
 :is(#todoRoot,#todoFloat) .dpc .dtrk{display:grid}
-:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{grid-area:1/1;align-self:start;padding:10px 12px 8px 38px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s .15s}   /* 舊文字：先淡出 */
+:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{grid-area:1/1;align-self:start;padding:18px 12px 8px 38px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s .15s}   /* 舊文字：先淡出 */
 :is(#todoRoot,#todoFloat) .dpc:not(.nm) .dpa,:is(#todoRoot,#todoFloat) .dpc.nm .dpb{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .22s ease .32s,visibility 0s}   /* 新文字：箭頭滑到位之後才淡入 */
 :is(#todoRoot,#todoFloat) .dpc.sw .dvp{transition:height .3s cubic-bezier(.4,0,.2,1) .12s}
 :is(#todoRoot,#todoFloat) .dpc.sw .dvp{transition:height .22s ease .28s}
 
 /* 箭頭條：蓋在內容上，展開備註時往右跑到右邊，收起再跑回左邊（跟內容的推動同時進行） */
 :is(#todoRoot,#todoFloat) .dpc{position:relative}
-:is(#todoRoot,#todoFloat) .dpc .dpb{padding:10px 38px 8px 12px}
+:is(#todoRoot,#todoFloat) .dpc .dpb{padding:18px 38px 8px 12px}
 :is(#todoRoot,#todoFloat) .dpc .dtg{position:absolute;z-index:2;top:0;bottom:0;left:0;width:26px;border:0;border-right:1px solid var(--line);background:rgba(58,110,165,.12);color:var(--blue);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:left .3s cubic-bezier(.4,0,.2,1) .12s,background .25s,color .25s,border-color .3s .12s}
 :is(#todoRoot,#todoFloat) .dpc.nm .dtg{left:calc(100% - 26px);border-right-color:transparent;border-left:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .dpc .dtg.gold{background:rgba(232,195,90,.28);color:#b8962e}
 :is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1) .12s}
 :is(#todoRoot,#todoFloat) .dpc.nm .dtg span{transform:rotate(180deg)}
+
+/* 展開面板頂端的小編輯鈕：不佔一列，點開才長出名稱欄＋期限／時間／重複 */
+:is(#todoRoot,#todoFloat) .dpc .dtab{position:absolute;z-index:3;top:0;right:34px;width:34px;height:16px;border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;background:var(--bg);color:var(--dim);font-size:11px;line-height:14px;padding:0;cursor:pointer;transition:background .2s,color .2s}
+
+/* 刪除鈕：兩個字疊在同一格，手機展開時「刪除」淡出、「修改」淡入 */
+:is(#todoRoot,#todoFloat) .row .del{display:grid;place-items:center}
+:is(#todoRoot,#todoFloat) .row .del span{grid-area:1/1;transition:opacity .25s}
+:is(#todoRoot,#todoFloat) .row .del .ed2{opacity:0}
+#td-wp #td-pn{flex:1;min-width:0;font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}

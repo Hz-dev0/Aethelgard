@@ -16,7 +16,28 @@ let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
 const KEEP_RECENT=5;   // 備註／小步驟保留到最近 5 條完成紀錄（畫面顯示 4 條 + 1 條緩衝，避免剛完成又取消時資料不見）
 function pruneDoneExtras(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0));
   dn.slice(KEEP_RECENT).forEach(t=>{delete t.note;delete t.subs})}
-const save=()=>{pruneDoneExtras();S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
+/* ── 同步：以任務為單位合併（不再整份覆蓋）＋ 本機快照（最多 5 份） ── */
+const tj=t=>{const {mod,...r}=t;return JSON.stringify(r)};
+let snapMap=new Map();
+const rebuildSnap=()=>{snapMap=new Map((S.tasks||[]).map(t=>[t.id,tj(t)]))};
+function stampChanges(){const now=Date.now(),cur=new Set();   // 有改動的任務蓋上修改時間；刪掉的任務記一筆墓碑，合併時才知道是刪除而不是「對方沒有」
+  S.tasks.forEach(t=>{cur.add(t.id);if(snapMap.get(t.id)!==tj(t))t.mod=now});
+  S.dead=S.dead||{};snapMap.forEach((_,id)=>{if(!cur.has(id))S.dead[id]=now});
+  Object.keys(S.dead).forEach(id=>{if(cur.has(+id)||now-S.dead[id]>60*864e5)delete S.dead[id]});
+  rebuildSnap()}
+function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assign({},R.dead||{});
+  Object.keys(L.dead||{}).forEach(id=>{dead[id]=Math.max(dead[id]||0,L.dead[id])});
+  const lm=new Map((L.tasks||[]).map(t=>[t.id,t])),rm=new Map((R.tasks||[]).map(t=>[t.id,t])),ids=[...lm.keys(),...[...rm.keys()].filter(k=>!lm.has(k))],out=[];
+  ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);let pick=a&&b?((a.mod||lu)>=(b.mod||ru)?a:b):(a||b);
+    if(dead[id]&&dead[id]>(pick.mod||(a?lu:ru)))return;   // 刪除比最後一次修改還新 → 維持刪除
+    out.push(pick)});
+  const base=lu>=ru?L:R;return Object.assign({},base,{tasks:out,dead,best:Math.max(L.best||0,R.best||0)})}
+const KSN=K+'_snaps';let lastSnapAt=(()=>{try{const a=JSON.parse(localStorage.getItem(KSN)||'[]');return a[0]?a[0].at:0}catch(e){return 0}})();
+const readSnaps=()=>{try{return JSON.parse(localStorage.getItem(KSN)||'[]')}catch(e){return[]}};
+function takeSnap(){try{const arr=readSnaps(),js=JSON.stringify(S);if(arr[0]&&arr[0].j===js)return;
+  arr.unshift({at:Date.now(),n:(S.tasks||[]).length,j:js});arr.length=Math.min(arr.length,5);lastSnapAt=Date.now();
+  try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(e){arr.length=Math.max(1,arr.length-2);try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(_){}}}catch(e){}}
+const save=()=>{pruneDoneExtras();stampChanges();S.updatedAt=Date.now();if(Date.now()-lastSnapAt>30*6e4)takeSnap();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
@@ -34,7 +55,6 @@ function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
 function toast(m,id,fn,ms){const t=$('toast');t.textContent=m;t.dataset.id=id||'';toast.fn=fn||null;t.style.pointerEvents=id||fn?'auto':'none';   // fn：點「復原」要做的事（刪除／新增的撤銷）
   if(id||fn){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||(id?3500:1400))}
-const peek=new Set();   // 手機上「已翻到時間那面」的卡片（只存在記憶體，不同步）
 const tmark=t=>{const a=t.subs||[],n=a.length;return (t.note?'<span class="nt">📝</span>':'')+(n?`<span class="nt">${a.filter(x=>x.done).length}/${n}</span>`:'')};   // 有備註／小步驟才多一個小標記
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
@@ -45,7 +65,7 @@ function row(t,o={}){const m=[],d=today();
   if(auto||t.kind==='dayonly'){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  const h=`<div class="row${t.id===detId?' dopen':''}${cmp?' cmp'+(peek.has(t.id)?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd"${cmp?` data-a="peek" data-id="${t.id}"`:''}><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除">刪除</button></div>`;
+  const open=t.id===detId,h=`<div class="row${open?' dopen':''}${cmp?' cmp'+(open?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd" data-a="tog" data-id="${t.id}"><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除"><span class="dl">刪除</span><span class="ed2">修改</span></button></div>`;
   return h+(t.id===detId?detPanel(t,true):'')}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
@@ -87,7 +107,7 @@ function qParse(txt){
       const t=fix(m[1],+m[2],m[3]==='半'?30:(parseInt(m[3])||0));if(t)out.time=t;else s=txt}}
   if(!out.date&&!out.time&&!out.repeat)return null;
   if(out.time&&!out.date)out.date=today();
-  out.kind=out.dl||(out.date&&!out.time)?'deadline':out.time?'dayonly':'';
+  out.kind=out.dl?'deadline':out.date?'dayonly':'';   // 有「前」才是截止日；其他有日期的都當天限定（時間可以空白）
   const name=s.replace(/\s+/g,' ').replace(/^[\s,，、:：\-－]+|[\s,，、:：\-－]+$/g,'');
   if(!name)return null;
   const dd=out.date?Math.round((new Date(out.date+'T12:00:00')-base)/864e5):null,dt=out.date?new Date(out.date+'T12:00:00'):null;
@@ -95,13 +115,16 @@ function qParse(txt){
   out.name=name;out.label=[out.date?'📅 '+dl+(out.time?' '+out.time:'')+(out.dl?' 前':''):'',out.repeat?'↻ 每 '+out.repeat+' 天':''].filter(Boolean).join('　');
   return out}
 let qhOff=false;   // 這次輸入已按 ✕ 取消自動辨識
+const nmLines=v=>v.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 function qHint(){const h=document.getElementById('td-qh'),i=document.getElementById('td-nm');if(!h||!i)return;
-  const q=qhOff?null:qParse(i.value);
+  const ls=nmLines(i.value),x=`<button type="button" data-a="qh-x" aria-label="取消自動辨識">✕</button>`;
+  if(!qhOff&&ls.length>1){const hit=ls.filter(l=>qParse(l)).length;h.style.display='flex';h.innerHTML=`<span>📋 ${ls.length} 個任務${hit?'　已辨識 '+hit+' 個':''}</span>${x}`;return}
+  const q=qhOff||!ls.length?null:qParse(ls[0]);
   if(!q){h.style.display='none';h.innerHTML='';return}
-  h.style.display='flex';h.innerHTML=`<span>${esc(q.label)}</span><button type="button" data-a="qh-x" aria-label="取消自動辨識">✕</button>`}
-document.addEventListener('input',e=>{if(e.target.id==='td-nm'){if(!e.target.value)qhOff=false;qHint()}});
+  h.style.display='flex';h.innerHTML=`<span>${esc(q.label)}</span>${x}`}
+document.addEventListener('input',e=>{if(e.target.id==='td-nm'){const el=e.target;if(!el.value)qhOff=false;el.style.height='auto';el.style.height=Math.min(150,el.scrollHeight)+'px';qHint()}});
 /* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
-let detId=null,detSave=0,lpT=null,lpPos=null,lpFired=false;
+let detId=null,detSave=0;
 const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
 const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、[文字](網址)、直接貼的網址，都會變成可以點的連結
   let h=esc(txt).replace(/\((https?:\/\/[^\s()]+)\)\[([^\]\n]+)\]|\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,(m,u1,t1,t2,u2)=>{
@@ -111,7 +134,7 @@ const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、
   return h.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i])};
 let detNm=false;   // 面板目前顯示的是「備註」頁嗎（預設是小步驟頁）
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc${detNm?' nm':''}"><button type="button" class="dtg" data-a="d-mode" aria-label="切換小步驟／備註"><span>›</span></button><div class="dvp"><div class="dtrk"><div class="dpa"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label></div><div class="dpb"><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc${detNm?' nm':''}"><button type="button" class="dtab" data-a="d-edit" aria-label="編輯">✎</button><button type="button" class="dtg" data-a="d-mode" aria-label="切換小步驟／備註"><span>›</span></button><div class="dvp"><div class="dtrk"><div class="dpa"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label></div><div class="dpb"><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註">${esc(t.note||'')}</textarea></div></div></div></div></div></div>`}
 function detTint(){const pn=P(),t=by(detId);if(!pn||!t)return;const g=pn.querySelector('.dtg'),nm=pn.querySelector('.dpc').classList.contains('nm');
   g.classList.toggle('gold',nm?(t.subs||[]).length>0:!!(t.note&&t.note.trim()))}   // 箭頭條通往的那一頁有資料 → 金色，沒有 → 藍色
 function detWire(pn){   // 面板高度跟著目前那一頁的內容走（切頁、加步驟、備註長高都會平順地伸縮）
@@ -124,14 +147,14 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   clearTimeout(detSave);const t=by(detId),row=pn.previousElementSibling;
   if(t){const nt=pn.querySelector('#td-nt');if(nt)t.note=nt.value.trim()?nt.value:'';if(!(t.subs||[]).length)delete t.subs;save()}
   detId=null;pn.removeAttribute('id');if(pn._ro)pn._ro.disconnect();
-  if(row){row.classList.remove('dopen');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
+  if(row){row.classList.remove('dopen','show');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
   if(imm){pn.remove();return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
-  closeDet(true);detId=t.id;detNm=!!(t.note&&t.note.trim());row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
+  closeDet(true);detId=t.id;detNm=!!(t.note&&t.note.trim());row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
-  setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
+  if(matchMedia('(hover:none)').matches)setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
@@ -145,24 +168,20 @@ document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false
 document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
 document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   if(t.closest&&t.closest('#td-nv')&&!t.closest('a')){noteEdit(true);return}            // 點備註的空白處 → 編輯；點連結 → 照常開連結
-  if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')))return;
+  if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')||t.closest('#td-wp')||t.closest('#td-wb')))return;
   closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
-/* 開啟方式：手機長按、電腦右鍵。長按時瀏覽器常常還會多送一個 contextmenu，所以 0.9 秒內只認第一次要求 */
+/* 開啟方式：手機＝點一下任務白色區塊（展開時日期資訊也一起出現）；電腦＝游標停在白色區塊一下就展開，離開才收起 */
 const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
-let lastReq=0,lastTouch=0;
-function reqOpen(id,r,touch){if(Date.now()-lastReq<900)return;lastReq=Date.now();
-  if(touch){lpFired=true;setTimeout(()=>{lpFired=false},700);navigator.vibrate&&navigator.vibrate(10)}   // 放手時那一下點擊不要算（避免同時觸發「點一下切換時間」）
-  openDet(id,r)}
-document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;lastTouch=Date.now();const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;
-  const r=bd.closest('.row');lpPos={x:e.clientX,y:e.clientY};clearTimeout(lpT);
-  lpT=setTimeout(()=>{lpT=null;const id=rowIdOf(r);if(id)reqOpen(id,r,true)},480)});
-document.addEventListener('pointermove',e=>{if(lpT&&Math.hypot(e.clientX-lpPos.x,e.clientY-lpPos.y)>10){clearTimeout(lpT);lpT=null}});
-['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(lpT);lpT=null}));
-document.addEventListener('click',e=>{if(lpFired){lpFired=false;e.stopPropagation();e.preventDefault()}},true);   // 長按放開後不要又當成一次點擊
-document.addEventListener('contextmenu',e=>{const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;e.preventDefault();
-  clearTimeout(lpT);lpT=null;const r=bd.closest('.row'),id=rowIdOf(r);if(id)reqOpen(id,r,Date.now()-lastTouch<2000)});
+let hovT=0,hovLeave=0;
+const inPanelFocus=()=>{const p=P(),a=document.activeElement;return !!(p&&a&&p.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName))};
+document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matches)return;const t=e.target;if(!t.closest)return;
+  const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||(bd&&bd.closest('.row.dopen'));
+  clearTimeout(hovT);hovT=0;
+  if(bd&&!inZone){const r=bd.closest('.row'),id=rowIdOf(r);clearTimeout(hovLeave);hovLeave=0;if(id)hovT=setTimeout(()=>{hovT=0;openDet(id,r)},260);return}   // 停一下才展開，滑鼠只是路過不會讓畫面跳動
+  if(inZone){clearTimeout(hovLeave);hovLeave=0;return}
+  if(detId&&!hovLeave)hovLeave=setTimeout(()=>{hovLeave=0;if(detId&&!inPanelFocus()&&!document.getElementById('td-wp'))closeDet()},240)});
 function addBox(){if(!addOpen)return'';
-  return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
+  return`<div class="add"><div class="in"><div class="nmrow"><textarea class="nm" id="td-nm" rows="1" placeholder="想到什麼，打字" autocomplete="off"></textarea><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
 /* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
 let kdVal='',dtVal='',tmVal='',rpVal='';
@@ -181,11 +200,23 @@ document.addEventListener('input',popIn);document.addEventListener('change',popI
 function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k=effKd();w.dataset.kd=k;   // 依類型顯示／隱藏日期和時間
   if(k==='dayonly'){const [h,m]=(tmVal||'').split(':'),hc=wheelCol('h'),mc=wheelCol('m');
     hc.scrollTop=(h?parseInt(h)+1:0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH;mark(hc);mark(mc)}}
+let popTask=null,addBak=null;   // popTask：氣泡正在編輯哪個任務（null = 新增任務用）
+function renderKeep(){const el=document.getElementById('td-nm'),v=el?el.value:'';render();const n=document.getElementById('td-nm');if(n&&v){n.value=v;n.style.height='auto';n.style.height=Math.min(150,n.scrollHeight)+'px';qHint()}}
 function closePop(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
+  const pnEl=w.querySelector('#td-pn'),newName=pnEl?pnEl.value.trim():'';
   if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=''}
   else if(effKd()==='dayonly'){const h=wheelVal('h');tmVal=h?h+':'+wheelVal('m'):''}
-  w.remove();bk&&bk.remove();const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
-function openPop(btn){closePop('ok');
+  w.remove();bk&&bk.remove();
+  if(popTask){const t=by(popTask);popTask=null;
+    if(t){let k,date,time,rp;
+      if(commit==='clr'){k='none';date='';time='';rp=0}
+      else{k=effKd();time=tmVal;rp=parseInt(rpVal)||0;date=dtVal||(k==='dayonly'?today():'');if(k!=='none'&&!date)k='none'}
+      t.kind=k;t.date=k==='none'?'':date;t.time=k==='dayonly'?time:'';t.repeat=rp;if(newName)t.name=newName;save();
+      if(addBak){({kdVal,dtVal,tmVal,rpVal}=addBak);addBak=null}renderKeep();return}
+    if(addBak){({kdVal,dtVal,tmVal,rpVal}=addBak);addBak=null}}
+  const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
+function openPop(btn,tid){closePop('ok');
+  if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal};popTask=tid;kdVal=t.kind||'none';dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):''}
   const col=(k,list)=>`<div class="wc" data-k="${k}">${list.map(v=>`<div class="wi" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div>`;
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
@@ -194,12 +225,13 @@ function openPop(btn){closePop('ok');
 <div class="r-tm"><div class="wheel">${col('h',['--',...Array.from({length:24},(_,i)=>pad(i))])}<b>:</b>${col('m',MINS)}</div></div>
 <label class="prow rp"><input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="—"> 天後重複提醒我</label>
 <div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
+  if(tid){const tt=by(tid);w.insertAdjacentHTML('afterbegin',`<div class="prow"><input id="td-pn" value="${esc(tt.name)}" placeholder="名稱" autocomplete="off"></div>`)}
   document.getElementById('todoFloat').append(bk,w);
   w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;
   popFill();
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
-  const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),below=r.bottom+10+wh<=innerHeight-8;
-  w.style.cssText=`left:${left}px;${below?'top:'+(r.bottom+10):'bottom:'+(innerHeight-r.top+10)}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up')}
+  const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),room=innerHeight-r.bottom-18,roomUp=r.top-18,below=wh<=room||room>=roomUp,avail=Math.max(160,below?room:roomUp);   // 放得下就照原位；兩邊都放不下就挑大的那邊並限制高度（可捲動）
+  w.style.cssText=`left:${left}px;max-height:${avail}px;overflow-y:auto;${below?'top:'+(r.bottom+10):'bottom:'+(innerHeight-r.top+10)}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up')}
 const dayStats=()=>S.tasks.filter(t=>t.done&&t.doneAt===today()).length;
 /* 月曆圖示：點下去會展開手機的日期選擇器（透明的日期欄位蓋在圖示上，點到的就是它） */
 const CAL='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v3.5M16 3v3.5"/><circle cx="8.5" cy="14.5" r=".9" fill="currentColor"/><circle cx="12" cy="14.5" r=".9" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".9" fill="currentColor"/></svg>';
@@ -222,15 +254,17 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
-function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn)}
+function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null}
 function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
-  const q=qhOff?null:qParse(raw),n=q?q.name:raw;   // 氣泡裡手動選的優先，沒選的才用輸入框辨識出來的
-  const kind=kdVal||(q&&q.kind)||defKd(),tm=tmVal||(q&&q.time)||'',rp=parseInt(rpVal)||(q&&q.repeat)||0;
-  let date=dtVal||(q&&q.date)||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
-  const t={id:Date.now(),name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tm:'',repeat:rp,done:false,touched:Date.now()};
-  if(view==='today'&&(k==='none'||date===today()))t.on=today();
-  S.tasks.push(t);kdVal=dtVal=tmVal=rpVal='';qhOff=false;save();render();$('nm').focus();
-  toast('已新增',null,()=>{S.tasks=S.tasks.filter(x=>x!==t);save();render()},5000)}
+  const lines=qhOff?[raw.replace(/\s*\n\s*/g,' ')]:nmLines(raw),made=[];   // 換行 = 一行一個任務，每行各自辨識日期／時間
+  lines.forEach((ln,idx)=>{const q=qhOff?null:qParse(ln),n=q?q.name:ln;   // 氣泡裡手動選的優先，沒選的才用辨識結果
+    const kind=kdVal||(q&&q.kind)||defKd(),tm=tmVal||(q&&q.time)||'',rp=parseInt(rpVal)||(q&&q.repeat)||0;
+    let date=dtVal||(q&&q.date)||(kind==='dayonly'?ymd(new Date(Date.now()-S.cfg.reset*36e5)):'');let k=kind;if(k!=='none'&&!date)k='none';
+    const t={id:Date.now()+idx,name:n,kind:k,date:k==='none'?'':date,time:k==='dayonly'?tm:'',repeat:rp,done:false,touched:Date.now()};
+    if(view==='today'&&(k==='none'||date===today()))t.on=today();
+    S.tasks.push(t);made.push(t)});
+  kdVal=dtVal=tmVal=rpVal='';qhOff=false;save();render();$('nm').focus();
+  toast(made.length>1?'已新增 '+made.length+' 個':'已新增',null,()=>{S.tasks=S.tasks.filter(x=>!made.includes(x));save();render()},5000)}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
@@ -308,15 +342,18 @@ function act(a,id,val){const t=by(id);if(!t)return;
   else if(a==='del'){const i=S.tasks.indexOf(t);S.tasks=S.tasks.filter(x=>x!==t);save();render();   // 直接刪，5 秒內可按「復原」放回原位
     toast('已刪除',null,()=>{S.tasks.splice(Math.min(i,S.tasks.length),0,t);save();render()},5000);return}
   else return;save();render()}
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.closest&&e.target.closest('.add'))addTask()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.target.closest&&e.target.closest('.add')){
+  if(e.target.id==='td-nm'&&(e.shiftKey||matchMedia('(pointer:coarse)').matches))return;   // Shift+Enter／手機的 Enter = 換行，按「新增」才送出
+  e.preventDefault();addTask()}});
 document.addEventListener('click',e=>{
   if(fpOpen&&!e.target.closest('#td-fp')){fpOpen=false;renderFp()}
   if(!e.target.closest('#todoRoot,#todoFloat'))return;
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
-  if(a==='peek'){if(!matchMedia('(hover:none)').matches)return;   // 電腦版用游標指上去，不用點
-    const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
+  if(a==='tog'){if(!matchMedia('(hover:none)').matches)return;openDet(id,el.closest('.row'));return}   // 電腦版用游標停留展開，不用點
+  if(a==='del'&&matchMedia('(hover:none)').matches&&el.closest('.row.dopen'))return openPop(el,id);   // 手機：展開時刪除鈕變成修改鈕
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
+  if(a==='d-edit')return openPop(el,detId);   // 電腦版面板頂端的小鈕：修改（名稱／期限／時間／重複）
   if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;c.classList.add('sw');clearTimeout(c._sw);c._sw=setTimeout(()=>c.classList.remove('sw'),800);
     detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();detTint();
     if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},600)}   // 還沒寫備註就直接可以打字
@@ -353,6 +390,7 @@ document.addEventListener('click',e=>{
     else if(v==='tasks')dl('tasks-'+today()+'.json',JSON.stringify(S,null,1));
     else{const f=window[{notesJson:'notesExportJson',notesMd:'notesExportMd',notesTxt:'notesExportTxt'}[v]];if(typeof f==='function')f()}
     return}
+  if(a==='s-snap'){const x=readSnaps()[+$('sp').value];if(!x)return;ask('還原到 '+snapFmt(x.at)+'？\n任務：目前 '+S.tasks.length+' 件 → '+x.n+' 件',()=>{bkMsg=applyBackup({tasks:JSON.parse(x.j)});bkUndo=true;openSet()},openSet);return}
   if(a==='s-undo'){const pv=readPrev();if(!pv)return;ask('復原上次還原？\n會把任務'+(pv.tabs?'和筆記':'')+'換回還原之前的樣子。',()=>{bkMsg=applyBackup({tasks:pv.tasks,tabs:pv.tabs})+'（已復原）';bkUndo=false;openSet()},openSet);return}
   if(a==='c-no'){pend=null;$('ov').className='';if(askBack){const b=askBack;askBack=null;b()}return}
   if(a==='c-yes'){const f=pend;pend=null;askBack=null;$('ov').className='';f&&f();return}
@@ -384,12 +422,14 @@ function applyBackup(b){   // 還原前先把目前的資料留一份，之後�
   if(b.tabs&&typeof window.notesApplyTabs==='function'){window.notesApplyTabs(b.tabs);out.push('筆記 '+b.tabs.length+' 個標籤')}
   return '已還原：'+out.join('、')}
 const ago=ts=>{if(!ts)return null;const n=Math.floor((Date.now()-ts)/864e5);return n<=0?'今天':n===1?'昨天':n+' 天前'};
+const snapFmt=ts=>{const d=new Date(ts);return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes())};
 function backupPane(){
-  const pv=readPrev();
+  const pv=readPrev(),sn=readSnaps();
   return `<div class="sh">匯出</div>
 <div class="brow"><select id="td-bk" style="flex:1;min-width:0;padding:8px"><option value="full">任務＋筆記（完整備份）</option><option value="tasks">只有任務</option><option value="notesJson">筆記 JSON</option><option value="notesMd">筆記 MD</option><option value="notesTxt">筆記 TXT</option></select><button class="b dk" data-a="s-do" style="border-radius:10px;padding:0 18px">匯出</button></div>
 <div class="sh">還原</div>
 <label class="b q sbtn upl">選擇備份檔…<input type="file" id="td-imp" accept=".json,application/json"></label>
+${sn.length?`<div class="brow" style="margin-top:8px"><select id="td-sp" style="flex:1;min-width:0;padding:8px">${sn.map((x,i)=>`<option value="${i}">${snapFmt(x.at)}（${x.n} 件）</option>`).join('')}</select><button class="b q" data-a="s-snap" style="border-radius:10px;padding:0 18px">還原</button></div>`:''}
 ${bkMsg?`<div class="bkmsg">${esc(bkMsg)}</div>`:''}
 ${bkMsg&&bkUndo&&pv?`<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-undo">復原</button></div>`:''}`}
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
@@ -442,10 +482,13 @@ async function push(){const seq=saveSeq;
 async function pull(){
   if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
   try{const snap=await window._fbGetDoc(REF());
-    if(snap.exists()){const d=snap.data(),cu=d.updatedAt||0,lu=S.updatedAt||0;
-      if(cu>lu){S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced();render()}
-      else if(lu>cu)await push();
-      else markSynced()}
+    if(snap.exists()){const d=snap.data(),cu=d.updatedAt||0,lu=S.updatedAt||0,ls=Number(localStorage.getItem(KS))||0;
+      if(cu===lu)markSynced();
+      else if(cu>ls&&lu>ls){   // 兩邊上次同步後都改過 → 合併，不整份覆蓋
+        takeSnap();const R=JSON.parse(d.json||'{}');S=mergeS(S,R);norm();S.updatedAt=Date.now();
+        try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}rebuildSnap();render();await push()}
+      else if(cu>lu){takeSnap();S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced();rebuildSnap();render()}
+      else await push()}
     else if((S.tasks&&S.tasks.length)||S.updatedAt)await push();
     else markSynced();
     cloudReady=true;statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
@@ -491,7 +534,7 @@ window.todoGo=go;
 function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._td)return;
   window.showPage=function(id,skip){if(OLD.includes(id))id='todo';const r=sp.call(this,id,skip);markTabs(id==='notes'?'notes':view);return r};window.showPage._td=1}
 function setTop(){const b=document.getElementById('td-topbar');if(b)document.documentElement.style.setProperty('--tdtop',b.offsetHeight+'px')}
-function boot(){wrapShowPage();
+function boot(){wrapShowPage();rebuildSnap();
   try{dirty=(S.updatedAt||0)>(Number(localStorage.getItem(KS))||0)}catch(e){}statusUpd();
   setTop();addEventListener('resize',setTop);go('today');startCloud()}
 
