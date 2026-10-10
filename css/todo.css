@@ -145,6 +145,9 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row.lapsed{background:#FBF7EA;border-color:#E4D8AE}
 :is(#todoRoot,#todoFloat) .row.lapsed .bd{padding:11px 12px}
 :is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#B8962E}
+/* 凌晨任務提前顯示：淺紅底，跟過期（香檳）、快到期（藍）區分 */
+:is(#todoRoot,#todoFloat) .row.early{background:#FDF0EE;border-color:#F0C8C3}
+:is(#todoRoot,#todoFloat) .row.early .meta{color:#C0504A}
 :is(#todoRoot,#todoFloat) .cal{position:relative;width:56px;flex:none;border-left:1px solid #E0D3A6;display:grid;place-items:center;background:#F1E8CA;color:#B8962E;cursor:pointer}
 :is(#todoRoot,#todoFloat) .cal:active{background:#E8DDB6}
 :is(#todoRoot,#todoFloat) .cal input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px}
@@ -182,7 +185,7 @@ body{overflow:auto}
 #td-wp .prow select,#td-wp .prow input[type=date]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .rp input{flex:none;width:64px;font:inherit;font-size:14px;padding:6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .r-tm{margin-bottom:0}
-#td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=deadline] .r-tm{display:none}
+#td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=dayonly] .r-tm{display:none}
 #td-wp .r-tm+.rp{margin-top:8px}
 #td-wb{position:fixed;inset:0;z-index:2000}
 #td-wp{position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
