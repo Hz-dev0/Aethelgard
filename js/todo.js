@@ -107,11 +107,13 @@ const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、
   return h.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i])};
 let detNm=false;   // 面板目前顯示的是「備註」頁嗎（預設是小步驟頁）
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc${detNm?' nm':''}"><button type="button" class="dtg${hasN?' hn':''}" data-a="d-mode" aria-label="切換小步驟／備註"><span>›</span></button><div class="dvp"><div class="dtrk"><div class="dpa"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label></div><div class="dpb"><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc${detNm?' nm':''}"><button type="button" class="dtg" data-a="d-mode" aria-label="切換小步驟／備註"><span>›</span></button><div class="dvp"><div class="dtrk"><div class="dpa"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label></div><div class="dpb"><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div></div></div></div>`}
+function detTint(){const pn=P(),t=by(detId);if(!pn||!t)return;const g=pn.querySelector('.dtg'),nm=pn.querySelector('.dpc').classList.contains('nm');
+  g.classList.toggle('gold',nm?(t.subs||[]).length>0:!!(t.note&&t.note.trim()))}   // 箭頭條通往的那一頁有資料 → 金色，沒有 → 藍色
 function detWire(pn){   // 面板高度跟著目前那一頁的內容走（切頁、加步驟、備註長高都會平順地伸縮）
   const c=pn.querySelector('.dpc'),vp=pn.querySelector('.dvp'),A=pn.querySelector('.dpa'),B=pn.querySelector('.dpb');
   const fit=()=>{vp.style.height=(c.classList.contains('nm')?B:A).offsetHeight+'px'};
-  fit();pn._fit=fit;pn._ro=new ResizeObserver(fit);pn._ro.observe(A);pn._ro.observe(B)}
+  fit();pn._fit=fit;pn._ro=new ResizeObserver(fit);pn._ro.observe(A);pn._ro.observe(B);detTint()}
 const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}
@@ -126,31 +128,35 @@ function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   closeDet(true);detId=t.id;detNm=false;row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
-const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t)};
+const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
 function noteEdit(on){const nv=pq('#td-nv'),nt=pq('#td-nt');if(!nv||!nt)return;
   if(on){nv.classList.add('hid');nt.classList.remove('hid');nt.style.height='auto';nt.style.height=Math.min(160,Math.max(64,nt.scrollHeight))+'px';nt.focus();nt.setSelectionRange(nt.value.length,nt.value.length)}
-  else{const t=by(detId);if(t){t.note=nt.value.trim()?nt.value:'';save();nv.innerHTML=linkify(t.note);
+  else{const t=by(detId);if(t){t.note=nt.value.trim()?nt.value:'';save();nv.innerHTML=linkify(t.note);detTint();
     if(t.note){nv.classList.remove('hid');nt.classList.add('hid')}}}}
 document.addEventListener('input',e=>{if(e.target.id!=='td-nt')return;const el=e.target;el.style.height='auto';el.style.height=Math.min(160,Math.max(64,el.scrollHeight))+'px';
-  const t=by(detId);if(!t)return;t.note=el.value;clearTimeout(detSave);detSave=setTimeout(save,500)});
+  const t=by(detId);if(!t)return;t.note=el.value;detTint();clearTimeout(detSave);detSave=setTimeout(save,500)});
 document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false);else if(e.target.id==='td-sn')detAdd(false)});   // 打到一半點別處，小步驟也先收進去   // 寫完離開輸入框，備註就變回可以點連結的樣子
 document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
 document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   if(t.closest&&t.closest('#td-nv')&&!t.closest('a')){noteEdit(true);return}            // 點備註的空白處 → 編輯；點連結 → 照常開連結
   if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')))return;
   closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
-/* 開啟方式：手機長按、電腦右鍵 */
+/* 開啟方式：手機長按、電腦右鍵。長按時瀏覽器常常還會多送一個 contextmenu，所以 0.9 秒內只認第一次要求 */
 const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
-document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;
+let lastReq=0,lastTouch=0;
+function reqOpen(id,r,touch){if(Date.now()-lastReq<900)return;lastReq=Date.now();
+  if(touch){lpFired=true;setTimeout(()=>{lpFired=false},700);navigator.vibrate&&navigator.vibrate(10)}   // 放手時那一下點擊不要算（避免同時觸發「點一下切換時間」）
+  openDet(id,r)}
+document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;lastTouch=Date.now();const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;
   const r=bd.closest('.row');lpPos={x:e.clientX,y:e.clientY};clearTimeout(lpT);
-  lpT=setTimeout(()=>{lpT=null;const id=rowIdOf(r);if(id){lpFired=true;navigator.vibrate&&navigator.vibrate(10);openDet(id,r)}},480)});
+  lpT=setTimeout(()=>{lpT=null;const id=rowIdOf(r);if(id)reqOpen(id,r,true)},480)});
 document.addEventListener('pointermove',e=>{if(lpT&&Math.hypot(e.clientX-lpPos.x,e.clientY-lpPos.y)>10){clearTimeout(lpT);lpT=null}});
-['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(lpT);lpT=null;if(lpFired)setTimeout(()=>{lpFired=false},400)}));
+['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>{clearTimeout(lpT);lpT=null}));
 document.addEventListener('click',e=>{if(lpFired){lpFired=false;e.stopPropagation();e.preventDefault()}},true);   // 長按放開後不要又當成一次點擊
 document.addEventListener('contextmenu',e=>{const bd=e.target.closest&&e.target.closest('#todoRoot .row .bd');if(!bd)return;e.preventDefault();
-  const r=bd.closest('.row'),id=rowIdOf(r);if(id)openDet(id,r)});
+  clearTimeout(lpT);lpT=null;const r=bd.closest('.row'),id=rowIdOf(r);if(id)reqOpen(id,r,Date.now()-lastTouch<2000)});
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><input class="nm" id="td-nm" placeholder="想到什麼，打字" autocomplete="off"><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
@@ -307,7 +313,7 @@ document.addEventListener('click',e=>{
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
-  if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();
+  if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();detTint();
     if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},320)}   // 還沒寫備註就直接可以打字
     else{const ae=document.activeElement;if(ae&&pn.contains(ae)&&ae.blur)ae.blur()}
     return}

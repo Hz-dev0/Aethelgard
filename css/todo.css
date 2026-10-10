@@ -130,7 +130,6 @@ body{overflow:auto}
 #todoRoot .syn.wait i{animation:tdPulse 1.2s ease-in-out infinite}
 #todoRoot .syn.off i{background:#9aa5b1}
 @keyframes tdPulse{50%{opacity:.3}}
-@media (prefers-reduced-motion:reduce){#todoRoot .syn.wait i{animation:none}}
 #todoRoot .syn.off.pend i{background:#e0a030}
 #todoRoot .syn span,#todoRoot .tab{white-space:nowrap}
 #todoRoot .seg{flex:none}
@@ -176,7 +175,6 @@ body{overflow:auto}
   :is(#todoRoot,#todoFloat) .row.cmp.show .side{transform:translateX(130px);opacity:0;pointer-events:none}
   :is(#todoRoot,#todoFloat) .row.cmp.show .del{transform:translateX(50px);opacity:0;pointer-events:none}
 }
-@media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .row.cmp *{transition:none!important}}
 /* 新增任務：時＋分 */
 /* 滾輪時間選擇（氣泡） */
 :is(#todoRoot,#todoFloat) .nmrow{display:flex;align-items:center;gap:4px}
@@ -219,7 +217,7 @@ body{overflow:auto}
 
 /* 任務詳細面板（備註＋小步驟）：接在任務下方，左邊從白底開始（跳過圈選框），右邊到按鈕尾端 */
 :is(#todoRoot,#todoFloat) .row.dopen{margin-bottom:0}   /* 卡片四個角維持圓角，面板右邊從刪除鈕圓角結束的地方（內縮 10px）往下長 */
-:is(#todoRoot,#todoFloat) .row.dopen .mt{display:none!important}
+@media (hover:hover){:is(#todoRoot,#todoFloat) .row.dopen .mt{display:none!important}}   /* 只有電腦版的氣泡需要避開面板 */
 :is(#todoRoot,#todoFloat) .dpanel{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;margin:0 10px 6px 55px}
 :is(#todoRoot,#todoFloat) .dpanel.on{grid-template-rows:1fr}
 :is(#todoRoot,#todoFloat) .dpin{min-height:0;overflow:hidden}
@@ -251,15 +249,17 @@ body{overflow:auto}
 @keyframes dckPop{0%{transform:scale(.5) rotate(-40deg)}55%{transform:scale(1.5) rotate(15deg)}100%{transform:scale(1) rotate(0)}}
 
 /* 面板：左邊一條跟面板等高的箭頭，按下去在「小步驟」和「備註」之間左右推動切換 */
-:is(#todoRoot,#todoFloat) .dpc .dtg{position:relative;flex:none;width:26px;align-self:stretch;border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--faint);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:background .15s,color .15s}
-:is(#todoRoot,#todoFloat) .dpc .dtg:hover{background:var(--bg3);color:var(--blue)}
-:is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1)}
-:is(#todoRoot,#todoFloat) .dpc.nm .dtg span{transform:rotate(180deg)}
-:is(#todoRoot,#todoFloat) .dpc .dtg.hn::after{content:'';position:absolute;top:9px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--blue)}   /* 有備註的小圓點 */
-:is(#todoRoot,#todoFloat) .dpc.nm .dtg.hn::after{display:none}
 :is(#todoRoot,#todoFloat) .dpc .dvp{flex:1;min-width:0;overflow:hidden;transition:height .3s cubic-bezier(.4,0,.2,1)}
 :is(#todoRoot,#todoFloat) .dpc .dtrk{display:flex;width:200%;align-items:flex-start;transition:transform .3s cubic-bezier(.4,0,.2,1)}
 :is(#todoRoot,#todoFloat) .dpc.nm .dtrk{transform:translateX(-50%)}
-:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{width:50%;flex:none;padding:10px 12px 8px;visibility:hidden;transition:visibility 0s .3s}
+:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{width:50%;flex:none;padding:10px 12px 8px 38px;visibility:hidden;transition:visibility 0s .3s}
 :is(#todoRoot,#todoFloat) .dpc:not(.nm) .dpa,:is(#todoRoot,#todoFloat) .dpc.nm .dpb{visibility:visible;transition:none}
-@media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .dpc *{transition:none!important}}
+
+/* 箭頭條：蓋在內容上，展開備註時往右跑到右邊，收起再跑回左邊（跟內容的推動同時進行） */
+:is(#todoRoot,#todoFloat) .dpc{position:relative}
+:is(#todoRoot,#todoFloat) .dpc .dpb{padding:10px 38px 8px 12px}
+:is(#todoRoot,#todoFloat) .dpc .dtg{position:absolute;z-index:2;top:0;bottom:0;left:0;width:26px;border:0;border-right:1px solid var(--line);background:rgba(58,110,165,.12);color:var(--blue);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:left .3s cubic-bezier(.4,0,.2,1),background .25s,color .25s,border-color .3s}
+:is(#todoRoot,#todoFloat) .dpc.nm .dtg{left:calc(100% - 26px);border-right-color:transparent;border-left:1px solid var(--line)}
+:is(#todoRoot,#todoFloat) .dpc .dtg.gold{background:rgba(232,195,90,.28);color:#b8962e}
+:is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+:is(#todoRoot,#todoFloat) .dpc.nm .dtg span{transform:rotate(180deg)}
