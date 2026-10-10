@@ -251,15 +251,16 @@ body{overflow:auto}
 /* 面板：左邊一條跟面板等高的箭頭，按下去在「小步驟」和「備註」之間左右推動切換 */
 :is(#todoRoot,#todoFloat) .dpc .dvp{flex:1;min-width:0;overflow:hidden;transition:height .3s cubic-bezier(.4,0,.2,1)}
 :is(#todoRoot,#todoFloat) .dpc .dtrk{display:grid}
-:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{grid-area:1/1;align-self:start;padding:10px 12px 8px 38px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease .28s,visibility 0s .5s}
-:is(#todoRoot,#todoFloat) .dpc:not(.nm) .dpa,:is(#todoRoot,#todoFloat) .dpc.nm .dpb{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .22s ease .28s,visibility 0s}   /* 先等箭頭滑過去（.28s），文字才淡入淡出 */
+:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{grid-area:1/1;align-self:start;padding:10px 12px 8px 38px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s .15s}   /* 舊文字：先淡出 */
+:is(#todoRoot,#todoFloat) .dpc:not(.nm) .dpa,:is(#todoRoot,#todoFloat) .dpc.nm .dpb{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .22s ease .32s,visibility 0s}   /* 新文字：箭頭滑到位之後才淡入 */
+:is(#todoRoot,#todoFloat) .dpc.sw .dvp{transition:height .3s cubic-bezier(.4,0,.2,1) .12s}
 :is(#todoRoot,#todoFloat) .dpc.sw .dvp{transition:height .22s ease .28s}
 
 /* 箭頭條：蓋在內容上，展開備註時往右跑到右邊，收起再跑回左邊（跟內容的推動同時進行） */
 :is(#todoRoot,#todoFloat) .dpc{position:relative}
 :is(#todoRoot,#todoFloat) .dpc .dpb{padding:10px 38px 8px 12px}
-:is(#todoRoot,#todoFloat) .dpc .dtg{position:absolute;z-index:2;top:0;bottom:0;left:0;width:26px;border:0;border-right:1px solid var(--line);background:rgba(58,110,165,.12);color:var(--blue);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:left .3s cubic-bezier(.4,0,.2,1),background .25s,color .25s,border-color .3s}
+:is(#todoRoot,#todoFloat) .dpc .dtg{position:absolute;z-index:2;top:0;bottom:0;left:0;width:26px;border:0;border-right:1px solid var(--line);background:rgba(58,110,165,.12);color:var(--blue);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:left .3s cubic-bezier(.4,0,.2,1) .12s,background .25s,color .25s,border-color .3s .12s}
 :is(#todoRoot,#todoFloat) .dpc.nm .dtg{left:calc(100% - 26px);border-right-color:transparent;border-left:1px solid var(--line)}
 :is(#todoRoot,#todoFloat) .dpc .dtg.gold{background:rgba(232,195,90,.28);color:#b8962e}
-:is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+:is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1) .12s}
 :is(#todoRoot,#todoFloat) .dpc.nm .dtg span{transform:rotate(180deg)}

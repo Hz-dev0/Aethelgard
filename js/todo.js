@@ -13,7 +13,7 @@ const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14
 let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
 let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
 /* 完成紀錄只看最近五條：從第六條開始，備註和小步驟就不留了（任務本身和完成次數照舊保留） */
-const KEEP_RECENT=5;
+const KEEP_RECENT=5;   // 備註／小步驟保留到最近 5 條完成紀錄（畫面顯示 4 條 + 1 條緩衝，避免剛完成又取消時資料不見）
 function pruneDoneExtras(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0));
   dn.slice(KEEP_RECENT).forEach(t=>{delete t.note;delete t.subs})}
 const save=()=>{pruneDoneExtras();S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
@@ -218,7 +218,7 @@ function renderAll(){const G={week:[],month:[],later:[],today:[]},N={week:'這�
   let h=`<div class="hrow"><h1>全部</h1>${addTg()}</div><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
   for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t,{cmp:1})).join(''):'<div class="empty">空的</div>');
   return h}
-function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,5);
+function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,4);   // 畫面只列 4 條（可撤回的）；第 5 條的備註／小步驟還留著當緩衝，第 6 條起才清
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
@@ -319,7 +319,7 @@ document.addEventListener('click',e=>{
   if(a==='d-ok')return closeDet();
   if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;c.classList.add('sw');clearTimeout(c._sw);c._sw=setTimeout(()=>c.classList.remove('sw'),800);
     detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();detTint();
-    if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},540)}   // 還沒寫備註就直接可以打字
+    if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},600)}   // 還沒寫備註就直接可以打字
     else{const ae=document.activeElement;if(ae&&pn.contains(ae)&&ae.blur)ae.blur()}
     return}
   if(a==='d-add')return detAdd();
