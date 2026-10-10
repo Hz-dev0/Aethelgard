@@ -12,7 +12,11 @@ let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
 let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
 let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
-const save=()=>{S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
+/* 完成紀錄只看最近五條：從第六條開始，備註和小步驟就不留了（任務本身和完成次數照舊保留） */
+const KEEP_RECENT=5;
+function pruneDoneExtras(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0));
+  dn.slice(KEEP_RECENT).forEach(t=>{delete t.note;delete t.subs})}
+const save=()=>{pruneDoneExtras();S.updatedAt=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
@@ -125,7 +129,7 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
-  closeDet(true);detId=t.id;detNm=false;row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
+  closeDet(true);detId=t.id;detNm=!!(t.note&&t.note.trim());row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
@@ -313,8 +317,9 @@ document.addEventListener('click',e=>{
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
-  if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();detTint();
-    if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},320)}   // 還沒寫備註就直接可以打字
+  if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;c.classList.add('sw');clearTimeout(c._sw);c._sw=setTimeout(()=>c.classList.remove('sw'),800);
+    detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();detTint();
+    if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},540)}   // 還沒寫備註就直接可以打字
     else{const ae=document.activeElement;if(ae&&pn.contains(ae)&&ae.blur)ae.blur()}
     return}
   if(a==='d-add')return detAdd();
