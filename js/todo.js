@@ -37,7 +37,7 @@ const readSnaps=()=>{try{return JSON.parse(localStorage.getItem(KSN)||'[]')}catc
 function takeSnap(){try{const arr=readSnaps(),js=JSON.stringify(S);if(arr[0]&&arr[0].j===js)return;
   arr.unshift({at:Date.now(),n:(S.tasks||[]).length,j:js});arr.length=Math.min(arr.length,5);lastSnapAt=Date.now();
   try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(e){arr.length=Math.max(1,arr.length-2);try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(_){}}}catch(e){}}
-const save=()=>{pruneDoneExtras();stampChanges();S.updatedAt=Date.now();if(Date.now()-lastSnapAt>30*6e4)takeSnap();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,800)}};
+const save=()=>{pruneDoneExtras();stampChanges();S.updatedAt=Date.now();if(Date.now()-lastSnapAt>30*6e4)takeSnap();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,3000)}};
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
@@ -486,8 +486,11 @@ const REF=()=>window._fbDoc(window._fbDb,'Aethelgard','todo');
    （Firestore 離線時只把寫入暫存在記憶體，關掉 App 就沒了，所以不能靠它） */
 const KS=K+'_synced';
 function markSynced(){try{localStorage.setItem(KS,String(S.updatedAt||0))}catch(e){}dirty=false;statusUpd()}
+let lastPushJson='';   // 上次成功寫進雲端的內容：一樣就不重複寫（雲端寫入有免費額度）
 async function push(){const seq=saveSeq;
-  try{await window._fbSetDoc(REF(),{json:JSON.stringify(S),updatedAt:S.updatedAt||Date.now()},{merge:true});if(seq===saveSeq)markSynced()}
+  try{const js=JSON.stringify(S);
+    if(js===lastPushJson){if(seq===saveSeq)markSynced();return}
+    await window._fbSetDoc(REF(),{json:js,updatedAt:S.updatedAt||Date.now()},{merge:true});lastPushJson=js;if(seq===saveSeq)markSynced()}
   catch(e){console.warn('[todo push]',e)}
   statusUpd()}
 async function pull(){
@@ -502,8 +505,9 @@ async function pull(){
       else await push()}
     else if((S.tasks&&S.tasks.length)||S.updatedAt)await push();
     else markSynced();
-    cloudReady=true;statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
+    cloudReady=true;lastPullAt=Date.now();statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
 /* 立刻同步一次（連上網、切回前景、點狀態點時用）；剛恢復連線時 Firestore 可能還沒接上，失敗就稍後再試 */
+let lastPullAt=0;   // 上次成功跟雲端對過的時間
 let syncAt=0;   // 同步鎖：離線時 Firestore 的寫入會一直「等待中」不回應，所以鎖要有逾時，不能永遠卡住
 async function syncNow(tries){if(syncAt&&Date.now()-syncAt<15000)return false;
   if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
@@ -526,7 +530,7 @@ function statusUpd(){const el=document.getElementById('td-sync');if(!el)return;
   el.setAttribute('aria-label','同步狀態：'+(t||'已同步'))}
 const SYNMSG={ok:'已同步到雲端',pend:'有修改還沒同步，連上網就會送出',off:'目前離線，修改都先存在手機，連上網會自動同步（橘點＝有修改還沒送出）',wait:'正在連線雲端…'};
 function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);if(navigator.onLine!==false)syncNow()}
-addEventListener('online',()=>{statusUpd();syncNow()});
+addEventListener('online',()=>{statusUpd();if(dirty||Date.now()-lastPullAt>2*6e4)syncNow()});   // 恢復連線：有東西要送、或超過 2 分鐘沒對過才連雲端
 addEventListener('offline',statusUpd);
 setInterval(statusUpd,1500);
 
@@ -535,7 +539,9 @@ function startCloud(){
     if(!(window._fbIsOwner&&window._fbUid&&window._fbGetDoc))return;
     clearInterval(t);
     const go=async()=>{if(await pull()){setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()})}
+  document.addEventListener('visibilitychange',()=>{   // 切回前景：有東西要送、或超過 10 分鐘沒對過才讀雲端（不再每次切回來都讀一次）
+    if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);push()}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
+    if(dirty||Date.now()-lastPullAt>10*6e4)syncNow()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}

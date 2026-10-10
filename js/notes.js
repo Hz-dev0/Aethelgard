@@ -101,15 +101,24 @@ const _notesDlg = (() => {
 window._notesDlg = _notesDlg;
 
 // ── Persistence ────────────────────────────────────────
+// 「內容簽章」：只看筆記的實際內容，不含目前翻到第幾頁、時間戳。只是切換頁面／離開筆記頁
+// （位置有變但內容沒變）不算修改，不會標成「待同步」，也不會重新推送雲端。
+let _notesSigBase;
+function _notesSig() {
+  try { return JSON.stringify(notesFolderData, (k, v) => (k === 'currentPage' || k === 'updatedAt') ? undefined : v); } catch (e) { return null; }
+}
 function notesSave() {
   try { notesFlush(); } catch(e) {}
-  const _saveTs = Date.now();
+  const _sig = _notesSig();
+  if (_notesSigBase === undefined) _notesSigBase = _sig;   // 第一次還沒有基準：以現在為準
+  const _changed = _sig === null || _sig !== _notesSigBase;
+  const _saveTs = _changed ? Date.now() : (window._notesMemUpdatedAt || Date.now());
   // ★ 幫目前正在編輯的分頁蓋上自己的更新時間戳，讓合併邏輯可以「以分頁為單位」
   // 判斷新舊，而不是整份筆記比一個時間戳（見 _pickNotes）。
   const _curTab = notesFolderData[notesTabIndex];
   if (_curTab) {
     if (!_curTab.id) _curTab.id = _notesGenId();
-    _curTab.updatedAt = _saveTs;
+    if (_changed) _curTab.updatedAt = _saveTs;
   }
   try {
     localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify({
@@ -124,7 +133,9 @@ function notesSave() {
   } catch(e) {}
   // ★ fix：確保 _notesMemUpdatedAt 與 localStorage updatedAt 一致
   // 讓 _pickNotes 和 snapshot 比對時拿到同一個時間戳
+  if (!_changed) return;   // 內容沒變（只是換頁、離開筆記頁）：位置已記下，不用同步也不用提示
   window._notesMemUpdatedAt = _saveTs;
+  _notesSigBase = _sig;
   try {
     if (typeof syncNotesToCloud === 'function') syncNotesToCloud();
   } catch(e) {}
@@ -161,6 +172,7 @@ function notesLoad() {
       }
       window._notesDeletedTabIds = _notesMergeDeletedLogs(window._notesDeletedTabIds, d.deletedTabIds);
       _notesLoaded = true;
+      _notesSigBase = _notesSig();
     }
   } catch(e) {
     // localStorage 不可用（無痕模式）或資料損毀 → 保持記憶體現有資料
@@ -173,6 +185,7 @@ function notesReloadFromStorage() {
   if (_notesIsVisible) return;
   notesLoad();
   notesEnsureDefaults();
+  _notesSigBase = _notesSig();
   notesRenderTabs();
 }
 window.notesReloadFromStorage = notesReloadFromStorage;
@@ -209,6 +222,7 @@ function notesLoadFromData(notes) {
 
   _notesLoaded = true; // 已從雲端載入，後續 sync 可安全帶上 notes
   notesEnsureDefaults();
+  _notesSigBase = _notesSig();   // 雲端／本機載入進來的內容就是新的基準
   // ── 只有筆記頁不在前景時才重新渲染，避免打斷使用者操作 ──
   if (_notesIsVisible) {
     // 靜默更新：flush 目前編輯中的文字到 notesFolderData，再重渲染
@@ -1157,6 +1171,7 @@ function notesShow() {
     notesLoad();
   }
   notesEnsureDefaults();
+  if (!window._notesUserEdited) _notesSigBase = _notesSig();   // 補預設值不算使用者修改，基準放在補完之後
   // ★ 恢復到上次停留的 tab 和 page（直接由 notesLoad/notesLoadFromData 寫入 notesTabIndex 和 currentPage）
   if (notesFolderData.length > 0) {
     notesTabIndex = Math.min(notesTabIndex, notesFolderData.length - 1);
