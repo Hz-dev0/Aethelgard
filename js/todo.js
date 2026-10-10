@@ -105,21 +105,26 @@ const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、
   h=h.replace(/(https?:\/\/[^\s<\u0000]+)/g,u=>{let tail='';const m=u.match(/(?:[.,;:!?)）」』。，、；：！？]|&gt;)+$/);if(m){tail=m[0];u=u.slice(0,-tail.length)}
     return `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`});
   return h.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i])};
+let detNm=false;   // 面板目前顯示的是「備註」頁嗎（預設是小步驟頁）
 function detPanel(t,on){const hasN=!!t.note;
-  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div>`}
+  return `<div class="dpanel${on?' on':''}" id="td-dpn"><div class="dpin"><div class="dpc${detNm?' nm':''}"><button type="button" class="dtg${hasN?' hn':''}" data-a="d-mode" aria-label="切換小步驟／備註"><span>›</span></button><div class="dvp"><div class="dtrk"><div class="dpa"><div id="td-ds">${detSubs(t)}</div><label class="dghost"><span class="gp">＋</span><input id="td-sn" placeholder="小步驟" autocomplete="off" enterkeyhint="done"></label></div><div class="dpb"><div id="td-nv" class="nv${hasN?'':' hid'}">${linkify(t.note||'')}</div><textarea id="td-nt" rows="3" class="${hasN?'hid':''}" placeholder="備註（連結可以寫成 (網址)[文字]）">${esc(t.note||'')}</textarea></div></div></div></div></div></div>`}
+function detWire(pn){   // 面板高度跟著目前那一頁的內容走（切頁、加步驟、備註長高都會平順地伸縮）
+  const c=pn.querySelector('.dpc'),vp=pn.querySelector('.dvp'),A=pn.querySelector('.dpa'),B=pn.querySelector('.dpb');
+  const fit=()=>{vp.style.height=(c.classList.contains('nm')?B:A).offsetHeight+'px'};
+  fit();pn._fit=fit;pn._ro=new ResizeObserver(fit);pn._ro.observe(A);pn._ro.observe(B)}
 const P=()=>document.getElementById('td-dpn');
 const pq=sel=>{const p=P();return p&&p.querySelector(sel)};
 function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   clearTimeout(detSave);const t=by(detId),row=pn.previousElementSibling;
   if(t){const nt=pn.querySelector('#td-nt');if(nt)t.note=nt.value.trim()?nt.value:'';if(!(t.subs||[]).length)delete t.subs;save()}
-  detId=null;pn.removeAttribute('id');
+  detId=null;pn.removeAttribute('id');if(pn._ro)pn._ro.disconnect();
   if(row){row.classList.remove('dopen');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
   if(imm){pn.remove();return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
-  closeDet(true);detId=t.id;row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
-  const pn=row.nextElementSibling;requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
+  closeDet(true);detId=t.id;detNm=false;row.classList.add('dopen');row.insertAdjacentHTML('afterend',detPanel(t));
+  const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t)};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
@@ -207,7 +212,7 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
-function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();}
+function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn)}
 function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
   const q=qhOff?null:qParse(raw),n=q?q.name:raw;   // 氣泡裡手動選的優先，沒選的才用輸入框辨識出來的
   const kind=kdVal||(q&&q.kind)||defKd(),tm=tmVal||(q&&q.time)||'',rp=parseInt(rpVal)||(q&&q.repeat)||0;
@@ -302,6 +307,10 @@ document.addEventListener('click',e=>{
     const r=el.closest('.row'),on=r.classList.toggle('show');on?peek.add(Number(id)):peek.delete(Number(id));return}
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
+  if(a==='d-mode'){const pn=P(),c=pn&&pn.querySelector('.dpc');if(!c)return;detNm=c.classList.toggle('nm');if(pn._fit)pn._fit();
+    if(detNm){const t=by(detId);if(t&&!t.note)setTimeout(()=>{const nt=pq('#td-nt');if(nt&&detNm)nt.focus()},320)}   // 還沒寫備註就直接可以打字
+    else{const ae=document.activeElement;if(ae&&pn.contains(ae)&&ae.blur)ae.blur()}
+    return}
   if(a==='d-add')return detAdd();
   if(a==='d-tg'){const sid=el.dataset.sid;detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(x)x.done=!x.done});
     const b=pq('.dck[data-sid="'+sid+'"]');if(b&&b.parentNode.classList.contains('dn'))b.classList.add('pop');return}   // 勾起來的星星閃一下

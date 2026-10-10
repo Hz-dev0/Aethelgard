@@ -223,7 +223,7 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpanel{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;margin:0 10px 6px 55px}
 :is(#todoRoot,#todoFloat) .dpanel.on{grid-template-rows:1fr}
 :is(#todoRoot,#todoFloat) .dpin{min-height:0;overflow:hidden}
-:is(#todoRoot,#todoFloat) .dpc{background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:10px 12px 8px}
+:is(#todoRoot,#todoFloat) .dpc{display:flex;background:var(--card);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden}
 :is(#todoRoot,#todoFloat) .dpc .ds{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}
 :is(#todoRoot,#todoFloat) .dpc .ds span{flex:1;min-width:0;word-break:break-word}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn span{color:var(--faint);text-decoration:line-through}
@@ -249,3 +249,17 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .ds.dn .dck{color:#e8c35a;text-shadow:0 0 8px rgba(232,195,90,.75)}
 :is(#todoRoot,#todoFloat) .dpc .dck.pop{animation:dckPop .45s ease-out}
 @keyframes dckPop{0%{transform:scale(.5) rotate(-40deg)}55%{transform:scale(1.5) rotate(15deg)}100%{transform:scale(1) rotate(0)}}
+
+/* 面板：左邊一條跟面板等高的箭頭，按下去在「小步驟」和「備註」之間左右推動切換 */
+:is(#todoRoot,#todoFloat) .dpc .dtg{position:relative;flex:none;width:26px;align-self:stretch;border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--faint);cursor:pointer;display:grid;place-items:center;padding:0;font:inherit;transition:background .15s,color .15s}
+:is(#todoRoot,#todoFloat) .dpc .dtg:hover{background:var(--bg3);color:var(--blue)}
+:is(#todoRoot,#todoFloat) .dpc .dtg span{font-size:22px;line-height:1;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+:is(#todoRoot,#todoFloat) .dpc.nm .dtg span{transform:rotate(180deg)}
+:is(#todoRoot,#todoFloat) .dpc .dtg.hn::after{content:'';position:absolute;top:9px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--blue)}   /* 有備註的小圓點 */
+:is(#todoRoot,#todoFloat) .dpc.nm .dtg.hn::after{display:none}
+:is(#todoRoot,#todoFloat) .dpc .dvp{flex:1;min-width:0;overflow:hidden;transition:height .3s cubic-bezier(.4,0,.2,1)}
+:is(#todoRoot,#todoFloat) .dpc .dtrk{display:flex;width:200%;align-items:flex-start;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+:is(#todoRoot,#todoFloat) .dpc.nm .dtrk{transform:translateX(-50%)}
+:is(#todoRoot,#todoFloat) .dpc .dpa,:is(#todoRoot,#todoFloat) .dpc .dpb{width:50%;flex:none;padding:10px 12px 8px;visibility:hidden;transition:visibility 0s .3s}
+:is(#todoRoot,#todoFloat) .dpc:not(.nm) .dpa,:is(#todoRoot,#todoFloat) .dpc.nm .dpb{visibility:visible;transition:none}
+@media (prefers-reduced-motion:reduce){:is(#todoRoot,#todoFloat) .dpc *{transition:none!important}}
