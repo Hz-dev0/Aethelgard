@@ -731,7 +731,7 @@ function notesFlipIn() {
     box.animate([
       { opacity: .12, filter: 'blur(5px)' },
       { opacity: 1, filter: 'blur(0px)' }
-    ], { duration: 260, easing: 'ease-out' });
+    ], { duration: 364, easing: 'ease-out' });
   });
 }
 function notesFlipDrag(dx) {   // 手指拖曳中：目前這頁漸漸變虛
@@ -749,8 +749,8 @@ function notesFlipDrag(dx) {   // 手指拖曳中：目前這頁漸漸變虛
 function notesFlipRelease(commit, dir) {
   _flipBoxes().forEach(box => {
     if (commit) _flipReset(box);   // 翻頁成功：新頁由 notesFlipIn 淡入
-    else { box.style.transition = 'opacity .2s ease, filter .2s ease'; box.style.opacity = ''; box.style.filter = '';
-      setTimeout(() => _flipReset(box), 220); }
+    else { box.style.transition = 'opacity .28s ease, filter .28s ease'; box.style.opacity = ''; box.style.filter = '';
+      setTimeout(() => _flipReset(box), 300); }
   });
   if (commit) notesChangeSubPage(dir);
 }
