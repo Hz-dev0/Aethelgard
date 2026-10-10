@@ -179,7 +179,7 @@ const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
 let hovT=0,hovLeave=0,hovLock=0,hovXY=null;
 const inPanelFocus=()=>{const p=P(),a=document.activeElement;return !!(p&&a&&p.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName))};
 function hoverEval(t){if(!t||!t.closest)return;
-  const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||(bd&&bd.closest('.row.dopen'));
+  const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||t.closest('#todoRoot .row.dopen');   // 整張展開的卡片（含修改鈕、圈選框）都算停留區，游標移去按修改不會收起
   clearTimeout(hovT);hovT=0;
   if(bd&&!inZone){const r=bd.closest('.row'),id=rowIdOf(r);clearTimeout(hovLeave);hovLeave=0;if(id)hovT=setTimeout(()=>{hovT=0;openDet(id,r)},HOV_MS);return}   // 稍微停一下（50ms）才展開，快速掃過不會跳動
   if(inZone){clearTimeout(hovLeave);hovLeave=0;return}

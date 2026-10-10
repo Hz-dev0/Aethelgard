@@ -718,50 +718,39 @@ function notesChangeSubPage(dir) {
 }
 window.notesChangeSubPage = notesChangeSubPage;
 
-// ── 翻頁特效 ──────────────────────────────────────────
-// 翻頁：新頁面以書頁翻過來的樣子落下（next＝書脊在左、prev＝書脊在右）。
-// 手機拖曳標題時，頁面會跟著手指翻到一半（越拖角度越大、有陰影），過了門檻震動一下＝放開就會翻頁。
+// ── 翻頁特效：淡出淡入（舊頁虛、新頁實）──────────────────
+// 手機拖曳標題時，目前這頁會隨拖曳距離變淡、變模糊（虛）；過了門檻輕震一下＝放開就會翻頁。
+// 翻頁後新頁從模糊淡入到清楚（實）。沒過門檻放開就回到清楚。
 const _FLIP_PX = 60;
 function _flipBoxes() { return [...document.querySelectorAll('.notes-folder-content .notes-note-box')]; }
-function _flipHinge(box, side) {   // 書脊：整個內容區的左邊或右邊（兩欄並排時兩欄一起像一本書）
-  const wrap = box.parentElement.getBoundingClientRect(), r = box.getBoundingClientRect();
-  return ((side === 'left' ? wrap.left : wrap.right) - r.left) + 'px 50%';
-}
-function _flipReset(box) { box.style.transition = ''; box.style.transform = ''; box.style.transformOrigin = ''; box.style.boxShadow = ''; box.style.opacity = ''; }
-function notesFlipIn(dir) {
+function _flipReset(box) { box.style.transition = ''; box.style.opacity = ''; box.style.filter = ''; }
+function notesFlipIn() {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const side = dir > 0 ? 'left' : 'right', deg = dir > 0 ? -26 : 26;
   _flipBoxes().forEach(box => {
     if (!box.animate) return;
-    box.style.transformOrigin = _flipHinge(box, side);
-    const an = box.animate([
-      { transform: `perspective(1000px) rotateY(${deg}deg) translateX(${dir * 24}px)`, opacity: .15, boxShadow: `${-dir * 14}px 0 24px rgba(0,0,0,.22)` },
-      { transform: 'perspective(1000px) rotateY(0) translateX(0)', opacity: 1, boxShadow: '0 0 0 rgba(0,0,0,0)' }
-    ], { duration: 280, easing: 'cubic-bezier(.2,.7,.3,1)' });
-    an.onfinish = an.oncancel = () => { box.style.transformOrigin = ''; };
+    box.animate([
+      { opacity: .12, filter: 'blur(5px)' },
+      { opacity: 1, filter: 'blur(0px)' }
+    ], { duration: 260, easing: 'ease-out' });
   });
 }
-function notesFlipDrag(dx) {   // 手指拖曳中：頁面跟著翻到一半
+function notesFlipDrag(dx) {   // 手指拖曳中：目前這頁漸漸變虛
   const tab = notesFolderData[notesTabIndex];
   const dir = dx < 0 ? 1 : -1;   // 往左拖＝下一頁
   const atEdge = tab && ((dir < 0 && tab.currentPage === 0) || (dir > 0 && tab.currentPage >= tab.pages.length - 1));
-  const k = atEdge ? .18 : .5;   // 已經是第一頁／最後一頁：只翻一點點（有阻力），讓人知道到底了
-  const deg = Math.max(-38, Math.min(38, dx * k * .55));
-  const t = Math.min(1, Math.abs(dx) / _FLIP_PX);
+  const t = Math.min(1, Math.abs(dx) / _FLIP_PX) * (atEdge ? .3 : 1);   // 第一頁／最後一頁：只虛一點點，讓人知道到底了
   _flipBoxes().forEach(box => {
     box.style.transition = 'none';
-    box.style.transformOrigin = _flipHinge(box, dir > 0 ? 'left' : 'right');
-    box.style.transform = `perspective(1000px) rotateY(${deg}deg) translateX(${dx * k * .35}px)`;
-    box.style.boxShadow = `${-dir * (6 + 12 * t)}px 0 ${12 + 16 * t}px rgba(0,0,0,${(.08 + .14 * t).toFixed(3)})`;
-    box.style.opacity = String(1 - .25 * t);
+    box.style.opacity = String((1 - .6 * t).toFixed(3));
+    box.style.filter = `blur(${(4 * t).toFixed(2)}px)`;
   });
   return !atEdge && Math.abs(dx) >= _FLIP_PX;
 }
 function notesFlipRelease(commit, dir) {
   _flipBoxes().forEach(box => {
-    if (commit) { _flipReset(box); }      // 翻頁成功：交給 notesFlipIn 接著播落下動畫
-    else { box.style.transition = 'transform .25s cubic-bezier(.2,.9,.3,1.2), box-shadow .25s, opacity .25s'; box.style.transform = ''; box.style.boxShadow = ''; box.style.opacity = '';
-      setTimeout(() => _flipReset(box), 270); }   // 沒過門檻：彈回原位
+    if (commit) _flipReset(box);   // 翻頁成功：新頁由 notesFlipIn 淡入
+    else { box.style.transition = 'opacity .2s ease, filter .2s ease'; box.style.opacity = ''; box.style.filter = '';
+      setTimeout(() => _flipReset(box), 220); }
   });
   if (commit) notesChangeSubPage(dir);
 }
