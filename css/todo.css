@@ -189,7 +189,9 @@ body{overflow:auto}
 #td-wp .prow select,#td-wp .prow input[type=date]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .rp input{flex:none;width:64px;font:inherit;font-size:14px;padding:6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .r-tm{margin-bottom:0}
-#td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=dayonly] .r-tm{display:none}
+#td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=dayonly] .r-tm,#td-wp[data-kd=none] .r-rm,#td-wp[data-kd=dayonly] .r-rm{display:none}
+#td-wp .r-tm+.r-rm{margin-top:8px}
+#td-wp .r-rm input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
 #td-wp .r-tm+.rp{margin-top:8px}
 #td-wb{position:fixed;inset:0;z-index:2000}
 #td-wp{position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
@@ -275,3 +277,8 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row .del span{grid-area:1/1;transition:opacity .25s}
 :is(#todoRoot,#todoFloat) .row .del .ed2{opacity:0}
 #td-wp #td-pn{flex:1;min-width:0;font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+
+/* 到期提醒開關：只在卡片展開時出現在「修改」左邊；關＝灰底深灰字，開＝跟修改鈕同一組金色 */
+:is(#todoRoot,#todoFloat) .row .bell{display:none;width:38px;flex:none;border:0;cursor:pointer;place-items:center;background:#E6E9ED;color:#5A6370;position:relative;z-index:2;transition:background .2s,color .2s;-webkit-tap-highlight-color:transparent}
+:is(#todoRoot,#todoFloat) .row.dopen .bell{display:grid}
+:is(#todoRoot,#todoFloat) .row.dopen .bell.on{background:#F1E8CA;color:#B8962E;box-shadow:inset 1px 0 0 #E0D3A6}

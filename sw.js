@@ -1,4 +1,4 @@
-const _swBuild = '202610101141'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
+const _swBuild = '202610111500'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
@@ -19,6 +19,7 @@ const ASSETS = [
   '/Aethelgard/js/notes.js',
   '/Aethelgard/js/todo.js',
   '/Aethelgard/js/pwa.js',
+  '/Aethelgard/js/push.js',
 ];
 
 // ── 外部資源快取（Firebase SDK、marked、DOMPurify、字體）──
@@ -33,6 +34,7 @@ const EXT_PRECACHE = [
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js',
   'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js',
   'https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js',
 ];
@@ -105,4 +107,26 @@ self.addEventListener('fetch', e => {
   }
   if (url.origin !== self.location.origin) return;
   e.respondWith(ownFetch(e));
+});
+
+// ── 推播通知：收到伺服器送來的提醒就顯示；點通知回到 App ──
+self.addEventListener('push', e => {
+  let p = {};
+  try { p = e.data ? e.data.json() : {}; } catch (_) {}
+  const d = p.data || p;
+  e.waitUntil(self.registration.showNotification(d.title || 'Aethelgard', {
+    body: d.body || '',
+    tag: d.tag || undefined,   // 同一個任務的提醒共用 tag：App 開著時本機先跳、伺服器再送，也只會看到一則
+    icon: '/Aethelgard/icon.png',
+    data: { url: d.url || '/Aethelgard/' },
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/Aethelgard/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow(url);
+  }));
 });

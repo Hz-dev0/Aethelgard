@@ -9,7 +9,7 @@ document.body.appendChild(fl);
 
 const K='aeth_todo_v1';
 let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
-const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0,early:3},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
+const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0,early:3,remindMin:10,remindDef:1,tzo:480},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
 let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
 let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
 /* 完成紀錄只看最近五條：從第六條開始，備註和小步驟就不留了（任務本身和完成次數照舊保留） */
@@ -58,6 +58,9 @@ function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
 function toast(m,id,fn,ms){const t=$('toast');t.textContent=m;t.dataset.id=id||'';toast.fn=fn||null;t.style.pointerEvents=id||fn?'auto':'none';   // fn：點「復原」要做的事（刪除／新增的撤銷）
   if(id||fn){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||(id?3500:1400))}
+const ALM='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.2 1.5M4 6l3-2.5M20 6l-3-2.5"/></svg>';
+const remOn=t=>(t.rm===undefined?!!S.cfg.remindDef:t.rm!==0);
+const bellBtn=t=>(t.time&&t.date&&!t.done)?`<button class="bell${remOn(t)?' on':''}" data-a="bell" data-id="${t.id}" aria-label="到期提醒" aria-pressed="${remOn(t)}">${ALM}</button>`:'';
 const tmark=t=>{const a=t.subs||[],n=a.length;return (t.note?'<span class="nt">📝</span>':'')+(n?`<span class="nt">${a.filter(x=>x.done).length}/${n}</span>`:'')};   // 有備註／小步驟才多一個小標記
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
@@ -69,7 +72,7 @@ function row(t,o={}){const m=[],d=today();
   if(auto||t.kind==='dayonly'||o.pre){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  const open=t.id===detId,h=`<div class="row${o.early?' early':''}${open?' dopen':''}${cmp?' cmp'+(open?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd" data-a="tog" data-id="${t.id}"><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除"><span class="dl">刪除</span><span class="ed2">修改</span></button></div>`;
+  const open=t.id===detId,h=`<div class="row${o.early?' early':''}${open?' dopen':''}${cmp?' cmp'+(open?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd" data-a="tog" data-id="${t.id}"><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}${bellBtn(t)}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除"><span class="dl">刪除</span><span class="ed2">修改</span></button></div>`;
   return h+(t.id===detId?detPanel(t,true):'')}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
@@ -200,7 +203,7 @@ function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><textarea class="nm" id="td-nm" rows="1" placeholder="想到什麼，打字" autocomplete="off"></textarea><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
 /* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
-let kdVal='',dtVal='',tmVal='',rpVal='',dtAuto=false;   // dtAuto：日期是程式預設填的（不是使用者自己選的），才會隨時間自動算今天／隔天
+let kdVal='',dtVal='',tmVal='',rpVal='',rmVal='',dtAuto=false;   // dtAuto：日期是程式預設填的（不是使用者自己選的），才會隨時間自動算今天／隔天
 const defKd=()=>'none',effKd=()=>kdVal||defKd();   // 新增任務預設「沒有期限」（今天標籤新增的，addTask 會自動放進今天）
 const defTm=()=>pad(new Date().getHours())+':00';
 /* 三種期限：沒有期限＝沒日期；全天任務＝只有日期；截止時間＝日期＋時＋分（一定要有）。由資料判斷，不用搬舊資料 */
@@ -216,7 +219,7 @@ document.addEventListener('scroll',e=>{const el=e.target;if(el.classList&&el.cla
 document.addEventListener('click',e=>{const it=e.target.closest&&e.target.closest('.wc .wi');if(!it)return;
   const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});
 const popIn=e=>{const t=e.target;if(!t.id)return;
-  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-rp')rpVal=t.value};
+  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-rp')rpVal=t.value;else if(t.id==='td-rm')rmVal=t.checked?'1':'0'};
 document.addEventListener('input',popIn);document.addEventListener('change',popIn);
 function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k=effKd();w.dataset.kd=k;   // 依類型顯示／隱藏日期和時間
   const di=w.querySelector('#td-dt');
@@ -225,11 +228,12 @@ function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k
   if(k==='deadline'){if(!tmVal)tmVal=defTm();   // 截止時間一定有時和分
     const [h,m]=tmVal.split(':'),hc=wheelCol('h'),mc=wheelCol('m');
     hc.scrollTop=(parseInt(h)||0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH;mark(hc);mark(mc);autoDate()}}
+const rmOn=()=>rmVal===''?!!S.cfg.remindDef:rmVal==='1';   // 這個任務要不要提醒（沒動過就跟著設定裡的預設）
 let popTask=null,addBak=null;   // popTask：氣泡正在編輯哪個任務（null = 新增任務用）
 function renderKeep(){const el=document.getElementById('td-nm'),v=el?el.value:'';render();const n=document.getElementById('td-nm');if(n&&v){n.value=v;n.style.height='auto';n.style.height=Math.min(150,n.scrollHeight)+'px';qHint()}}
 function closePop(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
   const pnEl=w.querySelector('#td-pn'),newName=pnEl?pnEl.value.trim():'';
-  if(commit==='clr'){kdVal=dtVal=tmVal=rpVal='';dtAuto=false}
+  if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=rmVal='';dtAuto=false}
   else if(effKd()==='deadline'){tmVal=wheelVal('h')+':'+wheelVal('m');if(dtAuto)dtVal=dateForTime(tmVal)}
   w.remove();bk&&bk.remove();
   if(popTask){const t=by(popTask);popTask=null;
@@ -237,23 +241,24 @@ function closePop(commit){const w=document.getElementById('td-wp'),bk=document.g
       if(commit==='clr'){k='none';date='';time='';rp=0}
       else{k=effKd();rp=parseInt(rpVal)||0;date=k==='none'?'':(dtVal||today());time=k==='deadline'?(tmVal||defTm()):''}
       if(k!==uiKind(t))t.kind=k;   // 類型沒變就保留原本的內部種類，舊任務的顯示行為不會悄悄改變
-      t.date=k==='none'?'':date;t.time=time;t.repeat=rp;if(newName)t.name=newName;save();
-      if(addBak){({kdVal,dtVal,tmVal,rpVal,dtAuto}=addBak);addBak=null}renderKeep();return}
-    if(addBak){({kdVal,dtVal,tmVal,rpVal,dtAuto}=addBak);addBak=null}}
+      t.date=k==='none'?'':date;t.time=time;t.repeat=rp;if(k==='deadline')t.rm=rmOn()?1:0;else delete t.rm;if(newName)t.name=newName;save();
+      if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,dtAuto}=addBak);addBak=null}renderKeep();return}
+    if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,dtAuto}=addBak);addBak=null}}
   const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
 function openPop(btn,tid){closePop('ok');
-  if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):''}
+  if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,rmVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):'';rmVal=t.rm===0?'0':t.rm===1?'1':''}
   const col=(k,list)=>`<div class="wc" data-k="${k}">${list.map(v=>`<div class="wi" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div>`;
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
   w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="dayonly">全天任務</option><option value="deadline">截止時間</option></select></div>
 <div class="prow r-dt"><input type="date" id="td-dt"></div>
 <div class="r-tm"><div class="wheel">${col('h',Array.from({length:24},(_,i)=>pad(i)))}<b>:</b>${col('m',MINS)}</div></div>
+<label class="prow r-rm"><input type="checkbox" id="td-rm"> 到期前提醒我</label>
 <label class="prow rp"><input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="—"> 天後重複提醒我</label>
 <div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
   if(tid){const tt=by(tid);w.insertAdjacentHTML('afterbegin',`<div class="prow"><input id="td-pn" value="${esc(tt.name)}" placeholder="名稱" autocomplete="off"></div>`)}
   document.getElementById('todoFloat').append(bk,w);
-  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;
+  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;w.querySelector('#td-rm').checked=rmOn();
   popFill();
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
   const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),room=innerHeight-r.bottom-18,roomUp=r.top-18,below=wh<=room||room>=roomUp,avail=Math.max(160,below?room:roomUp);   // 放得下就照原位；兩邊都放不下就挑大的那邊並限制高度（可捲動）
@@ -301,9 +306,10 @@ function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
     if(!date&&tm)date=dateForTime(tm);
     const k=!date?'none':tm?'deadline':'dayonly';   // 沒日期＝沒有期限；只有日期＝全天任務；有日期又有時間＝截止時間
     const t={id:Date.now()+idx,name:n,kind:k,date,time:k==='none'?'':tm,repeat:rp,done:false,touched:Date.now()};
+    if(k==='deadline')t.rm=rmOn()?1:0;
     if(view==='today'&&(k==='none'||date===today()))t.on=today();
     S.tasks.push(t);made.push(t)});
-  kdVal=dtVal=tmVal=rpVal='';dtAuto=false;qhOff=false;save();render();$('nm').focus();
+  kdVal=dtVal=tmVal=rpVal=rmVal='';dtAuto=false;qhOff=false;save();render();$('nm').focus();
   toast(made.length>1?'已新增 '+made.length+' 個':'已新增',null,()=>{S.tasks=S.tasks.filter(x=>!made.includes(x));save();render()},5000)}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
@@ -373,7 +379,7 @@ function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
       if(t.repeat){const x=new Date(today()+'T00:00');x.setDate(x.getDate()+t.repeat);
-        const nx={id:Date.now()+1,name:t.name,kind:t.time?'deadline':'dayonly',date:ymd(x),time:t.time||'',repeat:t.repeat,done:false,touched:Date.now()};S.tasks.push(nx);t.nextId=nx.id;m+='　'+t.repeat+' 天後再提醒'}
+        const nx={id:Date.now()+1,name:t.name,kind:t.time?'deadline':'dayonly',date:ymd(x),time:t.time||'',repeat:t.repeat,done:false,touched:Date.now()};if(t.rm!==undefined)nx.rm=t.rm;S.tasks.push(nx);t.nextId=nx.id;m+='　'+t.repeat+' 天後再提醒'}
       toast(m,t.id)}
     else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
   else if(a==='today'){t.on=today();t.touched=Date.now()}
@@ -404,6 +410,7 @@ document.addEventListener('click',e=>{
     const b=pq('.dck[data-sid="'+sid+'"]');if(b&&b.parentNode.classList.contains('dn'))b.classList.add('pop');return}   // 勾起來的星星閃一下
   if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
   if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
+  if(a==='bell'){const t=by(el.dataset.id);if(!t)return;t.rm=remOn(t)?0:1;save();el.classList.toggle('on',t.rm===1);el.setAttribute('aria-pressed',t.rm===1);return}
   if(a==='w-ok')return closePop('ok');
   if(a==='w-clr')return closePop('clr');
   if(a==='add')return addTask();
@@ -424,6 +431,10 @@ document.addEventListener('click',e=>{
         'auth/operation-not-allowed':'Firebase 後台尚未啟用 Google 登入方式','auth/unauthorized-domain':'這個網址尚未加入 Firebase 授權網域'};
       say('❌ '+(m[err.code]||('綁定失敗：'+(err.code||err.message))))});return}
   if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
+  if(a==='s-ntf-on'||a==='s-ntf-off'||a==='s-ntf-test'){const P=window._push;if(!P)return toast('通知模組尚未載入');
+    if(a==='s-ntf-test'){P.test().then(m=>toast(m),e=>toast(e.message||'失敗'));return}
+    if(a==='s-ntf-on'){S.cfg.tzo=-new Date().getTimezoneOffset();save();P.enable().then(()=>{openSet();toast('已開啟通知')},e=>toast(e.message||'開啟失敗',null,null,3500))}
+    else P.disable().then(()=>{openSet();toast('已關閉通知')},e=>toast(e.message||'失敗'));return}
   if(a==='s-tab'){stab=el.dataset.k;bkMsg='';bkUndo=false;return openSet()}
   if(a==='s-do'){const v=$('bk').value;
     if(v==='full')dl('aethelgard-backup-'+today()+'.json',JSON.stringify(fullBackup(),null,1));
@@ -474,7 +485,7 @@ ${bkMsg?`<div class="bkmsg">${esc(bkMsg)}</div>`:''}
 ${bkMsg&&bkUndo&&pv?`<div class="brow" style="margin-top:8px"><button class="b q sbtn" data-a="s-undo">復原</button></div>`:''}`}
 function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-c="${k}" min="${min}" max="${max}" inputmode="numeric">`;
   const row=(t,d,c)=>`<div class="srow"><div class="sx"><div class="st">${t}</div>${d?`<div class="sd">${d}</div>`:''}</div><div class="sc">${c}</div></div>`;
-  const TB=[['gen','⚙','一般'],['tok','🔑','通行碼'],['acct','◉','帳號'],['exp','⇩','備份']];
+  const TB=[['gen','⚙','一般'],['tok','🔑','通行碼'],['ntf','🔔','通知'],['acct','◉','帳號'],['exp','⇩','備份']];
   if(!TB.some(t=>t[0]===stab))stab=TB[0][0];
   const info=(window._fbAuthInfo&&window._fbAuthInfo())||{},email=info.email||(window._fbAuth&&window._fbAuth.currentUser&&window._fbAuth.currentUser.email)||'',
     hasG=(info.providers||[]).includes('google.com');
@@ -489,6 +500,10 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
 <div class="sh">通行碼</div>
 <div class="tkrow"><div id="td-tkcode" class="tkcode">——————</div><button class="b dk" data-a="s-tgen">產生</button></div>
 <div class="meta" id="td-tkst" style="margin-top:8px;min-height:16px"></div>`,
+  ntf:row('這支手機接收通知','',window._push&&window._push.on()?'<span class="okmark">✓ 已開啟</span><button class="b q" data-a="s-ntf-off" style="border-radius:8px;min-height:36px;padding:0 14px">關閉</button>':'<button class="b" data-a="s-ntf-on" style="border-radius:8px;min-height:36px;padding:0 14px">開啟</button>')
+    +row('提前提醒','到期前幾分鐘通知（0＝準時）',o('remindMin',0,1440)+'分鐘')
+    +row('新任務預設提醒','有截止時間的新任務','<select data-c="remindDef"><option value="1">要</option><option value="0">不要</option></select>')
+    +`<button class="b q sbtn" data-a="s-ntf-test" style="margin-top:12px">測試通知</button>`,
   acct:(email?row('登入帳號',`<span style="word-break:break-all">${esc(email)}</span>`,''):'')
     +(hasG?row('Google 登入','已綁定，用 Google 登入會看到同一份資料','<span class="okmark">✓ 已綁定</span>')
           :row('Google 登入','綁定後，也能用 Google 登入並看到同一份資料','<button class="b q" data-a="s-link" style="border-radius:8px;min-height:36px;padding:0 14px">綁定</button>'))
@@ -546,7 +561,7 @@ async function syncNow(tries){if(syncAt&&Date.now()-syncAt<15000)return false;
   if(!ok&&(tries||0)<3&&navigator.onLine!==false)setTimeout(()=>syncNow((tries||0)+1),3000);
   if(ok){try{if(typeof _pushNotesEmergency==='function')_pushNotesEmergency('同步')}catch(e){}}
   statusUpd();return ok}
-window._todoSyncNow=syncNow;window._todoToast=toast;
+window._todoSyncNow=syncNow;window._todoToast=toast;window._todoState=()=>S;
 
 /* ===== 同步狀態點（頂列）：已同步 / 待同步 / 離線 / 連線中 ===== */
 function stateNow(){

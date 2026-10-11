@@ -31,6 +31,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   const db = getFirestore(app);
 
   // ── 把 Firebase 工具掛到 window，讓非 module 的 JS 也能用 ──
+  window._fbApp = app;
   window._fbDb = db;
   window._fbAuth = auth;
   window._fbDoc = doc;
