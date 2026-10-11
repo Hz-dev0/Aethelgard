@@ -295,4 +295,4 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row .nmi{display:inline-block}
 :is(#todoRoot,#todoFloat) .row.dopen .nmt.mq{text-overflow:clip}
 :is(#todoRoot,#todoFloat) .row.dopen .nmt.mq .nmi{animation:tdmq var(--mqt) ease-in-out infinite alternate}
-@keyframes tdmq{0%,18%{transform:translateX(0)}82%,100%{transform:translateX(var(--mqd))}}
+@keyframes tdmq{0%,4%{transform:translateX(0)}86%,100%{transform:translateX(var(--mqd))}}

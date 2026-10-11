@@ -65,7 +65,7 @@ const bellBtn=t=>(t.time&&t.date&&!t.done)?`<button class="bell${remOn(t)?' on':
 const tmark=t=>{const a=t.subs||[],n=a.length;return (t.note?'<span class="nt">📝</span>':'')+(n?`<span class="nt">${a.filter(x=>x.done).length}/${n}</span>`:'')};   // 有備註／小步驟才多一個小標記
 const nmIn=t=>`<span class="nmt"><span class="nmi">${esc(t.name)}</span></span>`+tmark(t);   // 名稱（收起時「…」截斷，展開時太長就跑馬燈）＋小標記
 function mqRun(row){if(RM||!row||!row.classList.contains('dopen'))return;const el=row.querySelector('.nmt'),i=el&&el.firstElementChild;if(!i)return;
-  const d=i.offsetWidth-el.clientWidth;if(d>2){el.style.setProperty('--mqd',-d+'px');el.style.setProperty('--mqt',(d/30+2.5).toFixed(1)+'s');el.classList.add('mq')}}
+  const d=i.offsetWidth-el.clientWidth;if(d>2){el.style.setProperty('--mqd',-d+'px');if(!el.classList.contains('mq')){el.style.setProperty('--mqt',(d/30+1.5).toFixed(1)+'s');el.classList.add('mq')}}}   // 先馬上開始捲；動畫跑完後再校正一次終點
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
   if(o.pre){m.push(`<span class="meta warn">${t.time} · ${o.early?'還有 '+leftTxt(o.early):'時間到了'}</span>`)}   // 凌晨任務提前顯示在今天
@@ -168,7 +168,7 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
   closeDet();detId=t.id;detNm=!!(t.note&&t.note.trim())||!(t.subs||[]).length;   // 舊的收合動畫和新的展開動畫同時進行；備註跟小步驟都沒有時，先顯示備註
-  hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');setTimeout(()=>mqRun(row),380);   // 等卡片展開動畫跑完、寬度確定再判斷名稱有沒有超出
+  hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');setTimeout(()=>mqRun(row),30);setTimeout(()=>mqRun(row),380);   // 一展開就開始捲，展開動畫跑完、寬度確定後再校正終點
   row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   if(matchMedia('(hover:none)').matches)setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
@@ -301,7 +301,7 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
-function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null;if(detId){const r=document.querySelector('.row.dopen');if(r)setTimeout(()=>mqRun(r),380)}}
+function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null;if(detId){const r=document.querySelector('.row.dopen');if(r){setTimeout(()=>mqRun(r),30);setTimeout(()=>mqRun(r),380)}}}
 function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
   const lines=qhOff?[raw.replace(/\s*\n\s*/g,' ')]:nmLines(raw),made=[];   // 換行 = 一行一個任務，每行各自辨識日期／時間
   lines.forEach((ln,idx)=>{const q=qhOff?null:qParse(ln),n=q?q.name:ln;   // 氣泡裡手動選的優先，沒選的才用辨識結果
