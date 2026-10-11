@@ -282,3 +282,17 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row .bell{display:none;width:38px;flex:none;border:0;cursor:pointer;place-items:center;background:#E6E9ED;color:#5A6370;position:relative;z-index:2;transition:background .2s,color .2s;-webkit-tap-highlight-color:transparent}
 :is(#todoRoot,#todoFloat) .row.dopen .bell{display:grid}
 :is(#todoRoot,#todoFloat) .row.dopen .bell.on{background:#F1E8CA;color:#B8962E;box-shadow:inset 1px 0 0 #E0D3A6}
+
+/* 卡片不換行：名稱太長用「…」截斷（📝／小步驟標記固定在右邊不被切掉）；第二列也維持單行 */
+:is(#todoRoot,#todoFloat) .row .nmln{display:flex;align-items:center;min-width:0}
+:is(#todoRoot,#todoFloat) .row .nmt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#todoRoot,#todoFloat) .row .nmln .nt{flex:none}
+:is(#todoRoot,#todoFloat) .row .mrow{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#todoRoot,#todoFloat) .row .dlx{display:none}
+:is(#todoRoot,#todoFloat) .row.dopen .dlx{display:inline}
+
+/* 展開時名稱太長：來回慢慢捲動（收起時回到「…」截斷） */
+:is(#todoRoot,#todoFloat) .row .nmi{display:inline-block}
+:is(#todoRoot,#todoFloat) .row.dopen .nmt.mq{text-overflow:clip}
+:is(#todoRoot,#todoFloat) .row.dopen .nmt.mq .nmi{animation:tdmq var(--mqt) ease-in-out infinite alternate}
+@keyframes tdmq{0%,18%{transform:translateX(0)}82%,100%{transform:translateX(var(--mqd))}}

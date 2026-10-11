@@ -53,8 +53,9 @@ const key=t=>(t.date||'9999')+(t.time||''),byDate=(a,b)=>key(a)<key(b)?-1:1;
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':n<=30?'month':'later'}
 function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
-  if(t.kind==='dayonly')return d===0?'今天'+tm:d>0?t.date+tm+'（剩 '+d+' 天）':'日子已過';
-  return d===0?'今天'+tm+' 截止':d>0?'剩 '+d+' 天（'+t.date+tm+'）':'已過期 '+(-d)+' 天'}
+  const more=`<span class="dlx">（${t.date}${tm}）</span>`;   // 日期時間：卡片展開才顯示，收起時只留「剩 N 天」
+  if(t.kind==='dayonly')return d===0?'今天'+tm:d>0?'剩 '+d+' 天'+more:'日子已過';
+  return d===0?'今天'+tm+' 截止':d>0?'剩 '+d+' 天'+more:'已過期 '+(-d)+' 天'}
 function toast(m,id,fn,ms){const t=$('toast');t.textContent=m;t.dataset.id=id||'';toast.fn=fn||null;t.style.pointerEvents=id||fn?'auto':'none';   // fn：點「復原」要做的事（刪除／新增的撤銷）
   if(id||fn){const b=document.createElement('b');b.textContent='　復原';b.style.cursor='pointer';t.append(b)}
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||(id?3500:1400))}
@@ -62,6 +63,9 @@ const ALM='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="c
 const remOn=t=>(t.rm===undefined?!!S.cfg.remindDef:t.rm!==0);
 const bellBtn=t=>(t.time&&t.date&&!t.done)?`<button class="bell${remOn(t)?' on':''}" data-a="bell" data-id="${t.id}" aria-label="到期提醒" aria-pressed="${remOn(t)}">${ALM}</button>`:'';
 const tmark=t=>{const a=t.subs||[],n=a.length;return (t.note?'<span class="nt">📝</span>':'')+(n?`<span class="nt">${a.filter(x=>x.done).length}/${n}</span>`:'')};   // 有備註／小步驟才多一個小標記
+const nmIn=t=>`<span class="nmt"><span class="nmi">${esc(t.name)}</span></span>`+tmark(t);   // 名稱（收起時「…」截斷，展開時太長就跑馬燈）＋小標記
+function mqRun(row){if(RM||!row||!row.classList.contains('dopen'))return;const el=row.querySelector('.nmt'),i=el&&el.firstElementChild;if(!i)return;
+  const d=i.offsetWidth-el.clientWidth;if(d>2){el.style.setProperty('--mqd',-d+'px');el.style.setProperty('--mqt',(d/30+2.5).toFixed(1)+'s');el.classList.add('mq')}}
 function row(t,o={}){const m=[],d=today();
   const dayToday=t.kind==='dayonly'&&t.date===d,auto=t.kind!=='none'&&t.date===d;
   if(o.pre){m.push(`<span class="meta warn">${t.time} · ${o.early?'還有 '+leftTxt(o.early):'時間到了'}</span>`)}   // 凌晨任務提前顯示在今天
@@ -72,7 +76,7 @@ function row(t,o={}){const m=[],d=today();
   if(auto||t.kind==='dayonly'||o.pre){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
   const cmp=o.cmp&&m.length;   // 沒有任何第二列資訊的任務就維持原樣，不用翻
-  const open=t.id===detId,h=`<div class="row${o.early?' early':''}${open?' dopen':''}${cmp?' cmp'+(open?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd" data-a="tog" data-id="${t.id}"><div>${esc(t.name)}${tmark(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:m.join(' ')}</div>${side?`<div class="side">${side}</div>`:''}${bellBtn(t)}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除"><span class="dl">刪除</span><span class="ed2">修改</span></button></div>`;
+  const open=t.id===detId,h=`<div class="row${o.early?' early':''}${open?' dopen':''}${cmp?' cmp'+(open?' show':''):''}"><button class="ckz" data-a="chk" data-id="${t.id}" aria-label="完成"><span class="ck"></span></button><div class="bd" data-a="tog" data-id="${t.id}"><div class="nmln">${nmIn(t)}</div>${cmp?`<span class="mt">${m.join(' ')}</span>`:(m.length?`<div class="mrow">${m.join(' ')}</div>`:'')}</div>${side?`<div class="side">${side}</div>`:''}${bellBtn(t)}<button class="del dk" data-a="del" data-id="${t.id}" aria-label="刪除"><span class="dl">刪除</span><span class="ed2">修改</span></button></div>`;
   return h+(t.id===detId?detPanel(t,true):'')}
 function sec(k,title,n,body){const o=S.fold[k]!==false;return `<h2 class="fold" data-a="fold" data-k="${k}">${o?'▾':'▸'} ${title}（${n}）</h2>`+(o?body:'')}
 /* 新增區塊可收合；收合狀態只記在這支手機（不進雲端、不會觸發同步） */
@@ -158,13 +162,14 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
     if(t.subs&&!t.subs.length){delete t.subs;ch=true}
     if(ch)save()}
   detId=null;pn.removeAttribute('id');if(pn._ro)pn._ro.disconnect();
-  if(row){row.classList.remove('dopen','show');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=esc(t.name)+tmark(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
+  if(row){row.classList.remove('dopen','show');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=nmIn(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
   if(imm){pn.remove();return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
   closeDet();detId=t.id;detNm=!!(t.note&&t.note.trim())||!(t.subs||[]).length;   // 舊的收合動畫和新的展開動畫同時進行；備註跟小步驟都沒有時，先顯示備註
-  hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');row.insertAdjacentHTML('afterend',detPanel(t));
+  hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');setTimeout(()=>mqRun(row),380);   // 等卡片展開動畫跑完、寬度確定再判斷名稱有沒有超出
+  row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
   if(matchMedia('(hover:none)').matches)setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
@@ -296,7 +301,7 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
-function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null}
+function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null;if(detId){const r=document.querySelector('.row.dopen');if(r)setTimeout(()=>mqRun(r),380)}}
 function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
   const lines=qhOff?[raw.replace(/\s*\n\s*/g,' ')]:nmLines(raw),made=[];   // 換行 = 一行一個任務，每行各自辨識日期／時間
   lines.forEach((ln,idx)=>{const q=qhOff?null:qParse(ln),n=q?q.name:ln;   // 氣泡裡手動選的優先，沒選的才用辨識結果
