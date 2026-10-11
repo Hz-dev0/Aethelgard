@@ -4,7 +4,7 @@
    - App 開著時：這裡每 30 秒自己檢查一次，準時跳通知（跟伺服器共用 tag，不會重複） */
 (function () {
   // ★ Firebase 主控台 → 專案設定 → Cloud Messaging → 網路推送憑證 → 產生金鑰組，把公開金鑰貼在這裡
-  const VAPID_KEY = 'BHlf2hE8viDvhV3Vs7O6upG9zOgmmBm12hUZzr2d4ThmrBmAPy65z-Y2nxld362SM1DX1zVJ9jpizrjmf7Fs2eY';
+  const VAPID_KEY = '';
   const DEV_K = 'aeth_push_dev', ON_K = 'aeth_push_on', FIRED_K = 'aeth_push_fired';
 
   const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
