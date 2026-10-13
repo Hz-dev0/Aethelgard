@@ -302,3 +302,16 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row.dopen .nmt.mq .nmi{animation:tdmq var(--mqt) ease-in-out infinite alternate}
 @keyframes tdmq{0%,4%{transform:translateX(0)}86%,100%{transform:translateX(var(--mqd))}}
 #td-wp .tclr{flex:none;width:32px;height:32px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--bg);color:var(--text-faint,var(--gray));font-size:13px;cursor:pointer}
+/* 小步驟提醒氣泡 */
+#td-sp .prow{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:14px;color:var(--text)}
+#td-sp .prow select,#td-sp .prow input[type=date],#td-sp .prow input[type=time]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+#td-sb{position:fixed;inset:0;z-index:2000}
+#td-sp{width:280px;max-width:calc(100vw - 16px);box-sizing:border-box;position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
+#td-sp::before{content:'';position:absolute;left:calc(var(--ax) - 7px);width:12px;height:12px;background:#fff;transform:rotate(45deg)}
+#td-sp.dn::before{top:-7px;border-left:1px solid var(--line);border-top:1px solid var(--line)}
+#td-sp.up::before{bottom:-7px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+#td-sp .wbtns{display:flex;gap:8px;margin-top:8px}
+#td-sp .wbtns .b{flex:1;border-radius:10px;min-height:38px}
+#td-sp{width:240px}
+:is(#todoRoot,#todoFloat) .dpc .dbl{flex:none;display:grid;place-items:center;border:0;background:none;color:var(--faint);cursor:pointer;padding:2px 4px}
+:is(#todoRoot,#todoFloat) .dpc .dbl.on{color:var(--blue)}
