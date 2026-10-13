@@ -315,6 +315,7 @@ body{overflow:auto}
 #td-sp{width:240px}
 :is(#todoRoot,#todoFloat) .dpc .dbl{flex:none;display:grid;place-items:center;border:0;background:none;color:var(--faint);cursor:pointer;padding:2px 4px}
 :is(#todoRoot,#todoFloat) .dpc .dbl.on{color:var(--blue)}
-/* 小步驟排序：選取鈕不被瀏覽器當成捲動／選字；拖動中的那一列浮起來 */
-:is(#todoRoot,#todoFloat) .dpc .dck{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* 小步驟排序：名稱不被選字；拖動中的那一列浮起來 */
+:is(#todoRoot,#todoFloat) .dpc .ds span{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+:is(#todoRoot,#todoFloat) .dpc .dck{width:30px;height:30px;margin:-4px 0 -4px -4px}   /* 星星的可點範圍放大，版面高度不變 */
 :is(#todoRoot,#todoFloat) .dpc .ds.sdrag{position:relative;z-index:5;background:rgba(255,255,255,.96);border-radius:8px;box-shadow:0 4px 14px rgba(30,45,69,.2);transition:none}
