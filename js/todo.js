@@ -183,13 +183,13 @@ function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
-/* 小步驟排序：長按左邊的選取鈕（星星）約 0.4 秒，手指不放、上下拖動就能換順序；短按照舊是勾選／取消勾選 */
+/* 小步驟排序：長按小步驟的名稱約 0.4 秒，手指不放、上下拖動就能換順序；星星照舊是短按勾選／取消勾選 */
 let sdrag=null,sdNoClick=0;
 function sdStart(){const d=sdrag;if(!d)return;d.on=true;const rows=[...d.list.children];d.rows=rows;d.from=rows.indexOf(d.row);d.to=d.from;
   d.mids=rows.map(r=>{const q=r.getBoundingClientRect();return q.top+q.height/2});d.h=d.row.getBoundingClientRect().height;
   d.row.classList.add('sdrag');rows.forEach(r=>{if(r!==d.row)r.style.transition='transform .15s'});
   if(navigator.vibrate){try{navigator.vibrate(15)}catch(_){}}}
-document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('#td-ds .dck');if(!b||(e.pointerType==='mouse'&&e.button!==0))return;
+document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('#td-ds .ds span');if(!b||(e.pointerType==='mouse'&&e.button!==0))return;
   const row=b.closest('.ds');if(!row)return;try{b.setPointerCapture(e.pointerId)}catch(_){}
   sdrag={row,list:row.parentNode,id:e.pointerId,x:e.clientX,y:e.clientY,on:false,timer:setTimeout(sdStart,380)}});
 document.addEventListener('pointermove',e=>{const d=sdrag;if(!d||e.pointerId!==d.id)return;
@@ -202,7 +202,8 @@ function sdEnd(e){const d=sdrag;if(!d||(e&&e.pointerId!==d.id))return;clearTimeo
   d.row.classList.remove('sdrag');d.rows.forEach(r=>{r.style.transform='';r.style.transition=''});
   if(d.to!==d.from)detSet(t=>{const a=t.subs||[],m=a.splice(d.from,1)[0];a.splice(d.to,0,m)})}
 document.addEventListener('pointerup',sdEnd);document.addEventListener('pointercancel',sdEnd);
-document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('#td-ds .dck'))e.preventDefault()});
+document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('#td-ds .ds span'))e.preventDefault()});
+document.addEventListener('touchmove',e=>{if(sdrag&&sdrag.on&&e.cancelable)e.preventDefault()},{passive:false});   // 拖動中不讓面板跟著捲
 /* 小步驟提醒：每個小步驟可以自己設日期＋時間（rd／rt），到時間推播「任務名稱｜小步驟」。時間空白＝沒有提醒 */
 function openSp(btn,sid){closeSp('ok');const t=by(detId),x=t&&(t.subs||[]).find(v=>v.id==sid);if(!x)return;
   const bk=document.createElement('div');bk.id='td-sb';bk.dataset.a='sp-ok';
