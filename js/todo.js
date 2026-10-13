@@ -51,7 +51,8 @@ const by=id=>S.tasks.find(t=>t.id==id);
 const age=t=>Math.floor((Date.now()-t.touched)/864e5);
 const key=t=>(t.date||'9999')+(t.time||''),byDate=(a,b)=>key(a)<key(b)?-1:1;
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
-function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':n<=30?'month':'later'}
+const isRep=t=>!!(t.repeat||(t.wd&&t.wd.length));
+function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':(n<=30||isRep(t))?'month':'later'}   // 重複任務有日期就依日期歸類，不會掉到「有空再說」
 function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
   const more=`<span class="dlx">（${t.date}${tm}）</span>`;   // 日期時間：卡片展開才顯示，收起時只留「剩 N 天」
   if(t.kind==='dayonly')return d===0?'今天'+tm:d>0?'剩 '+d+' 天'+more:'日子已過';
@@ -193,10 +194,11 @@ function sdStart(){const d=sdrag;if(!d)return;d.on=true;const rows=[...d.list.ch
   if(navigator.vibrate){try{navigator.vibrate(15)}catch(_){}}}
 document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('#td-ds .ds span');if(!b||(e.pointerType==='mouse'&&e.button!==0))return;
   const row=b.closest('.ds');if(!row)return;try{b.setPointerCapture(e.pointerId)}catch(_){}
-  sdrag={row,list:row.parentNode,id:e.pointerId,x:e.clientX,y:e.clientY,on:false,timer:setTimeout(sdStart,380)}});
+  const mouse=e.pointerType==='mouse';   // 電腦版：按住往上下拖就開始（不用長按）；手機／觸控才需要長按約 0.4 秒
+  sdrag={row,list:row.parentNode,id:e.pointerId,x:e.clientX,y:e.clientY,on:false,mouse,timer:mouse?0:setTimeout(sdStart,380)}});
 document.addEventListener('pointermove',e=>{const d=sdrag;if(!d||e.pointerId!==d.id)return;
-  if(!d.on){if(Math.hypot(e.clientX-d.x,e.clientY-d.y)>8){clearTimeout(d.timer);sdrag=null}return}   // 還沒長按夠久就移動＝不是要拖，取消
-  const dy=e.clientY-d.y;d.row.style.transform='translateY('+dy+'px)';
+  if(!d.on){const mv=Math.hypot(e.clientX-d.x,e.clientY-d.y);if(d.mouse){if(mv>4)sdStart();else return}else{if(mv>8){clearTimeout(d.timer);sdrag=null}return}}   // 還沒長按夠久就移動＝不是要拖，取消
+  if(!d.on)return;const dy=e.clientY-d.y;d.row.style.transform='translateY('+dy+'px)';
   const cy=d.mids[d.from]+dy;let to=0;d.mids.forEach((m,i)=>{if(i!==d.from&&m<cy)to++});d.to=to;   // 其他小步驟有幾個還在被拖的這個上面＝它的新位置
   d.rows.forEach((r,i)=>{if(i===d.from)return;let sh=0;if(d.from<to&&i>d.from&&i<=to)sh=-d.h;else if(d.from>to&&i>=to&&i<d.from)sh=d.h;r.style.transform=sh?'translateY('+sh+'px)':''})});
 function sdEnd(e){const d=sdrag;if(!d||(e&&e.pointerId!==d.id))return;clearTimeout(d.timer);sdrag=null;if(!d.on)return;
@@ -279,7 +281,8 @@ function closePop(commit){const w=document.getElementById('td-wp'),bk=document.g
   if(popTask){const t=by(popTask);popTask=null;
     if(t){let k,date,time,rp;
       if(commit==='clr'){k='none';date='';time='';rp=0}
-      else{k=effKd();rp=wdVal?0:(parseInt(rpVal)||0);date=k==='none'?'':(dtVal||today());time=k==='none'?'':(tmVal||'')}
+      else{k=effKd();rp=wdVal?0:(parseInt(rpVal)||0);if(k==='none'&&(rp||wdVal))k='deadline';   // 設了重複就不能是「沒有期限」：自動改成截止，並補上日期
+        date=k==='none'?'':(dtVal||(wdVal?firstWd(wdVal.split('').map(Number)):today()));time=k==='none'?'':(tmVal||'')}
       t.kind=k;
       t.date=k==='none'?'':date;t.time=time;t.repeat=rp;if(wdVal)t.wd=wdVal.split('').map(Number);else delete t.wd;if(time)t.rm=rmOn()?1:0;else delete t.rm;if(newName)t.name=newName;save();
       if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,dtAuto}=addBak);addBak=null}renderKeep();return}
@@ -315,7 +318,10 @@ function earlyItems(open){const c=S.cfg,now=Date.now();if(!(c.early>0))return[];
     .map(t=>({t,ms:new Date(t.date+'T'+t.time).getTime()-now})).filter(x=>x.ms<=c.early*36e5).sort((a,b)=>a.ms-b.ms)}
 const earlySigOf=a=>a.map(x=>x.t.id+':'+(x.ms>0?leftTxt(x.ms):'0')).join('|');
 let earlySig='';
-function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
+/* 舊資料修正：設了重複卻沒有日期（掉在「有空再說」）的任務，補成「截止」＋日期 */
+function fixRep(){let ch=false;S.tasks.forEach(t=>{if(t.done||!isRep(t)||(t.kind!=='none'&&t.date))return;
+  t.kind='deadline';t.date=(t.wd&&t.wd.length)?firstWd(t.wd):today();t.repeat=+t.repeat||0;ch=true});if(ch)save()}
+function renderToday(){fixRep();const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   const early=earlyItems(open);earlySig=earlySigOf(early);
   const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
   const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d&&!early.some(x=>x.t===t)).sort(byDate);
@@ -325,7 +331,7 @@ function renderToday(){const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   h+='<h2>今天要做</h2>'+((mine.length||early.length)?mine.map(t=>row(t,{unmark:1,inToday:1})).join('')+early.map(x=>row(x.t,{unmark:1,inToday:1,pre:1,early:x.ms>0?x.ms:0})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
   if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
   return h}
-function renderAll(){const G={week:[],month:[],later:[],today:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',later:'有空再說',today:'今天'};
+function renderAll(){fixRep();const G={week:[],month:[],later:[],today:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',later:'有空再說',today:'今天'};
   S.tasks.filter(t=>!t.done).forEach(t=>G[grp(t)].push(t));
   let h=`<div class="hrow"><h1>全部</h1>${addTg()}</div><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
   for(const k of['week','month','later','today'])h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t,{cmp:1})).join(''):'<div class="empty">空的</div>');
@@ -340,11 +346,12 @@ function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
   lines.forEach((ln,idx)=>{const q=qhOff?null:qParse(ln),n=q?q.name:ln;   // 氣泡裡手動選的優先，沒選的才用辨識結果
     const wdA=wdVal?wdVal.split('').map(Number):(q&&q.wd)||[],rp=wdA.length?0:(parseInt(rpVal)||(q&&q.repeat)||0);
     let date=dtVal||(q&&q.date)||'',tm=tmVal||(q&&q.time)||'';
-    if(kdVal==='none'){date='';tm=''}
+    if(kdVal==='none'&&!rp&&!wdA.length){date='';tm=''}   // 沒期限＋沒重複才清空；有重複一定要有日期
     else if(kdVal){date=date||(tm?dateForTime(tm):today())}   // 氣泡選了截止／指定：一定有日期，時間可空白
     if(!date&&tm)date=dateForTime(tm);
     if(wdA.length&&!date)date=firstWd(wdA);
-    const k=!date?'none':(kdVal==='deadline'||kdVal==='dayonly')?kdVal:(q&&q.kind)||'dayonly';   // 氣泡手動選的優先，其次是輸入辨識（有「前」＝截止），其餘有日期的＝指定
+    if(rp&&!date)date=today();
+    const k=!date?'none':(kdVal==='deadline'||kdVal==='dayonly')?kdVal:(q&&q.kind)||((rp||wdA.length)?'deadline':'dayonly');   // 氣泡手動選的優先，其次是輸入辨識（有「前」＝截止），其餘有日期的＝指定
     const t={id:Date.now()+idx,name:n,kind:k,date,time:k==='none'?'':tm,repeat:rp,done:false,touched:Date.now()};
     if(wdA.length)t.wd=wdA;
     if(t.time)t.rm=rmOn()?1:0;
@@ -422,11 +429,11 @@ function act(a,id,val){const t=by(id);if(!t)return;
       const wk=t.wd&&t.wd.length;
       if(t.repeat||wk){let x;
         if(wk){const bs=t.date&&t.date>today()?t.date:today(),f=new Date(bs+'T00:00');f.setDate(f.getDate()+1);x=new Date(firstWd(t.wd,ymd(f))+'T00:00')}   // 每週：從「今天或任務日期（取較晚）」的隔天起，找下一個勾選的星期
-        else{x=new Date(today()+'T00:00');x.setDate(x.getDate()+t.repeat)}
-        const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:wk?0:t.repeat,done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;
+        else{x=new Date(today()+'T00:00');x.setDate(x.getDate()+(+t.repeat||1))}
+        const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:wk?0:(+t.repeat||1),done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;
         if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();const off=Math.round((new Date(ymd(x)+'T12:00:00')-new Date((t.date||today())+'T12:00:00'))/864e5);   // 小步驟的提醒日期跟著任務一起往後挪相同天數，時間不變
         nx.subs=t.subs.map((y,i)=>{const n={id:b+i,text:y.text,done:false};if(y.rd&&y.rt){const q=new Date(y.rd+'T12:00:00');q.setDate(q.getDate()+off);n.rd=ymd(q);n.rt=y.rt}return n})}   // 重複任務：備註和小步驟一起帶到下一次，小步驟全部重設為未完成
-        S.tasks.push(nx);t.nextId=nx.id;m+=wk?'　下次 '+(x.getMonth()+1)+'/'+x.getDate()+'（週'+QW[x.getDay()]+'）提醒':'　'+t.repeat+' 天後再提醒'}
+        S.tasks.push(nx);t.nextId=nx.id;m+=wk?'　下次 '+(x.getMonth()+1)+'/'+x.getDate()+'（週'+QW[x.getDay()]+'）提醒':'　'+(+t.repeat||1)+' 天後再提醒'}
       toast(m,t.id)}
     else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
   else if(a==='today'){t.on=today();t.touched=Date.now()}
