@@ -145,6 +145,8 @@ document.addEventListener('input',e=>{if(e.target.id==='td-nm'){const el=e.targe
 /* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
 let detId=null,detSave=0;
 const SALM='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M4.5 6.5l3-2.5M19.5 6.5l-3-2.5"/></svg>';
+const subLeft=t=>(t.subs||[]).filter(x=>!x.done).length;   // 還沒勾的小步驟數：有的話任務不能完成
+const subBlock=t=>{const n=subLeft(t);if(!n)return false;toast('還有 '+n+' 個小步驟沒完成',null,null,2200);return true};
 const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dbl${x.rd&&x.rt?' on':''}" data-a="d-bl" data-sid="${x.id}" aria-label="小步驟提醒">${SALM}</button><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
 const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、[文字](網址)、直接貼的網址，都會變成可以點的連結
   let h=esc(txt).replace(/\((https?:\/\/[^\s()]+)\)\[([^\]\n]+)\]|\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,(m,u1,t1,t2,u2)=>{
@@ -415,7 +417,7 @@ function fxRun(r,cb,n,rec){
     if(rec)fxRecord(b);
     r.style.visibility='hidden';setTimeout(cb,350)},D+20)}
 function act(a,id,val){const t=by(id);if(!t)return;
-  if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
+  if(a==='chk'){if(!t.done&&subBlock(t))return;t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
       const wk=t.wd&&t.wd.length;
       if(t.repeat||wk){let x;
@@ -502,7 +504,8 @@ document.addEventListener('click',e=>{
   if(a==='c-yes'){const f=pend;pend=null;askBack=null;$('ov').className='';f&&f();return}
   if(a.startsWith('m-')){const t=by(sugId);$('ov').className='';if(!t)return;
     if(a==='m-today')act('today',t.id);else if(a==='m-skip'){S.skip[t.id]=today();save()}else act('del',t.id);return}
-  const t=by(id);if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r){const n=dayStats()+1;return fx(r,()=>act(a,id),n,S.best>0&&n>S.best)}}
+  const t=by(id);if(a==='chk'&&t&&!t.done&&subBlock(t))return;   // 小步驟沒全勾完：連完成特效都不跑
+  if(a==='chk'&&t&&!t.done&&S.cfg.fx){const r=el.closest('.row');if(r){const n=dayStats()+1;return fx(r,()=>act(a,id),n,S.best>0&&n>S.best)}}
   act(a,id)});
 $('ov').addEventListener('click',e=>{if(e.target.id!=='td-ov')return;if(ovMode==='sug'){const t=by(sugId);if(t){S.skip[t.id]=today();save()}}pend=null;$('ov').className=''});
 document.addEventListener('change',e=>{const el=e.target;if(el.matches('input[type=date][data-a]'))act(el.dataset.a,el.dataset.id,el.value)});
