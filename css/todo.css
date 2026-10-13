@@ -193,6 +193,11 @@ body{overflow:auto}
 #td-wp .r-tm+.r-rm{margin-top:8px}
 #td-wp .r-rm input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
 #td-wp .r-tm+.rp{margin-top:8px}
+#td-wp .wdr{flex-direction:column;align-items:stretch;gap:4px;margin-bottom:0}
+#td-wp .wdr>span{font-size:13px;color:var(--text-faint,var(--gray))}
+#td-wp .wds{display:flex;gap:4px}
+#td-wp .wdb{flex:1;min-width:0;height:30px;padding:0;font:inherit;font-size:13px;border:1px solid var(--line);border-radius:50%;background:var(--bg);color:var(--text);cursor:pointer}
+#td-wp .wdb.on{background:var(--blue);border-color:var(--blue);color:#fff}
 #td-wb{position:fixed;inset:0;z-index:2000}
 #td-wp{position:fixed;z-index:2001;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(30,45,69,.22);padding:10px;animation:tdPop .16s ease-out}
 #td-wp::before{content:'';position:absolute;left:calc(var(--ax) - 7px);width:12px;height:12px;background:#fff;transform:rotate(45deg)}
