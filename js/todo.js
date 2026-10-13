@@ -183,6 +183,26 @@ function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
+/* 小步驟排序：長按左邊的選取鈕（星星）約 0.4 秒，手指不放、上下拖動就能換順序；短按照舊是勾選／取消勾選 */
+let sdrag=null,sdNoClick=0;
+function sdStart(){const d=sdrag;if(!d)return;d.on=true;const rows=[...d.list.children];d.rows=rows;d.from=rows.indexOf(d.row);d.to=d.from;
+  d.mids=rows.map(r=>{const q=r.getBoundingClientRect();return q.top+q.height/2});d.h=d.row.getBoundingClientRect().height;
+  d.row.classList.add('sdrag');rows.forEach(r=>{if(r!==d.row)r.style.transition='transform .15s'});
+  if(navigator.vibrate){try{navigator.vibrate(15)}catch(_){}}}
+document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('#td-ds .dck');if(!b||(e.pointerType==='mouse'&&e.button!==0))return;
+  const row=b.closest('.ds');if(!row)return;try{b.setPointerCapture(e.pointerId)}catch(_){}
+  sdrag={row,list:row.parentNode,id:e.pointerId,x:e.clientX,y:e.clientY,on:false,timer:setTimeout(sdStart,380)}});
+document.addEventListener('pointermove',e=>{const d=sdrag;if(!d||e.pointerId!==d.id)return;
+  if(!d.on){if(Math.hypot(e.clientX-d.x,e.clientY-d.y)>8){clearTimeout(d.timer);sdrag=null}return}   // 還沒長按夠久就移動＝不是要拖，取消
+  const dy=e.clientY-d.y;d.row.style.transform='translateY('+dy+'px)';
+  const cy=d.mids[d.from]+dy;let to=0;d.mids.forEach((m,i)=>{if(i!==d.from&&m<cy)to++});d.to=to;   // 其他小步驟有幾個還在被拖的這個上面＝它的新位置
+  d.rows.forEach((r,i)=>{if(i===d.from)return;let sh=0;if(d.from<to&&i>d.from&&i<=to)sh=-d.h;else if(d.from>to&&i>=to&&i<d.from)sh=d.h;r.style.transform=sh?'translateY('+sh+'px)':''})});
+function sdEnd(e){const d=sdrag;if(!d||(e&&e.pointerId!==d.id))return;clearTimeout(d.timer);sdrag=null;if(!d.on)return;
+  sdNoClick=Date.now();   // 放開手指那一下不要當成勾選
+  d.row.classList.remove('sdrag');d.rows.forEach(r=>{r.style.transform='';r.style.transition=''});
+  if(d.to!==d.from)detSet(t=>{const a=t.subs||[],m=a.splice(d.from,1)[0];a.splice(d.to,0,m)})}
+document.addEventListener('pointerup',sdEnd);document.addEventListener('pointercancel',sdEnd);
+document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('#td-ds .dck'))e.preventDefault()});
 /* 小步驟提醒：每個小步驟可以自己設日期＋時間（rd／rt），到時間推播「任務名稱｜小步驟」。時間空白＝沒有提醒 */
 function openSp(btn,sid){closeSp('ok');const t=by(detId),x=t&&(t.subs||[]).find(v=>v.id==sid);if(!x)return;
   const bk=document.createElement('div');bk.id='td-sb';bk.dataset.a='sp-ok';
@@ -430,7 +450,7 @@ document.addEventListener('click',e=>{
     else{const ae=document.activeElement;if(ae&&pn.contains(ae)&&ae.blur)ae.blur()}
     return}
   if(a==='d-add')return detAdd();
-  if(a==='d-tg'){const sid=el.dataset.sid;detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(x)x.done=!x.done});
+  if(a==='d-tg'){if(Date.now()-sdNoClick<500)return;const sid=el.dataset.sid;detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(x)x.done=!x.done});
     const b=pq('.dck[data-sid="'+sid+'"]');if(b&&b.parentNode.classList.contains('dn'))b.classList.add('pop');return}   // 勾起來的星星閃一下
   if(a==='d-bl')return openSp(el,el.dataset.sid);
   if(a==='sp-ok')return closeSp('ok');
