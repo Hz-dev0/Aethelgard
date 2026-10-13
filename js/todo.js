@@ -174,7 +174,7 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
-  closeDet();detId=t.id;detNm=!!(t.note&&t.note.trim())||!(t.subs||[]).length;   // 舊的收合動畫和新的展開動畫同時進行；備註跟小步驟都沒有時，先顯示備註
+  closeDet();detId=t.id;detNm=false;   // 舊的收合動畫和新的展開動畫同時進行；展開時一律先顯示小步驟頁，要看備註再切換
   hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');setTimeout(()=>mqRun(row),30);setTimeout(()=>mqRun(row),380);   // 一展開就開始捲，展開動畫跑完、寬度確定後再校正終點
   row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
@@ -213,7 +213,6 @@ document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matche
   hoverEval(e.target)});
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><textarea class="nm" id="td-nm" rows="1" placeholder="想到什麼，打字" autocomplete="off"></textarea><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
-const MINS=['00','20','30','40'];   // 新增任務時「分」只給這幾個選項
 /* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
 let kdVal='',dtVal='',tmVal='',rpVal='',rmVal='',wdVal='',dtAuto=false;   // dtAuto：日期是程式預設填的（不是使用者自己選的），才會隨時間自動算今天／隔天
 const defKd=()=>'none',effKd=()=>kdVal||defKd();   // 新增任務預設「沒有期限」（今天標籤新增的，addTask 會自動放進今天）
@@ -221,35 +220,24 @@ const defTm=()=>pad(new Date().getHours())+':00';
 /* 三種期限：沒有期限＝沒日期；截止＝在那之前做完就好（可提早做，有「今天做」）；指定＝那天（或那個時間）才做（沒有「今天做」）。截止、指定的時間都可以空白。舊資料原本就有 kind，不用搬 */
 const uiKind=t=>(!t.date||t.kind==='none')?'none':t.kind==='dayonly'?'dayonly':'deadline';
 const optSet=()=>!!(dtVal||tmVal||rpVal||wdVal||(kdVal&&kdVal!==defKd()));
-const WH=32,wheelCol=k=>document.querySelector('#td-wp [data-k="'+k+'"]');
-const wheelIdx=el=>Math.max(0,Math.min(el.children.length-1,Math.round(el.scrollTop/WH)));
-const wheelVal=k=>{const el=wheelCol(k);return el?el.children[wheelIdx(el)].dataset.v:''};
-const mark=el=>{const i=wheelIdx(el);[...el.children].forEach((c,j)=>c.classList.toggle('on',j===i))};
 function autoDate(){if(!dtAuto||effKd()==='none')return;const w=document.getElementById('td-wp');if(!w)return;
-  const h=wheelVal('h'),d=h===''?today():dateForTime(h+':00');if(d!==dtVal){dtVal=d;const di=w.querySelector('#td-dt');if(di)di.value=d}}
-document.addEventListener('scroll',e=>{const el=e.target;if(el.classList&&el.classList.contains('wc')){mark(el);if(el.dataset.k==='h'){autoDate();tmFlag()}}},true);
-document.addEventListener('click',e=>{const it=e.target.closest&&e.target.closest('.wc .wi');if(!it)return;
-  const col=it.parentNode;col.scrollTo({top:[...col.children].indexOf(it)*WH,behavior:'smooth'})});
+  const d=tmVal?dateForTime(tmVal):today();if(d!==dtVal){dtVal=d;const di=w.querySelector('#td-dt');if(di)di.value=d}}
 const popIn=e=>{const t=e.target;if(!t.id)return;
-  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-rp'){rpVal=t.value;if(rpVal&&wdVal){wdVal='';wdMark(document.getElementById('td-wp'))}}else if(t.id==='td-rm')rmVal=t.checked?'1':'0'};
+  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-rp'){rpVal=t.value;if(rpVal&&wdVal){wdVal='';wdMark(document.getElementById('td-wp'))}}else if(t.id==='td-tm'){tmVal=t.value;autoDate();tmFlag()}else if(t.id==='td-rm')rmVal=t.checked?'1':'0'};
 document.addEventListener('input',popIn);document.addEventListener('change',popIn);
 const wdMark=w=>{if(w)w.querySelectorAll('.wdb').forEach(b=>b.classList.toggle('on',wdVal.includes(b.dataset.d)))};
 function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k=effKd();w.dataset.kd=k;   // 依類型顯示／隱藏日期和時間
   const di=w.querySelector('#td-dt');
   if(k!=='none'&&!dtVal){dtVal=today();dtAuto=true;if(di)di.value=dtVal}   // 截止、指定一定有日期
-  if(k!=='none'){const hc=wheelCol('h'),mc=wheelCol('m');   // 小時第一格是「--」＝沒有時間
-    if(w.dataset.tmInit===undefined||tmVal!==w.dataset.tmInit){w.dataset.tmInit=tmVal;
-      const [h,m]=tmVal?tmVal.split(':'):['',''];
-      hc.scrollTop=(tmVal?(parseInt(h)||0)+1:0)*WH;mc.scrollTop=Math.max(0,MINS.indexOf(m))*WH}
-    mark(hc);mark(mc);autoDate();tmFlag()}}
-function tmFlag(){const w=document.getElementById('td-wp');if(w)w.classList.toggle('notm',wheelVal('h')==='')}   // 沒有時間就不用問要不要提醒
+  if(k!=='none'){const ti=w.querySelector('#td-tm');if(ti&&ti.value!==tmVal)ti.value=tmVal;autoDate();tmFlag()}}   // 時間欄空白＝沒有時間
+function tmFlag(){const w=document.getElementById('td-wp');if(w)w.classList.toggle('notm',!tmVal)}   // 沒有時間就不用問要不要提醒
 const rmOn=()=>rmVal===''?!!S.cfg.remindDef:rmVal==='1';   // 這個任務要不要提醒（沒動過就跟著設定裡的預設）
 let popTask=null,addBak=null;   // popTask：氣泡正在編輯哪個任務（null = 新增任務用）
 function renderKeep(){const el=document.getElementById('td-nm'),v=el?el.value:'';render();const n=document.getElementById('td-nm');if(n&&v){n.value=v;n.style.height='auto';n.style.height=Math.min(150,n.scrollHeight)+'px';qHint()}}
 function closePop(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
   const pnEl=w.querySelector('#td-pn'),newName=pnEl?pnEl.value.trim():'';
   if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=rmVal=wdVal='';dtAuto=false}
-  else if(effKd()!=='none'&&wheelCol('h')){tmVal=wheelVal('h')===''?'':wheelVal('h')+':'+wheelVal('m');if(dtAuto)dtVal=tmVal?dateForTime(tmVal):today()}
+  else if(effKd()!=='none'&&w.querySelector('#td-tm')){if(dtAuto)dtVal=tmVal?dateForTime(tmVal):today()}
   w.remove();bk&&bk.remove();
   if(popTask){const t=by(popTask);popTask=null;
     if(t){let k,date,time,rp;
@@ -262,19 +250,18 @@ function closePop(commit){const w=document.getElementById('td-wp'),bk=document.g
   const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
 function openPop(btn,tid){closePop('ok');
   if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):'';wdVal=(t.wd||[]).length?WO.filter(x=>t.wd.includes(+x)).join(''):'';rmVal=t.rm===0?'0':t.rm===1?'1':''}
-  const col=(k,list)=>`<div class="wc" data-k="${k}">${list.map(v=>`<div class="wi" data-v="${v==='--'?'':v}">${v}</div>`).join('')}</div>`;
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
   w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="deadline">截止・可提早做</option><option value="dayonly">指定・到時才做</option></select></div>
 <div class="prow r-dt"><input type="date" id="td-dt"></div>
-<div class="r-tm"><div class="wheel">${col('h',['--',...Array.from({length:24},(_,i)=>pad(i))])}<b>:</b>${col('m',MINS)}</div></div>
+<div class="prow r-tm"><input type="time" id="td-tm"><button type="button" class="tclr" data-a="tm-clr" aria-label="清除時間">✕</button></div>
 <label class="prow r-rm"><input type="checkbox" id="td-rm"> 時間前提醒我</label>
 <label class="prow rp"><input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="—"> 天後重複提醒我</label>
 <div class="prow wdr"><span>或每週：</span><div class="wds">${WO.map(d=>`<button type="button" class="wdb" data-a="wd" data-d="${d}">${QW[+d]}</button>`).join('')}</div></div>
 <div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
   if(tid){const tt=by(tid);w.insertAdjacentHTML('afterbegin',`<div class="prow"><input id="td-pn" value="${esc(tt.name)}" placeholder="名稱" autocomplete="off"></div>`)}
   document.getElementById('todoFloat').append(bk,w);
-  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;w.querySelector('#td-rm').checked=rmOn();
+  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;w.querySelector('#td-rm').checked=rmOn();w.querySelector('#td-tm').value=tmVal;
   wdMark(w);popFill();
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
   const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),room=innerHeight-r.bottom-18,roomUp=r.top-18,below=wh<=room||room>=roomUp,avail=Math.max(160,below?room:roomUp);   // 放得下就照原位；兩邊都放不下就挑大的那邊並限制高度（可捲動）
@@ -433,6 +420,7 @@ document.addEventListener('click',e=>{
   if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
   if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
   if(a==='bell'){const t=by(el.dataset.id);if(!t)return;t.rm=remOn(t)?0:1;save();el.classList.toggle('on',t.rm===1);el.setAttribute('aria-pressed',t.rm===1);return}
+  if(a==='tm-clr'){const w=document.getElementById('td-wp'),ti=w&&w.querySelector('#td-tm');tmVal='';if(ti)ti.value='';autoDate();tmFlag();return}
   if(a==='wd'){const w=document.getElementById('td-wp');if(!w)return;   // 每週重複：點星期鈕複選；跟「幾天後重複」二選一
     const st=new Set(wdVal.split('').filter(Boolean)),d=el.dataset.d;st.has(d)?st.delete(d):st.add(d);wdVal=WO.filter(x=>st.has(x)).join('');
     if(wdVal){rpVal='';const r=w.querySelector('#td-rp');if(r)r.value='';
