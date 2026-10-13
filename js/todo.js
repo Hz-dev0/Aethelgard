@@ -385,7 +385,9 @@ function act(a,id,val){const t=by(id);if(!t)return;
   if(a==='chk'){t.done=!t.done;t.doneAt=t.done?today():null;t.doneTs=t.done?Date.now():0;
     if(t.done){const n=dayStats();let m='解決了 ✓';if(S.best>0&&n>S.best)m+='　單日新紀錄 '+n+' 件！';S.best=Math.max(S.best,n);
       if(t.repeat){const x=new Date(today()+'T00:00');x.setDate(x.getDate()+t.repeat);
-        const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:t.repeat,done:false,touched:Date.now()};if(t.rm!==undefined)nx.rm=t.rm;S.tasks.push(nx);t.nextId=nx.id;m+='　'+t.repeat+' 天後再提醒'}
+        const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:t.repeat,done:false,touched:Date.now()};if(t.rm!==undefined)nx.rm=t.rm;
+        if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();nx.subs=t.subs.map((x,i)=>({id:b+i,text:x.text,done:false}))}   // 重複任務：備註和小步驟一起帶到下一次，小步驟全部重設為未完成
+        S.tasks.push(nx);t.nextId=nx.id;m+='　'+t.repeat+' 天後再提醒'}
       toast(m,t.id)}
     else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
   else if(a==='today'){t.on=today();t.touched=Date.now()}
