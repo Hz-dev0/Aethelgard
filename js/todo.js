@@ -320,7 +320,7 @@ function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
-  const pool=S.tasks.filter(t=>!t.done&&grp(t)==='later'&&S.skip[t.id]!==d);if(!pool.length)return;
+  const pool=S.tasks.filter(t=>!t.done&&grp(t)==='later'&&!(t.kind==='dayonly'&&t.date)&&S.skip[t.id]!==d);   // 「指定・到時才做」的任務（日期超過 30 天也一樣）不能被抽來問要不要提早做if(!pool.length)return;
   const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
   const t=old||pool[Math.floor(Math.random()*pool.length)];sugId=t.id;ovMode='sug';S.sug.n++;save();
   $('ov').innerHTML=`<div class="box"><div class="t"><div class="meta">順手做一件？（今天第 ${S.sug.n}／${S.cfg.sugMax} 次）</div><p style="font-size:18px;margin:8px 0 4px">${esc(t.name)}</p><div class="meta">${age(t)>=S.cfg.stale?'放了 '+age(t)+' 天了':'沒有急的期限'}</div></div><div class="foot"><button class="b" data-a="m-today">今天做</button><button class="b q" data-a="m-skip">改天</button><button class="b dk" data-a="m-del">放掉</button></div></div>`;$('ov').className='on'}
