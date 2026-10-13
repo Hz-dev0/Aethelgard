@@ -144,7 +144,8 @@ function qHint(){const h=document.getElementById('td-qh'),i=document.getElementB
 document.addEventListener('input',e=>{if(e.target.id==='td-nm'){const el=e.target;if(!el.value)qhOff=false;el.style.height='auto';el.style.height=Math.min(150,el.scrollHeight)+'px';qHint()}});
 /* ── 任務詳細面板：備註＋小步驟。手機長按卡片、電腦右鍵卡片，從任務下方推開（再按一次或點旁邊收起） ── */
 let detId=null,detSave=0;
-const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
+const SALM='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M4.5 6.5l3-2.5M19.5 6.5l-3-2.5"/></svg>';
+const detSubs=t=>(t.subs||[]).map(x=>`<div class="ds${x.done?' dn':''}"><button type="button" class="dck" data-a="d-tg" data-sid="${x.id}" aria-label="完成小步驟">${x.done?'✦':'✧'}</button><span>${esc(x.text)}</span><button type="button" class="dbl${x.rd&&x.rt?' on':''}" data-a="d-bl" data-sid="${x.id}" aria-label="小步驟提醒">${SALM}</button><button type="button" class="dx" data-a="d-rm" data-sid="${x.id}" aria-label="刪除小步驟">✕</button></div>`).join('');
 const linkify=txt=>{const keep=[];   // 備註裡的連結：(網址)[文字]、[文字](網址)、直接貼的網址，都會變成可以點的連結
   let h=esc(txt).replace(/\((https?:\/\/[^\s()]+)\)\[([^\]\n]+)\]|\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,(m,u1,t1,t2,u2)=>{
     keep.push(`<a href="${u1||u2}" target="_blank" rel="noopener noreferrer">${t1||t2}</a>`);return '\u0000'+(keep.length-1)+'\u0000'});
@@ -182,6 +183,19 @@ function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
+/* 小步驟提醒：每個小步驟可以自己設日期＋時間（rd／rt），到時間推播「任務名稱｜小步驟」。時間空白＝沒有提醒 */
+function openSp(btn,sid){closeSp('ok');const t=by(detId),x=t&&(t.subs||[]).find(v=>v.id==sid);if(!x)return;
+  const bk=document.createElement('div');bk.id='td-sb';bk.dataset.a='sp-ok';
+  const w=document.createElement('div');w.id='td-sp';w.dataset.sid=sid;
+  w.innerHTML='<div class="prow"><input type="date" id="td-sd"></div><div class="prow"><input type="time" id="td-st"></div><div class="wbtns"><button class="b q" data-a="sp-clr">清除</button><button class="b" data-a="sp-ok">完成</button></div>';
+  document.getElementById('todoFloat').append(bk,w);
+  w.querySelector('#td-sd').value=x.rd||(t.date&&t.kind!=='none'?t.date:today());w.querySelector('#td-st').value=x.rt||'';
+  const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
+  const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),room=innerHeight-r.bottom-18,roomUp=r.top-18,below=wh<=room||room>=roomUp,avail=Math.max(160,below?room:roomUp);
+  w.style.cssText=`left:${left}px;max-height:${avail}px;overflow-y:auto;${below?'top:'+(r.bottom+10):'bottom:'+(innerHeight-r.top+10)}px;--ax:${Math.max(16,Math.min(ww-16,r.left+r.width/2-left))}px`;w.classList.add(below?'dn':'up')}
+function closeSp(mode){const w=document.getElementById('td-sp'),bk=document.getElementById('td-sb');if(!w)return;
+  const sid=w.dataset.sid,d=w.querySelector('#td-sd').value,tm=w.querySelector('#td-st').value;w.remove();bk&&bk.remove();
+  detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(!x)return;if(mode!=='clr'&&tm){x.rd=d||today();x.rt=tm}else{delete x.rd;delete x.rt}})}
 function noteEdit(on){const nv=pq('#td-nv'),nt=pq('#td-nt');if(!nv||!nt)return;
   if(on){nv.classList.add('hid');nt.classList.remove('hid');nt.style.height='auto';nt.style.height=Math.min(160,Math.max(64,nt.scrollHeight))+'px';nt.focus();nt.setSelectionRange(nt.value.length,nt.value.length)}
   else{const t=by(detId);if(t){const v=nt.value.trim()?nt.value:'';if(v!==(t.note||'')){t.note=v;save()}nv.innerHTML=linkify(t.note||'');detTint();
@@ -192,18 +206,18 @@ document.addEventListener('focusout',e=>{if(e.target.id==='td-nt')noteEdit(false
 document.addEventListener('keydown',e=>{if(e.target.id==='td-sn'&&e.key==='Enter'){e.preventDefault();detAdd()}});
 document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   if(t.closest&&t.closest('#td-nv')&&!t.closest('a')){noteEdit(true);return}            // 點備註的空白處 → 編輯；點連結 → 照常開連結
-  if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')||t.closest('#td-wp')||t.closest('#td-wb')))return;
+  if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')||t.closest('#td-wp')||t.closest('#td-wb')||t.closest('#td-sp')||t.closest('#td-sb')))return;
   closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
 /* 開啟方式：手機＝點一下任務白色區塊（展開時日期資訊也一起出現）；電腦＝游標停在白色區塊一下就展開，離開才收起 */
 const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
 let hovT=0,hovLeave=0,hovLock=0,hovXY=null;
 const inPanelFocus=()=>{const p=P(),a=document.activeElement;return !!(p&&a&&p.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName))};
 function hoverEval(t){if(!t||!t.closest)return;
-  const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||t.closest('#todoRoot .row.dopen');   // 整張展開的卡片（含修改鈕、圈選框）都算停留區，游標移去按修改不會收起
+  const bd=t.closest('#todoRoot .row .bd'),inZone=t.closest('#td-dpn')||t.closest('#td-wp')||t.closest('#td-wb')||t.closest('#td-sp')||t.closest('#td-sb')||t.closest('#todoRoot .row.dopen');   // 整張展開的卡片（含修改鈕、圈選框）都算停留區，游標移去按修改不會收起
   clearTimeout(hovT);hovT=0;
   if(bd&&!inZone){const r=bd.closest('.row'),id=rowIdOf(r);clearTimeout(hovLeave);hovLeave=0;if(id)hovT=setTimeout(()=>{hovT=0;openDet(id,r)},HOV_MS);return}   // 稍微停一下（50ms）才展開，快速掃過不會跳動
   if(inZone){clearTimeout(hovLeave);hovLeave=0;return}
-  if(detId&&!hovLeave)hovLeave=setTimeout(()=>{hovLeave=0;if(detId&&!inPanelFocus()&&!document.getElementById('td-wp'))closeDet()},200)}
+  if(detId&&!hovLeave)hovLeave=setTimeout(()=>{hovLeave=0;if(detId&&!inPanelFocus()&&!document.getElementById('td-wp')&&!document.getElementById('td-sp'))closeDet()},200)}
 const HOV_MS=50;
 document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matches)return;hovXY=[e.clientX,e.clientY];
   const wait=hovLock-Date.now();
@@ -387,7 +401,8 @@ function act(a,id,val){const t=by(id);if(!t)return;
         if(wk){const bs=t.date&&t.date>today()?t.date:today(),f=new Date(bs+'T00:00');f.setDate(f.getDate()+1);x=new Date(firstWd(t.wd,ymd(f))+'T00:00')}   // 每週：從「今天或任務日期（取較晚）」的隔天起，找下一個勾選的星期
         else{x=new Date(today()+'T00:00');x.setDate(x.getDate()+t.repeat)}
         const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:wk?0:t.repeat,done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;
-        if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();nx.subs=t.subs.map((x,i)=>({id:b+i,text:x.text,done:false}))}   // 重複任務：備註和小步驟一起帶到下一次，小步驟全部重設為未完成
+        if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();const off=Math.round((new Date(ymd(x)+'T12:00:00')-new Date((t.date||today())+'T12:00:00'))/864e5);   // 小步驟的提醒日期跟著任務一起往後挪相同天數，時間不變
+        nx.subs=t.subs.map((y,i)=>{const n={id:b+i,text:y.text,done:false};if(y.rd&&y.rt){const q=new Date(y.rd+'T12:00:00');q.setDate(q.getDate()+off);n.rd=ymd(q);n.rt=y.rt}return n})}   // 重複任務：備註和小步驟一起帶到下一次，小步驟全部重設為未完成
         S.tasks.push(nx);t.nextId=nx.id;m+=wk?'　下次 '+(x.getMonth()+1)+'/'+x.getDate()+'（週'+QW[x.getDay()]+'）提醒':'　'+t.repeat+' 天後再提醒'}
       toast(m,t.id)}
     else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
@@ -417,6 +432,9 @@ document.addEventListener('click',e=>{
   if(a==='d-add')return detAdd();
   if(a==='d-tg'){const sid=el.dataset.sid;detSet(t=>{const x=(t.subs||[]).find(v=>v.id==sid);if(x)x.done=!x.done});
     const b=pq('.dck[data-sid="'+sid+'"]');if(b&&b.parentNode.classList.contains('dn'))b.classList.add('pop');return}   // 勾起來的星星閃一下
+  if(a==='d-bl')return openSp(el,el.dataset.sid);
+  if(a==='sp-ok')return closeSp('ok');
+  if(a==='sp-clr')return closeSp('clr');
   if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
   if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
   if(a==='bell'){const t=by(el.dataset.id);if(!t)return;t.rm=remOn(t)?0:1;save();el.classList.toggle('on',t.rm===1);el.setAttribute('aria-pressed',t.rm===1);return}
@@ -594,7 +612,7 @@ function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);if(nav
 addEventListener('online',()=>{statusUpd();if(dirty||Date.now()-lastPullAt>2*6e4)syncNow()});   // 恢復連線：有東西要送、或超過 2 分鐘沒對過才連雲端
 addEventListener('offline',statusUpd);
 setInterval(statusUpd,1500);
-setInterval(()=>{if(view!=='today'||document.hidden||detId||document.getElementById('td-wp'))return;   // 每分鐘看一次：凌晨任務該出現／倒數文字要更新時才重畫（不碰雲端）
+setInterval(()=>{if(view!=='today'||document.hidden||detId||document.getElementById('td-wp')||document.getElementById('td-sp'))return;   // 每分鐘看一次：凌晨任務該出現／倒數文字要更新時才重畫（不碰雲端）
   const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
   if(earlySigOf(earlyItems(S.tasks.filter(t=>!t.done)))!==earlySig)render()},60000);
 

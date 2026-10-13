@@ -56,21 +56,29 @@
     const lead = (cfg.remindMin >= 0 ? cfg.remindMin : 10) * 6e4, def = cfg.remindDef === 0 ? 0 : 1, now = Date.now();
     const f = fired();
     let changed = false;
+    const jobs = [];
     for (const t of S.tasks || []) {
-      if (t.done || !t.date || !t.time) continue;
-      if ((t.rm === undefined ? def : t.rm) === 0) continue;
-      const due = new Date(t.date + 'T' + t.time).getTime();
-      if (!(now >= due - lead && now <= due + 30 * 6e4)) continue;
-      const key = t.id + '|' + t.date + '|' + t.time + '|' + lead;
-      if (f[key]) continue;
-      const left = Math.round((due - now) / 6e4);
+      if (t.done) continue;
+      if (t.date && t.time && (t.rm === undefined ? def : t.rm) !== 0)
+        jobs.push({ key: t.id + '|' + t.date + '|' + t.time + '|' + lead, title: t.name, sub: '', time: t.time,
+          due: new Date(t.date + 'T' + t.time).getTime(), tag: 't-' + t.id + '-' + t.date + '-' + t.time });
+      for (const x of t.subs || []) {   // 小步驟自己的提醒：不受任務的提醒開關影響，設了就會提醒
+        if (x.done || !x.rd || !x.rt) continue;
+        jobs.push({ key: 's' + x.id + '|' + t.id + '|' + x.rd + '|' + x.rt + '|' + lead, title: t.name, sub: x.text, time: x.rt,
+          due: new Date(x.rd + 'T' + x.rt).getTime(), tag: 's-' + t.id + '-' + x.id + '-' + x.rd + '-' + x.rt });
+      }
+    }
+    for (const j of jobs) {
+      if (!(now >= j.due - lead && now <= j.due + 30 * 6e4)) continue;
+      if (f[j.key]) continue;
+      const left = Math.round((j.due - now) / 6e4);
       try {
         const reg = await swReg();
-        await reg.showNotification(t.name, {
-          body: (left > 0 ? '還有 ' + left + ' 分鐘' : '時間到了') + '（' + t.time + '）',
-          tag: 't-' + t.id + '-' + t.date + '-' + t.time, icon: '/Aethelgard/icon.png',
+        await reg.showNotification(j.title, {
+          body: (j.sub ? j.sub + '｜' : '') + (left > 0 ? '還有 ' + left + ' 分鐘' : '時間到了') + '（' + j.time + '）',
+          tag: j.tag, icon: '/Aethelgard/icon.png',
         });
-        f[key] = now; changed = true;
+        f[j.key] = now; changed = true;
       } catch (e) {}
     }
     if (changed) {
