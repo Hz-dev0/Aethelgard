@@ -176,13 +176,28 @@ function closeDet(imm){const pn=P();if(!pn){detId=null;return}
   if(row){row.classList.remove('dopen','show');if(t){const d=row.querySelector('.bd>div:first-child');if(d)d.innerHTML=nmIn(t)}}   // 只更新那張卡片的小標記，不重畫整頁（免得清掉輸入框）
   if(imm){pn.remove();return}
   pn.classList.remove('on');setTimeout(()=>pn.remove(),320)}
+/* 展開後把面板捲進可視範圍：只捲「真正會捲的那一層」（手機版是 body），不用 scrollIntoView——
+   它會連 overflow:hidden 的 html 也一起捲，使用者拉不回來，上方「今天／全部」就被吞掉 */
+const scrollerEl=()=>{const b=document.body;return(b.scrollHeight>b.clientHeight+1&&getComputedStyle(b).overflowY!=='visible'&&getComputedStyle(b).overflowY!=='hidden')?b:null};
+function revealDet(pn){if(!pn||!pn.isConnected)return;
+  const row=pn.previousElementSibling,tb=document.getElementById('td-topbar'),fp=document.getElementById('td-fp');
+  const top=(tb?tb.getBoundingClientRect().bottom:0)+6,bot=(fp?fp.getBoundingClientRect().top:innerHeight)-6;
+  const pr=pn.getBoundingClientRect(),rr=(row||pn).getBoundingClientRect();
+  let d=0;
+  if(pr.bottom>bot)d=pr.bottom-bot;          // 面板下緣被擋住 → 往上捲到剛好看得到
+  if(rr.top-d<top)d=rr.top-top;              // 但任務那一列不能被頂端列蓋住（面板太長時以任務列為準）
+  if(Math.abs(d)<2)return;
+  const sc=scrollerEl();
+  if(sc)sc.scrollBy({top:d,behavior:'smooth'});else window.scrollBy({top:d,behavior:'smooth'})}
+/* 保險：手機版 html 是 overflow:hidden，不該有捲動量；萬一被鍵盤／瀏覽器推動了，立刻歸零 */
+addEventListener('scroll',()=>{const h=document.documentElement;if(h.scrollTop&&getComputedStyle(h).overflowY==='hidden')h.scrollTop=0},{passive:true});
 function openDet(id,row){const t=by(id);if(!t)return;closePop('ok');
   if(detId===t.id)return closeDet();   // 再按一次就收起
   closeDet();detId=t.id;detNm=false;   // 舊的收合動畫和新的展開動畫同時進行；展開時一律先顯示小步驟頁，要看備註再切換
   hovLock=Date.now()+300;row.classList.add('dopen');if(row.classList.contains('cmp'))row.classList.add('show');setTimeout(()=>mqRun(row),30);setTimeout(()=>mqRun(row),380);   // 一展開就開始捲，展開動畫跑完、寬度確定後再校正終點
   row.insertAdjacentHTML('afterend',detPanel(t));
   const pn=row.nextElementSibling;detWire(pn);requestAnimationFrame(()=>requestAnimationFrame(()=>pn.classList.add('on')));
-  if(matchMedia('(hover:none)').matches)setTimeout(()=>pn.scrollIntoView({block:'nearest',behavior:'smooth'}),300)}
+  if(matchMedia('(hover:none)').matches)setTimeout(()=>revealDet(pn),300)}
 const detSet=f=>{const t=by(detId);if(!t)return;f(t);save();const l=pq('#td-ds');if(l)l.innerHTML=detSubs(t);detTint()};
 function detAdd(keep){const i=pq('#td-sn'),v=i&&i.value.trim();if(!v)return;
   detSet(t=>{(t.subs=t.subs||[]).push({id:Date.now()+Math.floor(Math.random()*1000),text:v,done:false})});i.value='';if(keep!==false)i.focus()}
