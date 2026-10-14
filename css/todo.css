@@ -145,6 +145,9 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row.lapsed{background:#FBF7EA;border-color:#E4D8AE}
 :is(#todoRoot,#todoFloat) .row.lapsed .bd{padding:11px 12px}
 :is(#todoRoot,#todoFloat) .row.lapsed .meta{color:#B8962E}
+/* 過期卡片也能展開：沒有左邊的圈選區，面板改成跟卡片同寬；顏色跟著香檳色 */
+:is(#todoRoot,#todoFloat) .row.lapsed.dopen+.dpanel{margin-left:10px}
+:is(#todoRoot,#todoFloat) .row.lapsed.dopen+.dpanel .dpc{background:#FDFAF0;border-color:#E4D8AE}
 /* 凌晨任務提前顯示：淺紅底，跟過期（香檳）、快到期（藍）區分 */
 :is(#todoRoot,#todoFloat) .row.early{background:#FDF0EE;border-color:#F0C8C3}
 :is(#todoRoot,#todoFloat) .row.early .meta{color:#C0504A}
@@ -171,9 +174,9 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .row.dopen:has(.side) .bd{margin-right:-78px}
 :is(#todoRoot,#todoFloat) .row.dopen .side{transform:translateX(130px);opacity:0;pointer-events:none}
 :is(#todoRoot,#todoFloat) .row .del{position:relative;z-index:2;transition:background .28s}
-:is(#todoRoot,#todoFloat) .row.dopen .del{background:#F1E8CA!important;color:#B8962E!important;box-shadow:inset 1px 0 0 #E0D3A6}   /* 修改鈕＝白金（香檳）色，跟紅色的刪除區別；跟「過了日期」卡片同一組顏色 */
-:is(#todoRoot,#todoFloat) .row.dopen .del .dl{opacity:0}
-:is(#todoRoot,#todoFloat) .row.dopen .del .ed2{opacity:1}
+:is(#todoRoot,#todoFloat) .row.dopen:not(.lapsed) .del{background:#F1E8CA!important;color:#B8962E!important;box-shadow:inset 1px 0 0 #E0D3A6}   /* 修改鈕＝白金（香檳）色，跟紅色的刪除區別；跟「過了日期」卡片同一組顏色 */
+:is(#todoRoot,#todoFloat) .row.dopen:not(.lapsed) .del .dl{opacity:0}
+:is(#todoRoot,#todoFloat) .row.dopen:not(.lapsed) .del .ed2{opacity:1}
 :is(#todoRoot,#todoFloat) .dpc .dtab{display:none}
 @media (hover:none){
   :is(#todoRoot,#todoFloat) .row .bd{cursor:pointer;-webkit-tap-highlight-color:transparent}
