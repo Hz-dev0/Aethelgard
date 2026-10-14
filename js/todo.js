@@ -234,7 +234,7 @@ document.addEventListener('click',e=>{if(!detId)return;const t=e.target;
   if(t.closest&&(t.closest('#td-dpn')||t.closest('.row.dopen')||t.closest('#td-wp')||t.closest('#td-wb')||t.closest('#td-sp')||t.closest('#td-sb')))return;
   closeDet()});   // 點旁邊的地方收起（不攔截那一下點擊）
 /* 開啟方式：手機＝點一下任務白色區塊（展開時日期資訊也一起出現）；電腦＝游標停在白色區塊一下就展開，離開才收起 */
-const rowIdOf=r=>{const c=r&&r.querySelector('.ckz');return c&&c.dataset.id};
+const rowIdOf=r=>{const c=r&&r.querySelector('.ckz,.bd[data-id]');return c&&c.dataset.id};
 let hovT=0,hovLeave=0,hovLock=0,hovXY=null;
 const inPanelFocus=()=>{const p=P(),a=document.activeElement;return !!(p&&a&&p.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName))};
 function hoverEval(t){if(!t||!t.closest)return;
@@ -327,7 +327,7 @@ function renderToday(){fixRep();const d=today(),c=S.cfg,open=S.tasks.filter(t=>!
   const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d&&!early.some(x=>x.t===t)).sort(byDate);
   const mine=open.filter(t=>!lapsed.includes(t)&&grp(t)==='today').sort((a,b)=>(a.kind!=='none'&&a.time||'99:99')<(b.kind!=='none'&&b.time||'99:99')?-1:1);
   let h=`<div class="hrow"><h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1>${addTg()}</div><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
-  if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>`<div class="row lapsed"><div class="bd"><div>${esc(t.name)}</div><span class="meta warn">${dueLabel(t)}</span></div><label class="cal" aria-label="改到別天"><span>${CAL}</span><input type="date" data-a="resched" data-id="${t.id}" min="${d}"></label><button class="del dk wide" data-a="del" data-id="${t.id}">不用做了</button></div>`).join('');
+  if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>{const op=t.id===detId;return `<div class="row lapsed${op?' dopen':''}"><div class="bd" data-a="tog" data-id="${t.id}"><div class="nmln">${nmIn(t)}</div><span class="meta warn">${dueLabel(t)}</span></div><label class="cal" aria-label="改到別天"><span>${CAL}</span><input type="date" data-a="resched" data-id="${t.id}" min="${d}"></label><button class="del dk wide" data-a="del" data-id="${t.id}">不用做了</button></div>`+(op?detPanel(t,true):'')}).join('');
   h+='<h2>今天要做</h2>'+((mine.length||early.length)?mine.map(t=>row(t,{unmark:1,inToday:1})).join('')+early.map(x=>row(x.t,{unmark:1,inToday:1,pre:1,early:x.ms>0?x.ms:0})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
   if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
   return h}
@@ -450,7 +450,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#todoRoot,#todoFloat'))return;
   const el=e.target.closest('[data-a]');if(!el||el.matches('select,input'))return;const a=el.dataset.a,id=el.dataset.id;
   if(a==='tog'){if(!matchMedia('(hover:none)').matches)return;openDet(id,el.closest('.row'));return}   // 電腦版用游標停留展開，不用點
-  if(a==='del'&&el.closest('.row.dopen'))return openPop(el,id);   // 展開時刪除鈕變成修改鈕（手機、電腦都一樣）
+  if(a==='del'&&el.closest('.row.dopen:not(.lapsed)'))return openPop(el,id);   // 展開時刪除鈕變成修改鈕（手機、電腦都一樣）
   if(a==='opts')return openPop(el);
   if(a==='d-ok')return closeDet();
   if(a==='d-edit')return openPop(el,detId);   // 電腦版面板頂端的小鈕：修改（名稱／期限／時間／重複）
