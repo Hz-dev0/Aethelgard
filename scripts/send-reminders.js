@@ -23,24 +23,30 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
   const now = Date.now();
 
   const jobs = [];
+  const add = (key, title, sub, time, date, tag) => {
+    const due = Date.parse(date + 'T' + time + ':00Z') - tzo * 6e4;
+    if (!(now >= due - lead && now <= due + GRACE)) return;
+    if (sent[key]) return;
+    jobs.push({ key, title, sub, time, due, tag });
+  };
   for (const t of S.tasks || []) {
-    if (t.done || !t.date || !t.time) continue;
-    if ((t.rm === undefined ? def : t.rm) === 0) continue;
-    const due = Date.parse(t.date + 'T' + t.time + ':00Z') - tzo * 6e4;
-    if (!(now >= due - lead && now <= due + GRACE)) continue;
-    const key = t.id + '|' + t.date + '|' + t.time + '|' + lead;
-    if (sent[key]) continue;
-    jobs.push({ t, due, key });
+    if (t.done) continue;
+    if (t.date && t.time && (t.rm === undefined ? def : t.rm) !== 0)
+      add(t.id + '|' + t.date + '|' + t.time + '|' + lead, t.name, '', t.time, t.date, 't-' + t.id + '-' + t.date + '-' + t.time);
+    for (const x of t.subs || []) {   // 小步驟自己的提醒：不受任務的提醒開關影響，設了就會提醒
+      if (x.done || !x.rd || !x.rt) continue;
+      add('s' + x.id + '|' + t.id + '|' + x.rd + '|' + x.rt + '|' + lead, t.name, x.text, x.rt, x.rd, 's-' + t.id + '-' + x.id + '-' + x.rd + '-' + x.rt);
+    }
   }
 
-  for (const { t, due, key } of jobs) {
+  for (const { title, sub, time, due, tag, key } of jobs) {
     const left = Math.round((due - now) / 6e4);
     const res = await admin.messaging().sendEachForMulticast({
       tokens: devices.map(([, v]) => v.t),
       data: {
-        title: t.name,
-        body: (left > 0 ? '還有 ' + left + ' 分鐘' : '時間到了') + '（' + t.time + '）',
-        tag: 't-' + t.id + '-' + t.date + '-' + t.time,
+        title,
+        body: (sub ? sub + '｜' : '') + (left > 0 ? '還有 ' + left + ' 分鐘' : '時間到了') + '（' + time + '）',
+        tag,
         url: '/Aethelgard/',
       },
       webpush: { headers: { Urgency: 'high', TTL: '1800' } },
@@ -52,7 +58,7 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
       if (c === 'messaging/registration-token-not-registered' || c === 'messaging/invalid-registration-token')
         return ref.update({ ['tokens.' + devices[i][0] + '.t']: '' });
     }));
-    console.log('sent', t.name, res.successCount + '/' + devices.length);
+    console.log('sent', title, sub, res.successCount + '/' + devices.length);
   }
 
   if (jobs.length) {
