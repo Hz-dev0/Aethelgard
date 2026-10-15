@@ -51,7 +51,8 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
       },
       webpush: { headers: { Urgency: 'high', TTL: '1800' } },
     });
-    sent[key] = now;
+    if (res.successCount > 0) sent[key] = now;   // 全部失敗就不標記，下一輪（30 分鐘內）會再試
+    res.responses.forEach((r, i) => { if (r.error) console.log('FAILED', devices[i][0], r.error.code, '-', r.error.message); });
     // 失效的 token（解除安裝、清除網站資料）順手清掉
     await Promise.all(res.responses.map((r, i) => {
       const c = r.error && r.error.code;
