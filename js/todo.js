@@ -52,6 +52,7 @@ const age=t=>Math.floor((Date.now()-t.touched)/864e5);
 const key=t=>(t.date||'9999')+(t.time||''),byDate=(a,b)=>key(a)<key(b)?-1:1;
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isRep=t=>!!(t.repeat||(t.wd&&t.wd.length));
+const unT=t=>t.until?'　到 '+(+t.until.slice(5,7))+'/'+(+t.until.slice(8))+' 為止':'';   // 重複任務的結束日標示
 function grp(t){const d=today();if(t.on===d||(t.kind!=='none'&&t.date===d))return'today';if(t.kind==='none'||!t.date)return'later';const n=diff(t.date);return n<=7?'week':(n<=30||isRep(t))?'month':'later'}   // 重複任務有日期就依日期歸類，不會掉到「有空再說」
 function dueLabel(t){const d=diff(t.date),tm=t.time?' '+t.time:'';
   const more=`<span class="dlx">（${t.date}${tm}）</span>`;   // 日期時間：卡片展開才顯示，收起時只留「剩 N 天」
@@ -72,7 +73,7 @@ function row(t,o={}){const m=[],d=today();
   if(o.pre){m.push(`<span class="meta warn">${t.time} · ${o.early?'還有 '+leftTxt(o.early):'時間到了'}</span>`)}   // 凌晨任務提前顯示在今天
   else if(dayToday&&o.inToday){if(t.time)m.push(`<span class="meta warn">${t.time}</span>`)}
   else if(t.kind!=='none'&&t.date)m.push(`<span class="meta ${diff(t.date)<=S.cfg.soon?'warn':''}">${dueLabel(t)}</span>`);
-  if(t.wd&&t.wd.length)m.push(`<span class="meta">↻ 每週 ${wdTxt(t.wd)}</span>`);else if(t.repeat)m.push(`<span class="meta">↻ 每 ${t.repeat} 天</span>`);
+  if(t.wd&&t.wd.length)m.push(`<span class="meta">↻ 每週 ${wdTxt(t.wd)}${unT(t)}</span>`);else if(t.repeat)m.push(`<span class="meta">↻ ${t.repeat===1?'每天':'每 '+t.repeat+' 天'}${unT(t)}</span>`);
   let side='';
   if(auto||t.kind==='dayonly'||o.pre){}else if(!t.done&&t.on!==d)side=`<button class="b" data-a="today" data-id="${t.id}">今天做</button>`;
   else if(!t.done&&o.unmark)side=`<button class="b q" data-a="untoday" data-id="${t.id}">先不做</button>`;
@@ -104,6 +105,10 @@ function qParse(txt){
   if(m=cut(/每\s*(?:週|周|星期|禮拜)\s*([一二三四五六日天](?:[、,，和及\s]*[一二三四五六日天])*)(?:\s*提醒(?:我)?)?/)){   // 「每週一三五」「每週二、四」→ 勾選的星期
     out.wd=[...new Set([...m[1].replace(/[^一二三四五六日天]/g,'')].map(c=>QW.indexOf(c==='天'?'日':c)))];out.repeat=0}
   const base=new Date(today()+'T12:00:00'),add=n=>{const d=new Date(base);d.setDate(d.getDate()+n);return ymd(d)};
+  if(!out.repeat&&!out.wd.length&&(m=cut(/每\s*[天日](?:\s*提醒(?:我)?)?/)))out.repeat=1;   // 「每天」＝每 1 天
+  if(out.repeat||out.wd.length){const s0=s,mu=cut(/(?:直到|到)\s*(\d{1,2})\s*[\/月.]\s*(\d{1,2})\s*[日號号]?\s*(?:為止|为止|止)/);   // 「到 11/30 為止」＝重複的結束日
+    if(mu){const mo=+mu[1],dy=+mu[2];let d=new Date(base.getFullYear(),mo-1,dy,12);
+      if(mo>=1&&mo<=12&&dy>=1&&dy<=31&&d.getMonth()===mo-1){if(d<base)d=new Date(base.getFullYear()+1,mo-1,dy,12);out.until=ymd(d)}else s=s0}}
   if(m=cut(R(/大[後后]天|[後后]天|明[天日]|今[天日]/,1)))out.date=add({大後天:3,大后天:3,後天:2,后天:2,明天:1,明日:1,今天:0,今日:0}[m[0]]);
   else if(m=cut(R(/(下)?(?:週|周|星期|禮拜)([一二三四五六日天])/,1))){
     const tg=QW.indexOf(m[2]==='天'?'日':m[2]),cur=base.getDay();
@@ -132,7 +137,7 @@ function qParse(txt){
   if(!name)return null;
   const dd=out.date?Math.round((new Date(out.date+'T12:00:00')-base)/864e5):null,dt=out.date?new Date(out.date+'T12:00:00'):null;
   const dl=out.date?(dd===0?'今天':dd===1?'明天':dd===2?'後天':(dt.getMonth()+1)+'/'+dt.getDate()+'（週'+QW[dt.getDay()]+'）'):'';
-  out.name=name;out.label=[out.date?'📅 '+dl+(out.time?' '+out.time:'')+(out.dl?' 前':''):'',out.wd.length?'↻ 每週 '+wdTxt(out.wd):out.repeat?'↻ 每 '+out.repeat+' 天':''].filter(Boolean).join('　');
+  out.name=name;out.label=[out.date?'📅 '+dl+(out.time?' '+out.time:'')+(out.dl?' 前':''):'',out.wd.length?'↻ 每週 '+wdTxt(out.wd):out.repeat?(out.repeat===1?'↻ 每天':'↻ 每 '+out.repeat+' 天'):'',out.until?'到 '+(+out.until.slice(5,7))+'/'+(+out.until.slice(8))+' 為止':''].filter(Boolean).join('　');
   return out}
 let qhOff=false;   // 這次輸入已按 ✕ 取消自動辨識
 const nmLines=v=>v.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
@@ -268,16 +273,16 @@ document.addEventListener('mouseover',e=>{if(!matchMedia('(hover:hover)').matche
 function addBox(){if(!addOpen)return'';
   return`<div class="add"><div class="in"><div class="nmrow"><textarea class="nm" id="td-nm" rows="1" placeholder="想到什麼，打字" autocomplete="off"></textarea><button type="button" class="tbtn${optSet()?' has':''}" data-a="opts" aria-label="期限／時間／重複">${CLK}</button></div><div class="qhint" id="td-qh" style="display:none"></div></div><button class="addb" data-a="add">新增</button></div>`}
 /* 新增任務的選填項目：全部放在一個氣泡裡。選的值先存在這幾個變數，按「新增」才套用 */
-let kdVal='',dtVal='',tmVal='',rpVal='',rmVal='',wdVal='',dtAuto=false;   // dtAuto：日期是程式預設填的（不是使用者自己選的），才會隨時間自動算今天／隔天
+let kdVal='',dtVal='',tmVal='',rpVal='',rmVal='',wdVal='',unVal='',dtAuto=false;   // dtAuto：日期是程式預設填的（不是使用者自己選的），才會隨時間自動算今天／隔天
 const defKd=()=>'none',effKd=()=>kdVal||defKd();   // 新增任務預設「沒有期限」（今天標籤新增的，addTask 會自動放進今天）
 const defTm=()=>pad(new Date().getHours())+':00';
 /* 三種期限：沒有期限＝沒日期；截止＝在那之前做完就好（可提早做，有「今天做」）；指定＝那天（或那個時間）才做（沒有「今天做」）。截止、指定的時間都可以空白。舊資料原本就有 kind，不用搬 */
-const uiKind=t=>(!t.date||t.kind==='none')?'none':t.kind==='dayonly'?'dayonly':'deadline';
+const uiKind=t=>isRep(t)?'repeat':(!t.date||t.kind==='none')?'none':t.kind==='dayonly'?'dayonly':'deadline';   // 四種：沒有期限／截止／指定／重複（重複一律是「那天才做」）
 const optSet=()=>!!(dtVal||tmVal||rpVal||wdVal||(kdVal&&kdVal!==defKd()));
 function autoDate(){if(!dtAuto||effKd()==='none')return;const w=document.getElementById('td-wp');if(!w)return;
   const d=tmVal?dateForTime(tmVal):today();if(d!==dtVal){dtVal=d;const di=w.querySelector('#td-dt');if(di)di.value=d}}
 const popIn=e=>{const t=e.target;if(!t.id)return;
-  if(t.id==='td-kd'){kdVal=t.value;popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-rp'){rpVal=t.value;if(rpVal&&wdVal){wdVal='';wdMark(document.getElementById('td-wp'))}}else if(t.id==='td-tm'){tmVal=t.value;autoDate();tmFlag()}else if(t.id==='td-rm')rmVal=t.checked?'1':'0'};
+  if(t.id==='td-kd'){kdVal=t.value;if(kdVal!=='repeat'){rpVal=wdVal=unVal='';const w=document.getElementById('td-wp');if(w){const r=w.querySelector('#td-rp'),u=w.querySelector('#td-un');if(r)r.value='';if(u)u.value='';wdMark(w)}}popFill()}else if(t.id==='td-dt'){dtVal=t.value;dtAuto=false}else if(t.id==='td-un'){unVal=t.value}else if(t.id==='td-rp'){rpVal=t.value;if(rpVal&&wdVal){wdVal='';wdMark(document.getElementById('td-wp'))}}else if(t.id==='td-tm'){tmVal=t.value;autoDate();tmFlag()}else if(t.id==='td-rm')rmVal=t.checked?'1':'0'};
 document.addEventListener('input',popIn);document.addEventListener('change',popIn);
 const wdMark=w=>{if(w)w.querySelectorAll('.wdb').forEach(b=>b.classList.toggle('on',wdVal.includes(b.dataset.d)))};
 function popFill(){const w=document.getElementById('td-wp');if(!w)return;const k=effKd();w.dataset.kd=k;   // 依類型顯示／隱藏日期和時間
@@ -290,33 +295,34 @@ let popTask=null,addBak=null;   // popTask：氣泡正在編輯哪個任務（nu
 function renderKeep(){const el=document.getElementById('td-nm'),v=el?el.value:'';render();const n=document.getElementById('td-nm');if(n&&v){n.value=v;n.style.height='auto';n.style.height=Math.min(150,n.scrollHeight)+'px';qHint()}}
 function closePop(commit){const w=document.getElementById('td-wp'),bk=document.getElementById('td-wb');if(!w)return;
   const pnEl=w.querySelector('#td-pn'),newName=pnEl?pnEl.value.trim():'';
-  if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=rmVal=wdVal='';dtAuto=false}
+  if(commit==='clr'){kdVal=dtVal=tmVal=rpVal=rmVal=wdVal=unVal='';dtAuto=false}
   else if(effKd()!=='none'&&w.querySelector('#td-tm')){if(dtAuto)dtVal=tmVal?dateForTime(tmVal):today()}
   w.remove();bk&&bk.remove();
   if(popTask){const t=by(popTask);popTask=null;
     if(t){let k,date,time,rp;
       if(commit==='clr'){k='none';date='';time='';rp=0}
-      else{k=effKd();rp=wdVal?0:(parseInt(rpVal)||0);if(k==='none'&&(rp||wdVal))k='deadline';   // 設了重複就不能是「沒有期限」：自動改成截止，並補上日期
+      else{k=effKd();rp=(k==='repeat'&&!wdVal)?(parseInt(rpVal)||1):0;   // 選了「重複」沒填頻率＝每天
         date=k==='none'?'':(dtVal||(wdVal?firstWd(wdVal.split('').map(Number)):today()));time=k==='none'?'':(tmVal||'')}
-      t.kind=k;
-      t.date=k==='none'?'':date;t.time=time;t.repeat=rp;if(wdVal)t.wd=wdVal.split('').map(Number);else delete t.wd;if(time)t.rm=rmOn()?1:0;else delete t.rm;if(newName)t.name=newName;save();
-      if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,dtAuto}=addBak);addBak=null}renderKeep();return}
-    if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,dtAuto}=addBak);addBak=null}}
+      t.kind=k==='repeat'?'dayonly':k;
+      t.date=k==='none'?'':date;t.time=time;t.repeat=rp;if(wdVal)t.wd=wdVal.split('').map(Number);else delete t.wd;if(time)t.rm=rmOn()?1:0;else delete t.rm;if(newName)t.name=newName;if(k==='repeat'&&unVal&&unVal>=date)t.until=unVal;else delete t.until;save();
+      if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,unVal,dtAuto}=addBak);addBak=null}renderKeep();return}
+    if(addBak){({kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,unVal,dtAuto}=addBak);addBak=null}}
   const b=document.querySelector('#todoRoot .tbtn');if(b)b.classList.toggle('has',optSet())}
 function openPop(btn,tid){closePop('ok');
-  if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):'';wdVal=(t.wd||[]).length?WO.filter(x=>t.wd.includes(+x)).join(''):'';rmVal=t.rm===0?'0':t.rm===1?'1':''}
+  if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,unVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):'';wdVal=(t.wd||[]).length?WO.filter(x=>t.wd.includes(+x)).join(''):'';unVal=t.until||'';rmVal=t.rm===0?'0':t.rm===1?'1':''}
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
-  w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="deadline">截止・可提早做</option><option value="dayonly">指定・到時才做</option></select></div>
+  w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="deadline">截止・可提早做</option><option value="dayonly">指定・到時才做</option><option value="repeat">重複・當天才出現</option></select></div>
 <div class="prow r-dt"><input type="date" id="td-dt"></div>
 <div class="prow r-tm"><input type="time" id="td-tm"><button type="button" class="tclr" data-a="tm-clr" aria-label="清除時間">✕</button></div>
 <label class="prow r-rm"><input type="checkbox" id="td-rm"> 時間前提醒我</label>
-<label class="prow rp"><input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="—"> 天後重複提醒我</label>
+<label class="prow rp">每 <input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="1"> 天（完成後算起）</label>
 <div class="prow wdr"><span>或每週：</span><div class="wds">${WO.map(d=>`<button type="button" class="wdb" data-a="wd" data-d="${d}">${QW[+d]}</button>`).join('')}</div></div>
+<div class="prow r-un"><span>到</span><input type="date" id="td-un"><button type="button" class="tclr" data-a="un-clr" aria-label="清除結束日">✕</button><span>為止</span></div>
 <div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
   if(tid){const tt=by(tid);w.insertAdjacentHTML('afterbegin',`<div class="prow"><input id="td-pn" value="${esc(tt.name)}" placeholder="名稱" autocomplete="off"></div>`)}
   document.getElementById('todoFloat').append(bk,w);
-  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-rp').value=rpVal;w.querySelector('#td-rm').checked=rmOn();w.querySelector('#td-tm').value=tmVal;
+  w.querySelector('#td-kd').value=effKd();w.querySelector('#td-dt').value=dtVal;w.querySelector('#td-un').value=unVal;w.querySelector('#td-rp').value=rpVal;w.querySelector('#td-rm').checked=rmOn();w.querySelector('#td-tm').value=tmVal;
   wdMark(w);popFill();
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
   const left=Math.max(8,Math.min(r.right-ww,innerWidth-ww-8)),room=innerHeight-r.bottom-18,roomUp=r.top-18,below=wh<=room||room>=roomUp,avail=Math.max(160,below?room:roomUp);   // 放得下就照原位；兩邊都放不下就挑大的那邊並限制高度（可捲動）
@@ -334,12 +340,15 @@ function earlyItems(open){const c=S.cfg,now=Date.now();if(!(c.early>0))return[];
 const earlySigOf=a=>a.map(x=>x.t.id+':'+(x.ms>0?leftTxt(x.ms):'0')).join('|');
 let earlySig='';
 /* 舊資料修正：設了重複卻沒有日期（掉在「有空再說」）的任務，補成「截止」＋日期 */
-function fixRep(){let ch=false;S.tasks.forEach(t=>{if(t.done||!isRep(t)||(t.kind!=='none'&&t.date))return;
-  t.kind='deadline';t.date=(t.wd&&t.wd.length)?firstWd(t.wd):today();t.repeat=+t.repeat||0;ch=true});if(ch)save()}
+function fixRep(){let ch=false;S.tasks.forEach(t=>{if(t.done||!isRep(t))return;
+  if(t.kind!=='dayonly'){t.kind='dayonly';ch=true}   // 舊資料：重複任務一律改成「指定」，才不會跑進快到期
+  if(!t.date){t.date=(t.wd&&t.wd.length)?firstWd(t.wd):today();t.repeat=+t.repeat||0;ch=true}});if(ch)save()}
+/* 重複任務漏做：自動順延成今天（不問）。已經過了結束日的不順延，照一般的「過了日期」處理 */
+function rollRep(){let ch=false;const d=today();S.tasks.forEach(t=>{if(t.done||!isRep(t)||!t.date||t.date>=d||(t.until&&t.until<d))return;t.date=d;ch=true});if(ch)save()}
 function renderToday(){fixRep();const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   const early=earlyItems(open);earlySig=earlySigOf(early);
   const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
-  const soon=open.filter(t=>t.kind==='deadline'&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d&&!early.some(x=>x.t===t)).sort(byDate);
+  const soon=open.filter(t=>(t.kind==='deadline'||(isRep(t)&&t.until&&t.date===t.until))&&t.date&&diff(t.date)>=1&&diff(t.date)<=c.soon&&t.on!==d&&!early.some(x=>x.t===t)).sort(byDate);
   const mine=open.filter(t=>!lapsed.includes(t)&&grp(t)==='today').sort((a,b)=>(a.kind!=='none'&&a.time||'99:99')<(b.kind!=='none'&&b.time||'99:99')?-1:1);
   let h=`<div class="hrow"><h1>${new Date(Date.now()-c.reset*36e5).getMonth()+1} 月 ${new Date(Date.now()-c.reset*36e5).getDate()} 日</h1>${addTg()}</div><div class="sub">今天已解決 ${dayStats()} 件</div>${addBox()}`;
   if(lapsed.length)h+='<h2>過了日期，要怎麼處理？</h2>'+lapsed.map(t=>{const op=t.id===detId;return `<div class="row lapsed${op?' dopen':''}"><div class="bd" data-a="tog" data-id="${t.id}"><div class="nmln">${nmIn(t)}</div><span class="meta warn">${dueLabel(t)}</span></div><label class="cal" aria-label="改到別天"><span>${CAL}</span><input type="date" data-a="resched" data-id="${t.id}" min="${d}"></label><button class="del dk wide" data-a="del" data-id="${t.id}">不用做了</button></div>`+(op?detPanel(t,true):'')}).join('');
@@ -355,24 +364,28 @@ function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)
   const wk=S.tasks.filter(t=>t.done&&t.doneAt&&diff(t.doneAt)>=-6).length,tl=(n,l)=>`<div class="tile"><b>${n}</b><span>${l}</span></div>`;
   $('fpp').style.display=fpOpen?'block':'none';$('fpb').textContent=fpOpen?'▼':'▲';
   $('fpp').innerHTML=`<div class="tiles">${tl(dayStats(),'今天')}${tl(wk,'近 7 日')}${tl(S.best,'單日最高')}</div><div class="meta">最近完成</div>`+(dn.length?dn.map(t=>`<div class="rm"><span>${esc(t.name)}</span><span class="meta" style="flex:none">${t.doneTs?new Date(t.doneTs).toTimeString().slice(0,5):''}</span><button class="b" data-a="chk" data-id="${t.id}">復原</button></div>`).join(''):'<div class="empty">還沒有完成的事</div>')}
-function render(){$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null;if(detId){const r=document.querySelector('.row.dopen');if(r){setTimeout(()=>mqRun(r),30);setTimeout(()=>mqRun(r),380)}}}
+function render(){rollRep();$('app').innerHTML=view==='today'?renderToday():renderAll();renderFp();const pn=P();if(pn&&!pn._ro)detWire(pn);if(detId&&!P())detId=null;if(detId){const r=document.querySelector('.row.dopen');if(r){setTimeout(()=>mqRun(r),30);setTimeout(()=>mqRun(r),380)}}}
 function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
   const lines=qhOff?[raw.replace(/\s*\n\s*/g,' ')]:nmLines(raw),made=[];   // 換行 = 一行一個任務，每行各自辨識日期／時間
   lines.forEach((ln,idx)=>{const q=qhOff?null:qParse(ln),n=q?q.name:ln;   // 氣泡裡手動選的優先，沒選的才用辨識結果
-    const wdA=wdVal?wdVal.split('').map(Number):(q&&q.wd)||[],rp=wdA.length?0:(parseInt(rpVal)||(q&&q.repeat)||0);
+    let wdA=wdVal?wdVal.split('').map(Number):(q&&q.wd)||[],rp=wdA.length?0:(parseInt(rpVal)||(q&&q.repeat)||0);
+    if(kdVal==='repeat'&&!rp&&!wdA.length)rp=1;   // 選了「重複」沒填頻率＝每天
+    if(kdVal&&kdVal!=='repeat'){rp=0;wdA=[]}   // 氣泡手動選了別的類型：不採用輸入辨識出的重複
+    const isRp=!!(rp||wdA.length);
     let date=dtVal||(q&&q.date)||'',tm=tmVal||(q&&q.time)||'';
-    if(kdVal==='none'&&!rp&&!wdA.length){date='';tm=''}   // 沒期限＋沒重複才清空；有重複一定要有日期
+    if(kdVal==='none'&&!isRp){date='';tm=''}   // 沒期限＋沒重複才清空；有重複一定要有日期
     else if(kdVal){date=date||(tm?dateForTime(tm):today())}   // 氣泡選了截止／指定：一定有日期，時間可空白
     if(!date&&tm)date=dateForTime(tm);
     if(wdA.length&&!date)date=firstWd(wdA);
     if(rp&&!date)date=today();
-    const k=!date?'none':(kdVal==='deadline'||kdVal==='dayonly')?kdVal:(q&&q.kind)||((rp||wdA.length)?'deadline':'dayonly');   // 氣泡手動選的優先，其次是輸入辨識（有「前」＝截止），其餘有日期的＝指定
+    const k=!date?'none':isRp?'dayonly':(kdVal==='deadline'||kdVal==='dayonly')?kdVal:(q&&q.kind)||'dayonly';   // 重複任務一律「那天才做」   // 氣泡手動選的優先，其次是輸入辨識（有「前」＝截止），其餘有日期的＝指定
     const t={id:Date.now()+idx,name:n,kind:k,date,time:k==='none'?'':tm,repeat:rp,done:false,touched:Date.now()};
     if(wdA.length)t.wd=wdA;
+    const un=isRp?(unVal||(q&&q.until)||''):'';if(un&&un>=date)t.until=un;
     if(t.time)t.rm=rmOn()?1:0;
     if(view==='today'&&(k==='none'||date===today()))t.on=today();
     S.tasks.push(t);made.push(t)});
-  kdVal=dtVal=tmVal=rpVal=rmVal=wdVal='';dtAuto=false;qhOff=false;save();render();$('nm').focus();
+  kdVal=dtVal=tmVal=rpVal=rmVal=wdVal=unVal='';dtAuto=false;qhOff=false;save();render();$('nm').focus();
   toast(made.length>1?'已新增 '+made.length+' 個':'已新增',null,()=>{S.tasks=S.tasks.filter(x=>!made.includes(x));save();render()},5000)}
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
@@ -445,10 +458,11 @@ function act(a,id,val){const t=by(id);if(!t)return;
       if(t.repeat||wk){let x;
         if(wk){const bs=t.date&&t.date>today()?t.date:today(),f=new Date(bs+'T00:00');f.setDate(f.getDate()+1);x=new Date(firstWd(t.wd,ymd(f))+'T00:00')}   // 每週：從「今天或任務日期（取較晚）」的隔天起，找下一個勾選的星期
         else{x=new Date(today()+'T00:00');x.setDate(x.getDate()+(+t.repeat||1))}
-        const nx={id:Date.now()+1,name:t.name,kind:t.kind==='dayonly'?'dayonly':'deadline',date:ymd(x),time:t.time||'',repeat:wk?0:(+t.repeat||1),done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;
+        if(t.until&&ymd(x)>t.until){m+='　已到結束日，不再重複 🎉'}else{   // 超過結束日就不再長出下一次
+        const nx={id:Date.now()+1,name:t.name,kind:'dayonly',date:ymd(x),time:t.time||'',repeat:wk?0:(+t.repeat||1),done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;if(t.until)nx.until=t.until;
         if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();const off=Math.round((new Date(ymd(x)+'T12:00:00')-new Date((t.date||today())+'T12:00:00'))/864e5);   // 小步驟的提醒日期跟著任務一起往後挪相同天數，時間不變
         nx.subs=t.subs.map((y,i)=>{const n={id:b+i,text:y.text,done:false};if(y.rd&&y.rt){const q=new Date(y.rd+'T12:00:00');q.setDate(q.getDate()+off);n.rd=ymd(q);n.rt=y.rt}return n})}   // 重複任務：備註和小步驟一起帶到下一次，小步驟全部重設為未完成
-        S.tasks.push(nx);t.nextId=nx.id;m+=wk?'　下次 '+(x.getMonth()+1)+'/'+x.getDate()+'（週'+QW[x.getDay()]+'）提醒':'　'+(+t.repeat||1)+' 天後再提醒'}
+        S.tasks.push(nx);t.nextId=nx.id;m+=wk?'　下次 '+(x.getMonth()+1)+'/'+x.getDate()+'（週'+QW[x.getDay()]+'）提醒':'　'+(+t.repeat||1)+' 天後再提醒'}}
       toast(m,t.id)}
     else{if(t.nextId){const n=by(t.nextId);if(n&&!n.done)S.tasks=S.tasks.filter(x=>x!==n);t.nextId=null}toast('已取消完成')}}
   else if(a==='today'){t.on=today();t.touched=Date.now()}
@@ -483,11 +497,12 @@ document.addEventListener('click',e=>{
   if(a==='d-rm'){detSet(t=>{t.subs=(t.subs||[]).filter(v=>v.id!=el.dataset.sid)});return}
   if(a==='qh-x'){qhOff=true;qHint();const i=$('nm');i&&i.focus();return}
   if(a==='bell'){const t=by(el.dataset.id);if(!t)return;t.rm=remOn(t)?0:1;save();el.classList.toggle('on',t.rm===1);el.setAttribute('aria-pressed',t.rm===1);return}
+  if(a==='un-clr'){const w=document.getElementById('td-wp'),u=w&&w.querySelector('#td-un');unVal='';if(u)u.value='';return}
   if(a==='tm-clr'){const w=document.getElementById('td-wp'),ti=w&&w.querySelector('#td-tm');tmVal='';if(ti)ti.value='';autoDate();tmFlag();return}
   if(a==='wd'){const w=document.getElementById('td-wp');if(!w)return;   // 每週重複：點星期鈕複選；跟「幾天後重複」二選一
     const st=new Set(wdVal.split('').filter(Boolean)),d=el.dataset.d;st.has(d)?st.delete(d):st.add(d);wdVal=WO.filter(x=>st.has(x)).join('');
     if(wdVal){rpVal='';const r=w.querySelector('#td-rp');if(r)r.value='';
-      if(effKd()==='none'){kdVal='dayonly';const k=w.querySelector('#td-kd');if(k)k.value='dayonly';popFill()}   // 沒期限的任務沒辦法算下一次：自動改成「指定」
+      if(effKd()!=='repeat'){kdVal='repeat';const k=w.querySelector('#td-kd');if(k)k.value='repeat';popFill()}   // 沒期限的任務沒辦法算下一次：自動改成「指定」
       if(dtAuto&&effKd()!=='none'&&!wdVal.includes(String(new Date(dtVal+'T12:00:00').getDay()))){dtVal=firstWd(wdVal.split('').map(Number));dtAuto=false;const di=w.querySelector('#td-dt');if(di)di.value=dtVal}}   // 預設日期不在勾選的星期內：改成最近的那天
     wdMark(w);return}
   if(a==='w-ok')return closePop('ok');
