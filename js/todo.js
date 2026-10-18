@@ -232,7 +232,7 @@ document.addEventListener('touchmove',e=>{if(sdrag&&sdrag.on&&e.cancelable)e.pre
 function openSp(btn,sid){closeSp('ok');const t=by(detId),x=t&&(t.subs||[]).find(v=>v.id==sid);if(!x)return;
   const bk=document.createElement('div');bk.id='td-sb';bk.dataset.a='sp-ok';
   const w=document.createElement('div');w.id='td-sp';w.dataset.sid=sid;
-  w.innerHTML='<div class="prow"><input type="date" id="td-sd"></div><div class="prow"><input type="time" id="td-st"></div><div class="wbtns"><button class="b q" data-a="sp-clr">清除</button><button class="b" data-a="sp-ok">完成</button></div>';
+  w.innerHTML='<div class="prow dtm"><input type="date" id="td-sd"><input type="time" id="td-st"></div><div class="wbtns"><button class="b q" data-a="sp-clr">清除</button><button class="b" data-a="sp-ok">完成</button></div>';
   document.getElementById('todoFloat').append(bk,w);
   w.querySelector('#td-sd').value=x.rd||(t.date&&t.kind!=='none'?t.date:today());w.querySelector('#td-st').value=x.rt||'';
   const r=btn.getBoundingClientRect(),ww=w.offsetWidth,wh=w.offsetHeight;
@@ -312,13 +312,12 @@ function openPop(btn,tid){closePop('ok');
   if(tid){const t=by(tid);if(!t)return;addBak={kdVal,dtVal,tmVal,rpVal,rmVal,wdVal,unVal,dtAuto};popTask=tid;dtAuto=false;kdVal=uiKind(t);dtVal=t.date||'';tmVal=t.time||'';rpVal=t.repeat?String(t.repeat):'';wdVal=(t.wd||[]).length?WO.filter(x=>t.wd.includes(+x)).join(''):'';unVal=t.until||'';rmVal=t.rm===0?'0':t.rm===1?'1':''}
   const bk=document.createElement('div');bk.id='td-wb';bk.dataset.a='w-ok';
   const w=document.createElement('div');w.id='td-wp';
-  w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="deadline">截止・可提早做</option><option value="dayonly">指定・到時才做</option><option value="repeat">重複・當天才出現</option></select></div>
-<div class="prow r-dt"><input type="date" id="td-dt"></div>
-<div class="prow r-tm"><input type="time" id="td-tm"><button type="button" class="tclr" data-a="tm-clr" aria-label="清除時間">✕</button></div>
+  w.innerHTML=`<div class="prow"><select id="td-kd"><option value="none">沒有期限</option><option value="deadline">截止・可提早做</option><option value="dayonly">指定・到時才做</option><option value="repeat">重複・每天或每週</option></select></div>
+<div class="prow dtm r-dt r-tm"><input type="date" id="td-dt"><input type="time" id="td-tm"><button type="button" class="tclr" data-a="tm-clr" aria-label="清除時間">✕</button></div>
 <label class="prow r-rm"><input type="checkbox" id="td-rm"> 時間前提醒我</label>
 <label class="prow rp">每 <input type="number" id="td-rp" min="1" max="365" inputmode="numeric" placeholder="1"> 天（完成後算起）</label>
 <div class="prow wdr"><span>或每週：</span><div class="wds">${WO.map(d=>`<button type="button" class="wdb" data-a="wd" data-d="${d}">${QW[+d]}</button>`).join('')}</div></div>
-<div class="prow r-un"><span>到</span><input type="date" id="td-un"><button type="button" class="tclr" data-a="un-clr" aria-label="清除結束日">✕</button><span>為止</span></div>
+<div class="prow r-un"><span>結束日</span><input type="date" id="td-un"><button type="button" class="tclr" data-a="un-clr" aria-label="清除結束日">✕</button></div>
 <div class="wbtns"><button class="b q" data-a="w-clr">清除</button><button class="b" data-a="w-ok">完成</button></div>`;
   if(tid){const tt=by(tid);w.insertAdjacentHTML('afterbegin',`<div class="prow"><input id="td-pn" value="${esc(tt.name)}" placeholder="名稱" autocomplete="off"></div>`)}
   document.getElementById('todoFloat').append(bk,w);
