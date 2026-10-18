@@ -317,7 +317,7 @@ body{overflow:auto}
 #td-sp.up::before{bottom:-7px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 #td-sp .wbtns{display:flex;gap:8px;margin-top:8px}
 #td-sp .wbtns .b{flex:1;border-radius:10px;min-height:38px}
-#td-sp{width:240px}
+#td-sp{width:280px}
 :is(#todoRoot,#todoFloat) .dpc .dbl{flex:none;display:grid;place-items:center;border:0;background:none;color:var(--faint);cursor:pointer;padding:2px 4px}
 :is(#todoRoot,#todoFloat) .dpc .dbl.on{color:#B8962E}   /* 有設提醒：圖示變金（同上層鬧鐘亮起時的金色），維持無底色 */
 /* 小步驟排序：名稱不被選字；拖動中的那一列浮起來 */
@@ -326,3 +326,14 @@ body{overflow:auto}
 :is(#todoRoot,#todoFloat) .dpc .ds.sdrag{position:relative;z-index:5;background:rgba(255,255,255,.96);border-radius:8px;box-shadow:0 4px 14px rgba(30,45,69,.2);transition:none}
 
 @media (hover:hover){:is(#todoRoot,#todoFloat) .dpc .ds span{cursor:grab}:is(#todoRoot,#todoFloat) .dpc .ds.sdrag span{cursor:grabbing}}
+
+/* 日期／時間欄：同一列並排、可縮小、固定高度，手機（含 iOS）不會把旁邊的 ✕ 擠出氣泡；新增／修改氣泡和小步驟提醒共用 */
+#td-wp .prow.dtm,#td-sp .prow.dtm{flex-wrap:nowrap;gap:6px}
+#td-wp .prow input[type=date],#td-wp .prow input[type=time],#td-sp .prow input[type=date],#td-sp .prow input[type=time]{box-sizing:border-box;flex:1 1 0;min-width:0;width:0;height:34px;padding:0 6px;font-size:13px;text-align:left;-webkit-appearance:none;appearance:none}
+#td-wp .prow.dtm input[type=date],#td-sp .prow.dtm input[type=date]{flex:1.45 1 0}
+#td-wp input[type=date]::-webkit-date-and-time-value,#td-wp input[type=time]::-webkit-date-and-time-value,#td-sp input[type=date]::-webkit-date-and-time-value,#td-sp input[type=time]::-webkit-date-and-time-value{text-align:left;min-height:1.2em;margin:0}
+#td-wp input::-webkit-calendar-picker-indicator,#td-sp input::-webkit-calendar-picker-indicator{margin:0 0 0 2px;padding:0;width:14px}
+#td-wp .tclr{flex:none;width:34px;height:34px}
+#td-wp .r-un>span,#td-wp .rp>span{flex:none}
+#td-wp .prow.rp{font-size:13px}
+#td-wp select{height:34px}
