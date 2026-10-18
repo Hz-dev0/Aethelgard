@@ -192,12 +192,12 @@ body{overflow:auto}
 #td-wp .prow select,#td-wp .prow input[type=date],#td-wp .prow input[type=time]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .rp input{flex:none;width:64px;font:inherit;font-size:14px;padding:6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .r-tm{margin-bottom:8px}
-#td-wp:not([data-kd=repeat]) .rp,#td-wp:not([data-kd=repeat]) .wdr,#td-wp:not([data-kd=repeat]) .r-un{display:none}   /* 頻率、星期、結束日只在「重複」顯示 */
+#td-wp:not([data-kd=repeat]) .r-fq,#td-wp:not([data-kd=repeat]) .wdr,#td-wp:not([data-kd=repeat]) .r-un,#td-wp:not([data-fq=w]) .wdr,#td-wp:not([data-fq=n]) .fqn{display:none}   /* 頻率／星期／結束日只在「重複」顯示；星期只在「每週」、天數只在「每隔幾天」 */
+#td-wp.notm .dtm .tclr,#td-wp.nount .r-un .tclr{display:none}   /* ✕ 只在有值時出現 */
 #td-wp .r-un>span{flex:none}
 #td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=none] .r-rm,#td-wp.notm .r-rm{display:none}
 #td-wp .r-tm+.r-rm{margin-top:8px}
 #td-wp .r-rm input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
-#td-wp .r-tm+.rp{margin-top:8px}
 #td-wp .wdr{flex-direction:column;align-items:stretch;gap:8px;margin:8px 0}
 #td-wp .wdr>span{font-size:13px;color:var(--text-faint,var(--gray))}
 #td-wp .wds{display:flex;justify-content:space-between;gap:6px}
@@ -334,6 +334,7 @@ body{overflow:auto}
 #td-wp input[type=date]::-webkit-date-and-time-value,#td-wp input[type=time]::-webkit-date-and-time-value,#td-sp input[type=date]::-webkit-date-and-time-value,#td-sp input[type=time]::-webkit-date-and-time-value{text-align:left;min-height:1.2em;margin:0}
 #td-wp input::-webkit-calendar-picker-indicator,#td-sp input::-webkit-calendar-picker-indicator{margin:0 0 0 2px;padding:0;width:14px}
 #td-wp .tclr{flex:none;width:34px;height:34px}
-#td-wp .r-un>span,#td-wp .rp>span{flex:none}
-#td-wp .prow.rp{font-size:13px}
+#td-wp .r-un>span{flex:none}
+#td-wp .fqn{display:flex;align-items:center;gap:4px;flex:none;font-size:13px}
+#td-wp .fqn input{width:52px;height:34px;padding:0 4px;text-align:center;font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp select{height:34px}
