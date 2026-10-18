@@ -464,7 +464,7 @@ function act(a,id,val){const t=by(id);if(!t)return;
       const wk=t.wd&&t.wd.length;
       if(t.repeat||wk){let x;
         if(wk){const bs=t.date&&t.date>today()?t.date:today(),f=new Date(bs+'T00:00');f.setDate(f.getDate()+1);x=new Date(firstWd(t.wd,ymd(f))+'T00:00')}   // 每週：從「今天或任務日期（取較晚）」的隔天起，找下一個勾選的星期
-        else{x=new Date(today()+'T00:00');x.setDate(x.getDate()+(+t.repeat||1))}
+        else{x=new Date((t.date&&t.date>today()?t.date:today())+'T00:00');x.setDate(x.getDate()+(+t.repeat||1))}   // 每 N 天：從「今天或任務日期（取較晚）」算起，提早勾掉未來的那筆不會產生同一天的重複項
         if(t.until&&ymd(x)>t.until){m+='　已到結束日，不再重複 🎉'}else{   // 超過結束日就不再長出下一次
         const nx={id:Date.now()+1,name:t.name,kind:'dayonly',date:ymd(x),time:t.time||'',repeat:wk?0:(+t.repeat||1),done:false,touched:Date.now()};if(wk)nx.wd=t.wd.slice();if(t.rm!==undefined)nx.rm=t.rm;if(t.until)nx.until=t.until;
         if(t.note)nx.note=t.note;if(t.subs&&t.subs.length){const b=Date.now();const off=Math.round((new Date(ymd(x)+'T12:00:00')-new Date((t.date||today())+'T12:00:00'))/864e5);   // 小步驟的提醒日期跟著任務一起往後挪相同天數，時間不變
