@@ -192,6 +192,8 @@ body{overflow:auto}
 #td-wp .prow select,#td-wp .prow input[type=date],#td-wp .prow input[type=time]{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .rp input{flex:none;width:64px;font:inherit;font-size:14px;padding:6px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
 #td-wp .r-tm{margin-bottom:0}
+#td-wp:not([data-kd=repeat]) .rp,#td-wp:not([data-kd=repeat]) .wdr,#td-wp:not([data-kd=repeat]) .r-un{display:none}   /* 頻率、星期、結束日只在「重複」顯示 */
+#td-wp .r-un>span{flex:none}
 #td-wp[data-kd=none] .r-dt,#td-wp[data-kd=none] .r-tm,#td-wp[data-kd=none] .r-rm,#td-wp.notm .r-rm{display:none}
 #td-wp .r-tm+.r-rm{margin-top:8px}
 #td-wp .r-rm input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
