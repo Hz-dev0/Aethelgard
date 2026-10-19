@@ -361,10 +361,10 @@ function renderToday(){fixRep();const d=today(),c=S.cfg,open=S.tasks.filter(t=>!
   h+='<h2>今天要做</h2>'+((mine.length||early.length)?mine.map(t=>row(t,{unmark:1,inToday:1})).join('')+early.map(x=>row(x.t,{unmark:1,inToday:1,pre:1,early:x.ms>0?x.ms:0})).join(''):'<div class="empty">還沒有。打字新增，或從「全部」挑幾件過來。</div>');
   if(soon.length)h+=sec('t-soon','快到期',soon.length,`<div class="soon">${soon.map(t=>row(t)).join('')}</div>`);
   return h}
-function renderAll(){fixRep();const G={week:[],month:[],far:[],later:[],today:[],rep:[]},N={week:'這週（7 天內）',month:'這個月（30 天內）',far:'更久以後（30 天後）',later:'有空再說',today:'今天',rep:'重複任務'};
-  S.tasks.filter(t=>!t.done).forEach(t=>(isRep(t)?G.rep:G[grp(t)]).push(t));   // 重複任務自己一區（預設收合），不混在其他區塊裡
+function renderAll(){fixRep();const G={week:[],far:[],later:[],rep:[]},N={week:'這週（7 天內）',far:'更久以後（7 天後）',later:'有空再說',rep:'重複任務'};
+  S.tasks.filter(t=>!t.done).forEach(t=>(isRep(t)?G.rep:G[({today:'week',month:'far'})[grp(t)]||grp(t)]).push(t));   // 重複任務自己一區（預設收合），不混在其他區塊裡
   let h=`<div class="hrow"><h1>全部</h1>${addTg()}</div><div class="sub">共 ${S.tasks.filter(t=>!t.done).length} 件未完成</div>${addBox()}`;
-  for(const k of['week','month','far','later','today','rep']){if((k==='far'||k==='rep')&&!G[k].length)continue;   // 沒有就不顯示這區
+  for(const k of['week','far','later','rep']){if((k==='far'||k==='rep')&&!G[k].length)continue;   // 沒有就不顯示這區
     h+=sec('a-'+k,N[k],G[k].length,G[k].length?G[k].sort(byDate).map(t=>row(t,{cmp:1})).join(''):'<div class="empty">空的</div>',k==='rep'?false:true)}
   return h}
 function renderFp(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0)).slice(0,4);   // 畫面只列 4 條（可撤回的）；第 5 條的備註／小步驟還留著當緩衝，第 6 條起才清
