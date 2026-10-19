@@ -350,7 +350,7 @@ function fixRep(){let ch=false;S.tasks.forEach(t=>{if(t.done||!isRep(t))return;
   if(t.kind!=='dayonly'){t.kind='dayonly';ch=true}   // 舊資料：重複任務一律改成「指定」，才不會跑進快到期
   if(!t.date){t.date=(t.wd&&t.wd.length)?firstWd(t.wd):today();t.repeat=+t.repeat||0;ch=true}});if(ch)save()}
 /* 重複任務漏做：自動順延成今天（不問）。已經過了結束日的不順延，照一般的「過了日期」處理 */
-function rollRep(){let ch=false;const d=today();S.tasks.forEach(t=>{if(t.done||!isRep(t)||!t.date||t.date>=d||(t.until&&t.until<d))return;t.date=d;ch=true});if(ch)save()}
+function rollRep(){let ch=false;const d=today();S.tasks.forEach(t=>{if(t.done||!isRep(t)||!t.date||t.date>=d||(t.until&&t.until<d))return;t.date=d;snapMap.set(t.id,tj(t));ch=true});if(ch)save()}
 function renderToday(){fixRep();const d=today(),c=S.cfg,open=S.tasks.filter(t=>!t.done);
   const early=earlyItems(open);earlySig=earlySigOf(early);
   const lapsed=open.filter(t=>t.kind!=='none'&&t.date&&diff(t.date)<0);
