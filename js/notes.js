@@ -201,7 +201,8 @@ function notesLoadFromData(notes) {
   if (_notesIsVisible && notesFolderData.length > 0) {
     // 合併：保留本地每個 tab 的 currentPage，只更新內容
     const mergedTabs = notes.tabs.map((cloudTab, i) => {
-      const localTab = notesFolderData[i];
+      // 用分頁 id 對應本機分頁（別台裝置新增／刪除／換順序後，用位置對會把頁碼套到別的分頁上）
+      const localTab = (cloudTab.id && notesFolderData.find(t => t.id === cloudTab.id)) || (cloudTab.id ? null : notesFolderData[i]);
       if (localTab && typeof localTab.currentPage === 'number') {
         // 保留本地 currentPage（使用者正在瀏覽的位置）
         return { ...cloudTab, currentPage: Math.min(localTab.currentPage, (cloudTab.pages || []).length - 1) };

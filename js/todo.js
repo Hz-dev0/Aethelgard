@@ -9,7 +9,7 @@ document.body.appendChild(fl);
 
 const K='aeth_todo_v1';
 let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
-const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0,early:3,remindMin:10,remindDef:1,tzo:480},S.cfg);S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
+const norm=()=>{S=S||{};S.tasks=S.tasks||[];S.cfg=Object.assign({soon:3,stale:14,sugMax:3,reset:4,fx:1,tabPos:0,early:3,remindMin:10,remindDef:1,tzo:480,tok:30},S.cfg);S.cfgMod=S.cfgMod||{};S.skip=S.skip||{};S.fold=S.fold||{};S.sug=S.sug||{d:'',n:0};S.best=S.best||0};norm();
 let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
 let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
 /* 完成紀錄只看最近五條：從第六條開始，備註和小步驟就不留了（任務本身和完成次數照舊保留） */
@@ -31,13 +31,20 @@ function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assig
   ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);let pick=a&&b?((a.mod||lu)>=(b.mod||ru)?a:b):(a||b);
     if(dead[id]&&dead[id]>(pick.mod||(a?lu:ru)))return;   // 刪除比最後一次修改還新 → 維持刪除
     out.push(pick)});
-  const base=lu>=ru?L:R;return Object.assign({},base,{tasks:out,dead,best:Math.max(L.best||0,R.best||0)})}
+  const base=lu>=ru?L:R,oth=lu>=ru?R:L;
+  /* 設定逐項合併：每一項各自記修改時間，誰最後改誰贏（不再整包跟著「比較新的那份」走，另一台改的設定才不會被蓋掉） */
+  const lc=L.cfgMod||{},rc=R.cfgMod||{},cfg=Object.assign({},oth.cfg,base.cfg),cm={};
+  Object.keys(Object.assign({},lc,rc)).forEach(k=>{const a=lc[k]||0,b=rc[k]||0;cm[k]=Math.max(a,b);const src=a>=b?L:R;if(src.cfg&&src.cfg[k]!==undefined)cfg[k]=src.cfg[k]});
+  /* 「順手做一件」今天彈過幾次：同一天取較大值；今天不想做的任務：兩邊聯集 */
+  const ls_=L.sug||{d:'',n:0},rs_=R.sug||{d:'',n:0},sug=ls_.d===rs_.d?{d:ls_.d,n:Math.max(ls_.n||0,rs_.n||0)}:(ls_.d>rs_.d?ls_:rs_);
+  const skip=Object.assign({},R.skip||{});Object.keys(L.skip||{}).forEach(id=>{if(!skip[id]||L.skip[id]>skip[id])skip[id]=L.skip[id]});
+  return Object.assign({},base,{tasks:out,dead,best:Math.max(L.best||0,R.best||0),cfg,cfgMod:cm,sug,skip})}
 const KSN=K+'_snaps';let lastSnapAt=(()=>{try{const a=JSON.parse(localStorage.getItem(KSN)||'[]');return a[0]?a[0].at:0}catch(e){return 0}})();
 const readSnaps=()=>{try{return JSON.parse(localStorage.getItem(KSN)||'[]')}catch(e){return[]}};
 function takeSnap(){try{const arr=readSnaps(),js=JSON.stringify(S);if(arr[0]&&arr[0].j===js)return;
   arr.unshift({at:Date.now(),n:(S.tasks||[]).length,j:js});arr.length=Math.min(arr.length,5);lastSnapAt=Date.now();
   try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(e){arr.length=Math.max(1,arr.length-2);try{localStorage.setItem(KSN,JSON.stringify(arr))}catch(_){}}}catch(e){}}
-const save=()=>{pruneDoneExtras();stampChanges();S.updatedAt=Date.now();if(Date.now()-lastSnapAt>30*6e4)takeSnap();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,3000)}};
+const save=()=>{pruneDoneExtras();stampChanges();S.updatedAt=Math.max(Date.now(),(S.updatedAt||0)+1);if(Date.now()-lastSnapAt>30*6e4)takeSnap();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}dirty=true;saveSeq++;statusUpd();if(cloudReady){clearTimeout(pushT);pushT=setTimeout(push,3000)}};
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date(Date.now()-S.cfg.reset*36e5));
@@ -521,7 +528,7 @@ document.addEventListener('click',e=>{
   if(a==='s-close'){$('ov').className='';return}
   if(a==='s-sync'){syncClick();return}
   if(a==='s-out'){$('ov').className='';if(typeof window.ownerSignOut==='function')window.ownerSignOut();return}
-  if(a==='s-tdur'){const mm=parseInt(el.dataset.m);if(typeof window._setTokenMinutes==='function')window._setTokenMinutes(mm);
+  if(a==='s-tdur'){const mm=parseInt(el.dataset.m);S.cfg.tok=mm;S.cfgMod.tok=Date.now();save();if(typeof window._setTokenMinutes==='function')window._setTokenMinutes(mm);
     document.querySelectorAll('#td-tkp [data-m]').forEach(x=>{const on=x===el;x.classList.toggle('dk',on);x.classList.toggle('q',!on)});return}
   if(a==='s-tgen'){if(typeof window.generateToken==='function')window.generateToken();return}
   if(a==='s-link'){const say=m=>typeof window.showToast==='function'&&window.showToast(m);
@@ -534,7 +541,7 @@ document.addEventListener('click',e=>{
   if(a==='s-n'){const f=window[el.dataset.f];if(typeof f==='function')f();return}
   if(a==='s-ntf-on'||a==='s-ntf-off'||a==='s-ntf-test'){const P=window._push;if(!P)return toast('通知模組尚未載入');
     if(a==='s-ntf-test'){P.test().then(m=>toast(m),e=>toast(e.message||'失敗'));return}
-    if(a==='s-ntf-on'){S.cfg.tzo=-new Date().getTimezoneOffset();save();P.enable().then(()=>{openSet();toast('已開啟通知')},e=>toast(e.message||'開啟失敗',null,null,3500))}
+    if(a==='s-ntf-on'){S.cfg.tzo=-new Date().getTimezoneOffset();S.cfgMod.tzo=Date.now();save();P.enable().then(()=>{openSet();toast('已開啟通知')},e=>toast(e.message||'開啟失敗',null,null,3500))}
     else P.disable().then(()=>{openSet();toast('已關閉通知')},e=>toast(e.message||'失敗'));return}
   if(a==='s-tab'){stab=el.dataset.k;bkMsg='';bkUndo=false;return openSet()}
   if(a==='s-do'){const v=$('bk').value;
@@ -612,7 +619,7 @@ function openSet(){ovMode='set';const o=(k,min,max)=>`<input type="number" data-
     +`<button class="b dk sbtn" data-a="s-out" style="margin-top:14px">登出</button><div class="ver">版本 ${esc(window._BUILD||'—')}</div>`,
   exp:backupPane()};
   $('ov').innerHTML=`<div class="box sb p1" style="height:clamp(380px,60vh,540px);max-height:92vh;overflow:hidden"><div class="tabs">${TB.map(([k,i,l])=>`<button class="tb ${k===stab?'on':''}" data-a="s-tab" data-k="${k}"><i>${i}</i>${l}</button>`).join('')}</div><div class="pane" style="min-height:0"><div class="pc" style="min-height:0;overflow-y:auto">${P[stab]}</div><div class="foot"><button class="b" data-a="s-close">完成</button></div></div></div>`;
-  $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;save();render();}}});
+  $('ov').querySelectorAll('[data-c]').forEach(el=>{const k=el.dataset.c;el.value=S.cfg[k];el.onchange=()=>{const v=parseInt(el.value);if(v>=0){S.cfg[k]=v;S.cfgMod[k]=Date.now();save();render();}}});
   const im=$('imp');if(im)im.onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
     f.text().then(txt=>{let j;try{j=JSON.parse(txt)}catch(x){}const b=parseBackup(j);
       if(!b){bkMsg='這個檔案看不出是備份檔（需要是從這裡下載的 .json）';return openSet()}
@@ -634,25 +641,54 @@ const REF=()=>window._fbDoc(window._fbDb,'Aethelgard','todo');
 const KS=K+'_synced';
 function markSynced(){try{localStorage.setItem(KS,String(S.updatedAt||0))}catch(e){}dirty=false;statusUpd()}
 let lastPushJson='';   // 上次成功寫進雲端的內容：一樣就不重複寫（雲端寫入有免費額度）
-async function push(){const seq=saveSeq;
-  try{const js=JSON.stringify(S);
-    if(js===lastPushJson){if(seq===saveSeq)markSynced();return}
-    await window._fbSetDoc(REF(),{json:js,updatedAt:S.updatedAt||Date.now()},{merge:true});lastPushJson=js;if(seq===saveSeq)markSynced()}
+/* 判斷「誰有新東西」不再拿兩台裝置的時鐘互相比大小（時鐘差幾分鐘就會誤判成「雲端比較舊」而把對方的修改蓋掉）：
+   雲端版本只跟「這台上次看到／寫入的雲端版本」比有沒有變；本機有沒有改，只跟本機自己的時間比。 */
+const KC=K+'_cloudv';
+const getCV=()=>Number(localStorage.getItem(KC))||0,setCV=v=>{try{localStorage.setItem(KC,String(v))}catch(e){}};
+let rLater=false;
+function applyTok(){if(S.cfg&&S.cfg.tok&&typeof window._setTokenMinutes==='function')window._setTokenMinutes(S.cfg.tok)}
+function remoteApplied(){   // 收到別台裝置的內容後：設定值、畫面都跟著更新
+  applyTok();
+  const a=document.activeElement,tag=a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName),inOv=!!(a&&a.closest&&a.closest('#td-ov'));
+  if(ovMode==='set'&&$('ov').className==='on'&&!(tag&&inOv))openSet();   // 設定視窗開著：重畫，新值才會顯示
+  if(tag&&!inOv){rLater=true;return}   // 正在打字：先不重畫，放開輸入框再更新
+  render()}
+document.addEventListener('focusout',()=>{if(!rLater)return;setTimeout(()=>{const a=document.activeElement;if(!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))){rLater=false;render()}},60)});
+/* 拿雲端內容跟本機對一次。回傳 true＝本機還有東西要推上去 */
+function reconcile(d){
+  const cu=d.updatedAt||0,ls=Number(localStorage.getItem(KS))||0,cloudNew=cu!==getCV(),localNew=(S.updatedAt||0)>ls;
+  if(!cloudNew){if(!localNew)markSynced();return localNew}
+  takeSnap();
+  if(!localNew){S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;setCV(cu);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced()}
+  else{const R=JSON.parse(d.json||'{}'),nu=Math.max(Date.now(),(S.updatedAt||0)+1,(R.updatedAt||0)+1);   // 兩邊上次同步後都改過 → 合併，不整份覆蓋
+    S=mergeS(S,R);norm();S.updatedAt=nu;setCV(cu);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
+  rebuildSnap();remoteApplied();return localNew}
+async function pushRaw(){const seq=saveSeq,js=JSON.stringify(S),u=S.updatedAt||Date.now();
+  if(js===lastPushJson){if(seq===saveSeq)markSynced();return}
+  await window._fbSetDoc(REF(),{json:js,updatedAt:u},{merge:true});lastPushJson=js;setCV(u);if(seq===saveSeq)markSynced()}
+async function push(){   // 推之前先看雲端有沒有別台裝置的新版本：有就先合併再推，不會整份蓋掉對方
+  try{const snap=await window._fbGetDoc(REF());
+    if(snap.exists()&&!reconcile(snap.data())){statusUpd();return}
+    await pushRaw()}
   catch(e){console.warn('[todo push]',e)}
   statusUpd()}
 async function pull(){
   if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
   try{const snap=await window._fbGetDoc(REF());
-    if(snap.exists()){const d=snap.data(),cu=d.updatedAt||0,lu=S.updatedAt||0,ls=Number(localStorage.getItem(KS))||0;
-      if(cu===lu)markSynced();
-      else if(cu>ls&&lu>ls){   // 兩邊上次同步後都改過 → 合併，不整份覆蓋
-        takeSnap();const R=JSON.parse(d.json||'{}');S=mergeS(S,R);norm();S.updatedAt=Date.now();
-        try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}rebuildSnap();render();await push()}
-      else if(cu>lu){takeSnap();S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced();rebuildSnap();render()}
-      else await push()}
-    else if((S.tasks&&S.tasks.length)||S.updatedAt)await push();
+    if(snap.exists()){if(reconcile(snap.data()))await pushRaw()}
+    else if((S.tasks&&S.tasks.length)||S.updatedAt)await pushRaw();
     else markSynced();
     cloudReady=true;lastPullAt=Date.now();statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
+/* 即時監聽：別台裝置一推上雲端，這台馬上跟著更新（不用等切回前景或重新整理） */
+let unsubTodo=null;
+function listen(){
+  if(unsubTodo||!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbOnSnapshot))return;
+  unsubTodo=window._fbOnSnapshot(REF(),snap=>{
+    if(!cloudReady||!snap.exists()||snap.metadata.hasPendingWrites||snap.metadata.fromCache)return;   // 自己剛寫的／還沒到伺服器的不理
+    const d=snap.data();if((d.updatedAt||0)===getCV())return;   // 已經對過了
+    lastPullAt=Date.now();
+    if(reconcile(d)){dirty=true;statusUpd();clearTimeout(pushT);pushT=setTimeout(push,1500)}},
+    e=>{console.warn('[todo listen]',e);unsubTodo=null;setTimeout(listen,15000)})}
 /* 立刻同步一次（連上網、切回前景、點狀態點時用）；剛恢復連線時 Firestore 可能還沒接上，失敗就稍後再試 */
 let lastPullAt=0;   // 上次成功跟雲端對過的時間
 let syncAt=0;   // 同步鎖：離線時 Firestore 的寫入會一直「等待中」不回應，所以鎖要有逾時，不能永遠卡住
@@ -688,10 +724,10 @@ function startCloud(){
   const t=setInterval(async()=>{
     if(!(window._fbIsOwner&&window._fbUid&&window._fbGetDoc))return;
     clearInterval(t);
-    const go=async()=>{if(await pull()){setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
+    const go=async()=>{if(await pull()){applyTok();listen();setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
   document.addEventListener('visibilitychange',()=>{   // 切回前景：有東西要送、或超過 10 分鐘沒對過才讀雲端（不再每次切回來都讀一次）
-    if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);push()}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
-    if(dirty||Date.now()-lastPullAt>10*6e4)syncNow()})}
+    if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);pushRaw().catch(e=>console.warn('[todo push]',e))}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
+    if(dirty||Date.now()-lastPullAt>60*1e3)syncNow()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
@@ -701,7 +737,7 @@ window.todoGo=go;
 function wrapShowPage(){const sp=window.showPage;if(typeof sp!=='function'||sp._td)return;
   window.showPage=function(id,skip){if(OLD.includes(id))id='todo';const r=sp.call(this,id,skip);markTabs(id==='notes'?'notes':view);return r};window.showPage._td=1}
 function setTop(){const b=document.getElementById('td-topbar');if(b)document.documentElement.style.setProperty('--tdtop',b.offsetHeight+'px')}
-function boot(){wrapShowPage();rebuildSnap();
+function boot(){wrapShowPage();rebuildSnap();applyTok();
   try{dirty=(S.updatedAt||0)>(Number(localStorage.getItem(KS))||0)}catch(e){}statusUpd();
   setTop();addEventListener('resize',setTop);go('today');startCloud()}
 
