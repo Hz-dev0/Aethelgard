@@ -712,7 +712,9 @@ function statusUpd(){const el=document.getElementById('td-sync');if(!el)return;
   const [c,t]=stateNow();el.className='syn '+c;el.querySelector('span').textContent=t;
   el.setAttribute('aria-label','同步狀態：'+(t||'已同步'))}
 const SYNMSG={ok:'已同步到雲端',pend:'有修改還沒同步，正在送出…',off:'目前離線，修改都先存在手機，連上網會自動同步（橘點＝有修改還沒送出）',wait:'正在連線雲端…'};
-function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);try{if(navigator.onLine!==false&&typeof _pushNotesEmergency==='function')_pushNotesEmergency('手動');}catch(e){}if(navigator.onLine!==false)syncNow()}
+function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);try{if(navigator.onLine!==false&&typeof _pushNotesEmergency==='function')_pushNotesEmergency('手動');}catch(e){}if(navigator.onLine!==false)syncNow().then(()=>setTimeout(()=>{   // 同步跑完再回報結果（點下去當下的提示只是舊狀態）
+    const c2=stateNow()[0].split(' ')[0];
+    toast(c2==='ok'?'✓ 已同步到雲端':c2==='pend'?'還有修改在送出，稍後會自動重試':c2==='wait'?'還在連線雲端，稍後會自動重試':SYNMSG[c2])},1800)).catch(()=>{})}
 addEventListener('online',()=>{statusUpd();if(dirty||Date.now()-lastPullAt>2*6e4)syncNow()});   // 恢復連線：有東西要送、或超過 2 分鐘沒對過才連雲端
 addEventListener('offline',statusUpd);
 setInterval(statusUpd,1500);

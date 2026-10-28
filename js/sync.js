@@ -575,7 +575,7 @@ function syncNotesToCloud() {
   // 手機（Mobi/Android/iPhone/iPad）：5 秒，觸控編輯短暫，盡快推
   // PC：30 秒，停止打字 30 秒後才推，整個 session 大幅省寫入次數
   // 關頁/切頁時由 visibilitychange + beforeunload 保底，不怕遺失
-  }, /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 30000);
+  }, /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 5000 : 10000);
 }
 
 // ── 取得目前筆記的同步 payload（供緊急推送共用）──

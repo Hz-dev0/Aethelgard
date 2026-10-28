@@ -1,4 +1,4 @@
-const _swBuild = '202610210524'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
+const _swBuild = '202610210524'; // ← 推新版前執行：node scripts/bump-sw-version.js（目前沒有自動 workflow）
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
