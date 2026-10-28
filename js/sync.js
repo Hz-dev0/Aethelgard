@@ -545,6 +545,14 @@ function syncNotesToCloud() {
     })();
     if (!notesPayload) { syncToCloud(); return; }
 
+    // 筆記太大時提醒：Firestore 單一文件上限約 1MB，超過後所有同步都會失敗
+    try {
+      const _kb = Math.round(new Blob([JSON.stringify(notesPayload)]).size / 1024);
+      if (_kb >= 700 && !window._notesSizeWarned && typeof showToast === 'function') {
+        window._notesSizeWarned = true;
+        showToast('⚠️ 筆記已約 ' + _kb + 'KB，接近雲端單份上限（約 1000KB），建議精簡或封存舊筆記');
+      }
+    } catch(e) {}
     try {
       const ref = window._fbDoc(window._fbDb, 'Aethelgard', 'data');
       // ★ 改用已經載入好的 setDoc（merge:true），效果等同 updateDoc 但不用再動態
