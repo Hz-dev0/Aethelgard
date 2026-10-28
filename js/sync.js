@@ -592,6 +592,8 @@ function _getNotesPayloadForEmergency() {
 //   這個 import 要重新走一次網路，常常還沒抓完就被瀏覽器判定頁面已卸載而中斷，
 //   後面的 setDoc 根本沒機會送出。改用已經在記憶體裡的 setDoc，少一次網路來回。
 function _pushNotesEmergency(label) {
+  // 有「待同步」旗標但記憶體旗標已掉（例如重開 App 後）：補回來，不然永遠推不出去
+  if (!_notesDirty && window._notesPendingGet && window._notesPendingGet() && window._fbUid) _notesDirty = true;
   if (!_notesDirty) return;
   if (!window._fbUid || !window._fbDb) return;
   clearTimeout(_notesSyncTimer);
@@ -867,6 +869,8 @@ async function _doSyncToCloud() {
   // ★ Hash 防重：資料未變動就靜默跳過，不耗費任何網路
   const _hash = _quickHash(_payload);
   if (_hash && _hash === _lastSyncHash) {
+    // 內容跟上次成功推送的一樣＝雲端已是最新，把「筆記待同步」旗標一併清掉，否則頂列燈號會一直卡在「待同步」
+    _notesDirty = false; _notesPendingSet(false);
     const dot = document.getElementById('syncDot');
     if (dot && dot.className !== 'sync-dot synced') dot.className = 'sync-dot synced';
     return;
