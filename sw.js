@@ -1,132 +1,78 @@
-const _swBuild = '202610210524'; // ← 推新版前執行：node scripts/bump-sw-version.js（目前沒有自動 workflow）
-const CACHE_NAME = 'aethelgard-' + _swBuild;
+// 離線快取：
+//  - 開啟頁面：有網路就拿最新的（超過 4 秒沒回應或離線才用快取），所以更新後下次開啟自動換新版。
+//  - 程式檔（app.js?v=…、style.css?v=… 等）與 Firebase SDK：先用快取，背景再更新。
+//  - Firestore／登入等其他連線一律不碰，照常走網路（資料本身由 Firestore 自己的離線快取處理）。
+// 改了檔案請照舊把 index.html 裡的 ?v= 加 1；想強制全部重抓就把下面的 VER 加 1。
+const VER = "1";
+const CACHE = "wc-shell-" + VER;
+const SCOPE = self.registration.scope;
 
-const ASSETS = [
-  '/Aethelgard/',
-  '/Aethelgard/index.html',
-  '/Aethelgard/manifest.json',
-  '/Aethelgard/icon.png',
-  '/Aethelgard/css/main.css',
-  '/Aethelgard/css/todo.css',
-  '/Aethelgard/js/early.js',
-  '/Aethelgard/js/offline.js',
-  '/Aethelgard/js/firebase-init.js',
-  '/Aethelgard/js/firebase.js',
-  '/Aethelgard/js/auth.js',
-  '/Aethelgard/js/state.js',
-  '/Aethelgard/js/core.js',
-  '/Aethelgard/js/sync.js',
-  '/Aethelgard/js/notes.js',
-  '/Aethelgard/js/todo.js',
-  '/Aethelgard/js/pwa.js',
-  '/Aethelgard/js/push.js',
-];
+const cacheable = (u) =>
+  u.origin === location.origin || (u.origin === "https://www.gstatic.com" && u.pathname.startsWith("/firebasejs/"));
 
-// ── 外部資源快取（Firebase SDK、marked、DOMPurify、字體）──
-// ★ 這些檔案在別的網域，原本的 fetch 處理會直接略過，導致「沒網路時冷啟動」時
-//   Firebase SDK 載不進來、畫面卡在「正在驗證身份…」。這裡獨立一個快取，
-//   版本更新時不會被清掉（見 activate）。
-const EXT_CACHE = 'aethelgard-ext-v1';
-const EXT_HOSTS = ['www.gstatic.com', 'fonts.gstatic.com', 'fonts.googleapis.com', 'cdn.jsdelivr.net'];
-// 網址裡有固定版本號、內容不會變的主機：快取有就直接用，不再背景重抓
-const EXT_IMMUTABLE = ['www.gstatic.com', 'fonts.gstatic.com'];
-const EXT_PRECACHE = [
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js',
-  'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js',
-  'https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js',
-];
-const NET_TIMEOUT_MS = 5000;   // 網路超過這麼久沒回應、而且本機有快取，就先用快取（訊號有但沒資料的情況）
-
-self.addEventListener('install', e => {
-  e.waitUntil(Promise.all([
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)),
-    // 盡力預載，失敗（例如安裝時剛好沒網路）也不影響安裝；之後實際載入時會自動補進快取
-    caches.open(EXT_CACHE).then(cache => Promise.all(EXT_PRECACHE.map(u =>
-      fetch(u, { mode: 'cors' }).then(r => { if (r.ok) return cache.put(u, r); }).catch(() => {})
-    ))),
-  ]));
-});
-
-self.addEventListener('activate', e => {
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME && k !== EXT_CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
-});
+// 同一個檔案只留最新的 ?v= 版本，避免快取越積越多
+async function put(cache, req, res) {
+  await cache.put(req, res);
+  const u = new URL(req.url);
+  if (u.origin !== location.origin || !u.search) return;
+  for (const k of await cache.keys()) {
+    const ku = new URL(k.url);
+    if (ku.pathname === u.pathname && ku.search !== u.search) await cache.delete(k);
+  }
+}
 
-async function extFetch(e) {
-  const req = e.request, url = new URL(req.url);
-  const cache = await caches.open(EXT_CACHE);
+async function navigate(req) {
+  const cache = await caches.open(CACHE);
+  const net = fetch(req).then((r) => { if (r.ok) put(cache, req, r.clone()); return r; });
+  net.catch(() => {});
+  const fallback = async () => (await cache.match(req, { ignoreSearch: true })) || (await cache.match(SCOPE)) || (await cache.match(SCOPE + "index.html"));
+  try {
+    return await Promise.race([net, new Promise((_, rej) => setTimeout(rej, 4000))]);
+  } catch {
+    return (await fallback()) || net;
+  }
+}
+
+async function asset(req, swr) {
+  const cache = await caches.open(CACHE);
   const hit = await cache.match(req);
-  const net = fetch(req).then(res => {
-    if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
-    return res;
-  }).catch(() => null);
-  if (hit) {
-    if (!EXT_IMMUTABLE.includes(url.hostname)) e.waitUntil(net);   // 可能會變的（CSS、marked）背景更新
-    return hit;
-  }
-  return (await net) || Response.error();
+  const refresh = () => fetch(req).then((r) => { if (r.ok) put(cache, req, r.clone()); return r; });
+  if (hit) { if (swr) refresh().catch(() => {}); return hit; }
+  return refresh();
 }
 
-function ownFetch(e) {
+self.addEventListener("fetch", (e) => {
   const req = e.request;
-  const net = fetch(req, { cache: 'no-store' }) // ★ 明確繞過瀏覽器 HTTP 快取，避免 network-first 被舊的 HTTP 快取回應擋下來
-    .then(res => {
-      if (res.ok) {
-        const copy = res.clone();
-        e.waitUntil(caches.open(CACHE_NAME).then(c => c.put(req, copy)));
-      }
-      return res;
-    });
-  const fallback = async () =>
-    (await caches.match(req)) ||
-    (await caches.match(req, { ignoreSearch: true })) ||
-    (req.mode === 'navigate' ? (await caches.match('/Aethelgard/index.html')) || (await caches.match('/Aethelgard/')) : undefined);
-  // 網路太慢（有訊號但沒資料）時，不要讓使用者等到天荒地老：超過時間且有快取就先用快取
-  const timer = new Promise(resolve => setTimeout(() => resolve(fallback()), NET_TIMEOUT_MS));
-  return Promise.race([net.catch(() => null), timer])
-    .then(r => r || net.catch(async () => (await fallback()) || Response.error()));
-}
-
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  const url = new URL(e.request.url);
-  // www.gstatic.com 只處理 Firebase SDK（有固定版本號的路徑），其他不碰
-  if (EXT_HOSTS.includes(url.hostname) && (url.hostname !== 'www.gstatic.com' || url.pathname.startsWith('/firebasejs/'))) {
-    e.respondWith(extFetch(e)); return;
-  }
-  if (url.origin !== self.location.origin) return;
-  e.respondWith(ownFetch(e));
+  if (req.method !== "GET") return;
+  const u = new URL(req.url);
+  if (!cacheable(u)) return;
+  if (req.mode === "navigate") { e.respondWith(navigate(req)); return; }
+  e.respondWith(asset(req, u.origin === location.origin));
 });
 
-// ── 推播通知：收到伺服器送來的提醒就顯示；點通知回到 App ──
-self.addEventListener('push', e => {
-  let p = {};
-  try { p = e.data ? e.data.json() : {}; } catch (_) {}
-  const d = p.data || p;
-  e.waitUntil(self.registration.showNotification(d.title || 'Aethelgard', {
-    body: d.body || '',
-    tag: d.tag || undefined,   // 同一個任務的提醒共用 tag：App 開著時本機先跳、伺服器再送，也只會看到一則
-    icon: '/Aethelgard/icon.png',
-    data: { url: d.url || '/Aethelgard/' },
-  }));
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/Aethelgard/';
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) { if ('focus' in c) return c.focus(); }
-    return clients.openWindow(url);
-  }));
+// 頁面載入後，把這次用到的所有資源（含 Firebase 模組）補進快取，第一次開啟後就能離線使用
+self.addEventListener("message", (e) => {
+  if (e.data?.type !== "warm") return;
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    for (const url of e.data.urls || []) {
+      try {
+        const u = new URL(url);
+        if (!cacheable(u)) continue;
+        const req = new Request(u.href);
+        if (await cache.match(req)) continue;
+        const r = await fetch(req);
+        if (r.ok) await put(cache, req, r);
+      } catch {}
+    }
+  })());
 });
