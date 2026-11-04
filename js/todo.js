@@ -20,7 +20,8 @@ function pruneDoneExtras(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.don
 const tj=t=>{const {mod,...r}=t;return JSON.stringify(r)};
 let snapMap=new Map();
 const rebuildSnap=()=>{snapMap=new Map((S.tasks||[]).map(t=>[t.id,tj(t)]))};
-function stampChanges(){const now=Date.now(),cur=new Set();   // 有改動的任務蓋上修改時間；刪掉的任務記一筆墓碑，合併時才知道是刪除而不是「對方沒有」
+function stampChanges(){let now=Date.now();S.tasks.forEach(t=>{if((t.mod||0)>=now)now=t.mod+1});const cur=new Set();   // 時鐘慢的裝置：mod 至少比已見過的最大 mod 大 1，改動才不會輸給舊版本
+    // 有改動的任務蓋上修改時間；刪掉的任務記一筆墓碑，合併時才知道是刪除而不是「對方沒有」
   S.tasks.forEach(t=>{cur.add(t.id);if(snapMap.get(t.id)!==tj(t))t.mod=now});
   S.dead=S.dead||{};snapMap.forEach((_,id)=>{if(!cur.has(id))S.dead[id]=now});
   Object.keys(S.dead).forEach(id=>{if(cur.has(+id)||now-S.dead[id]>60*864e5)delete S.dead[id]});
@@ -28,7 +29,7 @@ function stampChanges(){const now=Date.now(),cur=new Set();   // 有改動的任
 function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assign({},R.dead||{});
   Object.keys(L.dead||{}).forEach(id=>{dead[id]=Math.max(dead[id]||0,L.dead[id])});
   const lm=new Map((L.tasks||[]).map(t=>[t.id,t])),rm=new Map((R.tasks||[]).map(t=>[t.id,t])),ids=[...lm.keys(),...[...rm.keys()].filter(k=>!lm.has(k))],out=[];
-  ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);let pick=a&&b?((a.mod||lu)>=(b.mod||ru)?a:b):(a||b);
+  ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);let pick=a&&b?(((a.mod||0)!==(b.mod||0))?((a.mod||0)>(b.mod||0)?a:b):(lu>=ru?a:b)):(a||b);   // 沒有 mod 的舊任務視為「最舊」，不再借用整份文件的時間去贏過對方剛改的版本
     if(dead[id]&&dead[id]>(pick.mod||(a?lu:ru)))return;   // 刪除比最後一次修改還新 → 維持刪除
     out.push(pick)});
   const base=lu>=ru?L:R,oth=lu>=ru?R:L;
