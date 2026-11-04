@@ -176,20 +176,6 @@ function clearApiUrl() {
   setApiStatus('ok', '已清除舊設定');
 }
 
-// ── 複製我的 UID ──
-function copyMyUid() {
-  const uid = window._fbUid || localStorage.getItem('aethelgard_fb_uid') || '';
-  if (!uid) { setApiStatus('err', '尚未取得裝置 ID，請稍後再試'); return; }
-  navigator.clipboard.writeText(uid).then(() => {
-    setApiStatus('ok', '✓ 已複製！到其他裝置的設定頁貼上即可');
-  }).catch(() => {
-    // fallback
-    const el = document.getElementById('apiKeyFragment');
-    if (el) { el.select(); document.execCommand('copy'); }
-    setApiStatus('ok', '✓ 已複製（請手動選取複製）');
-  });
-}
-window.copyMyUid = copyMyUid;
 
 let isSyncing = false;
 let _pendingSync = false;
@@ -649,44 +635,6 @@ window.addEventListener('pagehide', () => {
   _pushNotesEmergency('pagehide');
 });
 
-// 雲端只同步當年資料，舊資料保留在本地（不會消失）
-function archiveOldHistory() {
-  if (!state.doneHistory || state.doneHistory.length === 0) return;
-
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const cutoff = oneYearAgo.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  const toArchive = state.doneHistory.filter(h => h.completedAt && h.completedAt < cutoff);
-  if (toArchive.length === 0) return;
-
-  // 按年分組，存到 aethelgard_history_YYYY
-  const byYear = {};
-  toArchive.forEach(h => {
-    const year = h.completedAt.slice(0, 4);
-    if (!byYear[year]) byYear[year] = [];
-    byYear[year].push(h);
-  });
-
-  Object.entries(byYear).forEach(([year, entries]) => {
-    const key = 'aethelgard_history_' + year;
-    try {
-      const existing = JSON.parse(localStorage.getItem(key) || '[]');
-      const existingIds = new Set(existing.map(e => e.id));
-      const merged = [...existing, ...entries.filter(e => !existingIds.has(e.id))];
-      localStorage.setItem(key, JSON.stringify(merged));
-    } catch(e) {
-      console.warn('歷史封存失敗（' + year + '）', e);
-    }
-  });
-
-  // 從 state.doneHistory 移除已封存的項目
-  const archivedIds = new Set(toArchive.map(h => h.id));
-  state.doneHistory = state.doneHistory.filter(h => !archivedIds.has(h.id));
-  saveStateLocal(); // 更新本地備份，不觸發 syncToCloud（封存不需要立即推送）
-  _dbg(`已封存 ${toArchive.length} 筆歷史記錄`);
-}
-window.archiveOldHistory = archiveOldHistory;
 
 // ── Local state persistence (always runs, regardless of cloud) ──
 function saveStateLocal() {

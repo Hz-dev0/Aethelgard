@@ -29,7 +29,8 @@ function stampChanges(){let now=Date.now();S.tasks.forEach(t=>{if((t.mod||0)>=no
 function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assign({},R.dead||{});
   Object.keys(L.dead||{}).forEach(id=>{dead[id]=Math.max(dead[id]||0,L.dead[id])});
   const lm=new Map((L.tasks||[]).map(t=>[t.id,t])),rm=new Map((R.tasks||[]).map(t=>[t.id,t])),ids=[...lm.keys(),...[...rm.keys()].filter(k=>!lm.has(k))],out=[];
-  ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);let pick=a&&b?(((a.mod||0)!==(b.mod||0))?((a.mod||0)>(b.mod||0)?a:b):(lu>=ru?a:b)):(a||b);   // 沒有 mod 的舊任務視為「最舊」，不再借用整份文件的時間去贏過對方剛改的版本
+  let conf=0;
+  ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);if(a&&b&&tj(a)!==tj(b))conf++;let pick=a&&b?(((a.mod||0)!==(b.mod||0))?((a.mod||0)>(b.mod||0)?a:b):(lu>=ru?a:b)):(a||b);   // 沒有 mod 的舊任務視為「最舊」，不再借用整份文件的時間去贏過對方剛改的版本
     if(dead[id]&&dead[id]>(pick.mod||(a?lu:ru)))return;   // 刪除比最後一次修改還新 → 維持刪除
     out.push(pick)});
   const base=lu>=ru?L:R,oth=lu>=ru?R:L;
@@ -39,6 +40,7 @@ function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assig
   /* 「順手做一件」今天彈過幾次：同一天取較大值；今天不想做的任務：兩邊聯集 */
   const ls_=L.sug||{d:'',n:0},rs_=R.sug||{d:'',n:0},sug=ls_.d===rs_.d?{d:ls_.d,n:Math.max(ls_.n||0,rs_.n||0)}:(ls_.d>rs_.d?ls_:rs_);
   const skip=Object.assign({},R.skip||{});Object.keys(L.skip||{}).forEach(id=>{if(!skip[id]||L.skip[id]>skip[id])skip[id]=L.skip[id]});
+  mergeS.conf=conf;
   return Object.assign({},base,{tasks:out,dead,best:Math.max(L.best||0,R.best||0),cfg,cfgMod:cm,sug,skip})}
 const KSN=K+'_snaps';let lastSnapAt=(()=>{try{const a=JSON.parse(localStorage.getItem(KSN)||'[]');return a[0]?a[0].at:0}catch(e){return 0}})();
 const readSnaps=()=>{try{return JSON.parse(localStorage.getItem(KSN)||'[]')}catch(e){return[]}};
@@ -662,7 +664,8 @@ function reconcile(d){
   takeSnap();
   if(!localNew){S=JSON.parse(d.json||'{}');norm();S.updatedAt=cu;setCV(cu);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}markSynced()}
   else{const R=JSON.parse(d.json||'{}'),nu=Math.max(Date.now(),(S.updatedAt||0)+1,(R.updatedAt||0)+1);   // 兩邊上次同步後都改過 → 合併，不整份覆蓋
-    S=mergeS(S,R);norm();S.updatedAt=nu;setCV(cu);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
+    S=mergeS(S,R);norm();S.updatedAt=nu;setCV(cu);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
+    if(mergeS.conf)setTimeout(()=>toast('已合併 '+mergeS.conf+' 個兩台都改過的任務'),300)}
   rebuildSnap();remoteApplied();return localNew}
 async function pushRaw(){const seq=saveSeq,js=JSON.stringify(S),u=S.updatedAt||Date.now();
   if(js===lastPushJson){if(seq===saveSeq)markSynced();return}
@@ -705,14 +708,15 @@ window._todoSyncNow=syncNow;window._todoToast=toast;window._todoState=()=>S;
 /* ===== 同步狀態點（頂列）：已同步 / 待同步 / 離線 / 連線中 ===== */
 function stateNow(){
   const nd=(typeof _notesDirty!=='undefined'&&_notesDirty)||(typeof window._notesPendingGet==='function'&&window._notesPendingGet()),pend=dirty||nd;
-  if(navigator.onLine===false)return[pend?'off pend':'off','離線'];   // 離線且有待同步：同樣顯示「離線」，圓點改橘色
+  if(navigator.onLine===false)return[pend?'off pend':'off','離線'];
+  if(!(window._fbIsOwner&&window._fbUid)&&(cloudReady||window._fbUid))return['lock','無同步權限'];   // 通行碼過期／未登入：syncNow 不會動，燈不能再顯示成綠色   // 離線且有待同步：同樣顯示「離線」，圓點改橘色
   if(pend)return['pend','待同步'];
   if(!cloudReady)return['wait','連線中'];
   return['ok','']}
 function statusUpd(){const el=document.getElementById('td-sync');if(!el)return;
   const [c,t]=stateNow();el.className='syn '+c;el.querySelector('span').textContent=t;
   el.setAttribute('aria-label','同步狀態：'+(t||'已同步'))}
-const SYNMSG={ok:'已同步到雲端',pend:'有修改還沒同步，連上網就會送出',off:'目前離線，修改都先存在手機，連上網會自動同步（橘點＝有修改還沒送出）',wait:'正在連線雲端…'};
+const SYNMSG={lock:'目前沒有同步權限（未登入或通行碼已過期），修改只存在這台，請重新登入',ok:'已同步到雲端',pend:'有修改還沒同步，連上網就會送出',off:'目前離線，修改都先存在手機，連上網會自動同步（橘點＝有修改還沒送出）',wait:'正在連線雲端…'};
 function syncClick(){const c=stateNow()[0].split(' ')[0];toast(SYNMSG[c]);if(navigator.onLine!==false)syncNow()}
 addEventListener('online',()=>{statusUpd();if(dirty||Date.now()-lastPullAt>2*6e4)syncNow()});   // 恢復連線：有東西要送、或超過 2 分鐘沒對過才連雲端
 addEventListener('offline',statusUpd);
@@ -728,7 +732,7 @@ function startCloud(){
     const go=async()=>{if(await pull()){applyTok();listen();setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
   document.addEventListener('visibilitychange',()=>{   // 切回前景：有東西要送、或超過 10 分鐘沒對過才讀雲端（不再每次切回來都讀一次）
     if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);pushRaw().catch(e=>console.warn('[todo push]',e))}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
-    if(dirty||Date.now()-lastPullAt>60*1e3)syncNow()})}
+    if(dirty||Date.now()-lastPullAt>15*1e3)syncNow()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';
 function markTabs(c){cur=c;document.querySelectorAll('#td-topbar [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===c))}
