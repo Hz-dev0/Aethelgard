@@ -14,7 +14,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     linkWithPopup
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
-    getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs
+    getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs, runTransaction
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -41,6 +41,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   window._fbOnSnapshot = onSnapshot;
   window._fbCollection = collection;
   window._fbGetDocs = getDocs;
+  window._fbRunTransaction = runTransaction;   // 任務同步用：讀＋合併＋寫在同一個交易裡，兩台同時寫不會互相覆蓋
 
   // ── Owner 登入（信箱 + 密碼）：帶持久化，下次開頁自動免登入 ──
   window._fbOwnerLogin = async function(email, password) {

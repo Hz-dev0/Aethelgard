@@ -14,7 +14,10 @@ let view='today',fpOpen=false,sugId=null,pend=null,ovMode='';
 let dirty=false,saveSeq=0,cloudReady=false,pushT=0,pullTries=0;
 /* 完成紀錄只看最近五條：從第六條開始，備註和小步驟就不留了（任務本身和完成次數照舊保留） */
 const KEEP_RECENT=5;   // 備註／小步驟保留到最近 5 條完成紀錄（畫面顯示 4 條 + 1 條緩衝，避免剛完成又取消時資料不見）
-function pruneDoneExtras(){const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0));
+const DONE_TTL=90*864e5;   // 完成超過 90 天的任務直接清掉（畫面只用得到今天／近 7 日／最近 4 條；單日最高另外存在 S.best）
+function pruneDoneExtras(){const nowT=Date.now();
+  if(S.tasks.some(t=>t.done&&t.doneTs&&nowT-t.doneTs>DONE_TTL))S.tasks=S.tasks.filter(t=>!(t.done&&t.doneTs&&nowT-t.doneTs>DONE_TTL));
+  const dn=S.tasks.filter(t=>t.done).sort((a,b)=>(b.doneTs||0)-(a.doneTs||0));
   dn.slice(KEEP_RECENT).forEach(t=>{delete t.note;delete t.subs})}
 /* ── 同步：以任務為單位合併（不再整份覆蓋）＋ 本機快照（最多 5 份） ── */
 const tj=t=>{const {mod,...r}=t;return JSON.stringify(r)};
@@ -24,7 +27,7 @@ function stampChanges(){let now=Date.now();S.tasks.forEach(t=>{if((t.mod||0)>=no
     // 有改動的任務蓋上修改時間；刪掉的任務記一筆墓碑，合併時才知道是刪除而不是「對方沒有」
   S.tasks.forEach(t=>{cur.add(t.id);if(snapMap.get(t.id)!==tj(t))t.mod=now});
   S.dead=S.dead||{};snapMap.forEach((_,id)=>{if(!cur.has(id))S.dead[id]=now});
-  Object.keys(S.dead).forEach(id=>{if(cur.has(+id)||now-S.dead[id]>60*864e5)delete S.dead[id]});
+  Object.keys(S.dead).forEach(id=>{if(cur.has(+id)||now-S.dead[id]>365*864e5)delete S.dead[id]});
   rebuildSnap()}
 function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assign({},R.dead||{});
   Object.keys(L.dead||{}).forEach(id=>{dead[id]=Math.max(dead[id]||0,L.dead[id])});
@@ -133,9 +136,7 @@ function qParse(txt){
       if(h===12&&(pre==='晚上'||pre==='晚間'||pre==='凌晨'))h=0;   // 晚上／凌晨 12 點 = 00:00（午夜）
       if((pre==='下午'||pre==='晚上'||pre==='晚間')&&h>0&&h<12)h+=12;else if(pre==='中午'&&h<11)h+=12;
       if(h>23||mi>59)return null;
-      const sn=[0,20,30,40,60].reduce((a,b)=>Math.abs(b-mi)<Math.abs(a-mi)?b:a);   // 分鐘靠到 00／20／30／40
-      if(sn===60){h+=1;if(h>23)return null}
-      return pad(h)+':'+pad(sn%60)};
+      return pad(h)+':'+pad(mi)};   // 打幾分就是幾分，不再取整
     if(m=cut(R(new RegExp(P+'\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{2})'),1))){const t=fix(m[1],+m[2],+m[3]);if(t)out.time=t;else s=txt}
     else if(m=cut(R(new RegExp(P+'\\s*(\\d{1,2})\\s*點\\s*(半|\\d{1,2})?\\s*分?'),1))){
       const t=fix(m[1],+m[2],m[3]==='半'?30:(parseInt(m[3])||0));if(t)out.time=t;else s=txt}}
@@ -407,7 +408,8 @@ function addTask(){const raw=$('nm').value.trim();if(!raw)return;closePop('ok');
 let askBack=null;
 function ask(msg,ok,back){pend=ok;askBack=back||null;ovMode='ask';$('ov').innerHTML=`<div class="box"><div class="t">${esc(msg)}</div><div class="foot"><button class="b q" data-a="c-no">取消</button><button class="b dk" data-a="c-yes">確定</button></div></div>`;$('ov').className='on'}
 function suggest(){const d=today();if(S.sug.d!==d)S.sug={d,n:0};if(S.sug.n>=S.cfg.sugMax)return;
-  const pool=S.tasks.filter(t=>!t.done&&(grp(t)==='later'||grp(t)==='far')&&!(t.kind==='dayonly'&&t.date)&&S.skip[t.id]!==d);   // 「指定・到時才做」的任務（日期超過 30 天也一樣）不能被抽來問要不要提早做if(!pool.length)return;
+  const pool=S.tasks.filter(t=>!t.done&&(grp(t)==='later'||grp(t)==='far')&&!(t.kind==='dayonly'&&t.date)&&S.skip[t.id]!==d);   // 「指定・到時才做」的任務（日期超過 30 天也一樣）不能被抽來問要不要提早做
+  if(!pool.length)return;
   const old=pool.filter(t=>age(t)>=S.cfg.stale).sort((a,b)=>a.touched-b.touched)[0];
   const t=old||pool[Math.floor(Math.random()*pool.length)];sugId=t.id;ovMode='sug';S.sug.n++;save();
   $('ov').innerHTML=`<div class="box"><div class="t"><div class="meta">順手做一件？（今天第 ${S.sug.n}／${S.cfg.sugMax} 次）</div><p style="font-size:18px;margin:8px 0 4px">${esc(t.name)}</p><div class="meta">${age(t)>=S.cfg.stale?'放了 '+age(t)+' 天了':'沒有急的期限'}</div></div><div class="foot"><button class="b" data-a="m-today">今天做</button><button class="b q" data-a="m-skip">改天</button><button class="b dk" data-a="m-del">放掉</button></div></div>`;$('ov').className='on'}
@@ -581,7 +583,8 @@ const readPrev=()=>{try{return JSON.parse(localStorage.getItem(KP))}catch(e){ret
 function applyBackup(b){   // 還原前先把目前的資料留一份，之後可以按「復原」
   try{localStorage.setItem(KP,JSON.stringify({at:Date.now(),tasks:S,tabs:notesTabs()}))}catch(e){}
   const out=[];
-  if(b.tasks){S=b.tasks;norm();save();render();out.push('任務 '+S.tasks.length+' 件')}
+  if(b.tasks){const dead0=S.dead||{};S=b.tasks;norm();S.dead=Object.assign({},S.dead||{});   // 還原不能把刪除紀錄一起換掉，不然別台裝置上已刪的任務會被帶回來
+    Object.keys(dead0).forEach(id=>{if(!S.dead[id]||dead0[id]>S.dead[id])S.dead[id]=dead0[id]});save();render();out.push('任務 '+S.tasks.length+' 件')}
   if(b.tabs&&typeof window.notesApplyTabs==='function'){window.notesApplyTabs(b.tabs);out.push('筆記 '+b.tabs.length+' 個標籤')}
   return '已還原：'+out.join('、')}
 const ago=ts=>{if(!ts)return null;const n=Math.floor((Date.now()-ts)/864e5);return n<=0?'今天':n===1?'昨天':n+' 天前'};
@@ -670,25 +673,68 @@ function reconcile(d){
 async function pushRaw(){const seq=saveSeq,js=JSON.stringify(S),u=S.updatedAt||Date.now();
   if(js===lastPushJson){if(seq===saveSeq)markSynced();return}
   await window._fbSetDoc(REF(),{json:js,updatedAt:u},{merge:true});lastPushJson=js;setCV(u);if(seq===saveSeq)markSynced()}
-async function push(){   // 推之前先看雲端有沒有別台裝置的新版本：有就先合併再推，不會整份蓋掉對方
+async function pushLegacy(){   // 推之前先看雲端有沒有別台裝置的新版本：有就先合併再推，不會整份蓋掉對方
   try{const snap=await window._fbGetDoc(REF());
     if(snap.exists()&&!reconcile(snap.data())){statusUpd();return}
     await pushRaw()}
   catch(e){console.warn('[todo push]',e)}
   statusUpd()}
-async function pull(){
+async function pullLegacy(){
   if(!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbGetDoc))return false;
   try{const snap=await window._fbGetDoc(REF());
     if(snap.exists()){if(reconcile(snap.data()))await pushRaw()}
     else if((S.tasks&&S.tasks.length)||S.updatedAt)await pushRaw();
     else markSynced();
     cloudReady=true;lastPullAt=Date.now();statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
+/* ── 交易式同步：「讀雲端 → 合併 → 寫回」在同一個 Firestore 交易裡完成 ──
+   舊作法是 getDoc 之後再 setDoc，兩台裝置剛好同時寫就會互相覆蓋；交易在雲端被別台改過時會自動重跑 */
+const hasTx=()=>typeof window._fbRunTransaction==='function'&&!!window._fbDb;
+let txChain=Promise.resolve(),txBusy=false,lsnLate=false;
+function pushTx(){const p=txChain.then(txRun);txChain=p.catch(()=>{});return p}   // 排隊一個一個跑，不會兩個交易互搶
+async function txRun(){
+  const seq0=saveSeq,ls=Number(localStorage.getItem(KS))||0;let r={};txBusy=true;
+  try{
+    await window._fbRunTransaction(window._fbDb,async tx=>{   // 交易函式可能被重跑：只算、不碰畫面和本機狀態
+      r={};const ref=REF(),snap=await tx.get(ref),d=snap.exists()?snap.data():null;
+      const cu=d?(d.updatedAt||0):0,cloudNew=!!d&&cu!==getCV(),localNew=(S.updatedAt||0)>ls;
+      if(!d){   // 雲端還沒有這份文件：本機有東西才建立
+        if((S.tasks&&S.tasks.length)||S.updatedAt){const u=S.updatedAt||Date.now(),js=JSON.stringify(S);tx.set(ref,{json:js,updatedAt:u},{merge:true});r={wrote:true,cv:u,js}}
+        else r={idle:true};
+        return}
+      if(cloudNew){const R=JSON.parse(d.json||'{}');
+        if(!localNew){r={X:R,cv:cu};return}   // 只有雲端有新東西：不用寫，拿來用
+        const nu=Math.max(Date.now(),(S.updatedAt||0)+1,(R.updatedAt||0)+1),M=mergeS(S,R);M.updatedAt=nu;const js=JSON.stringify(M);
+        tx.set(ref,{json:js,updatedAt:nu},{merge:true});r={X:M,wrote:true,cv:nu,js,conf:mergeS.conf};return}
+      if(!localNew){r={idle:true};return}
+      const u=S.updatedAt||Date.now(),js=JSON.stringify(S);
+      if(js===lastPushJson){r={idle:true};return}
+      tx.set(ref,{json:js,updatedAt:u},{merge:true});r={wrote:true,cv:u,js}});
+    const edited=saveSeq!==seq0;   // 交易進行中使用者又改了東西：套用雲端內容時要再合併一次，不能直接蓋掉
+    if(r.X){takeSnap();
+      if(edited){S=mergeS(S,r.X);norm();S.updatedAt=Math.max(Date.now(),S.updatedAt||0,r.X.updatedAt||0)+1}
+      else{S=r.X;norm();S.updatedAt=r.cv}
+      setCV(r.cv);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
+      rebuildSnap();remoteApplied();if(r.wrote)lastPushJson=r.js;
+      if(r.conf)setTimeout(()=>toast('已合併 '+r.conf+' 個兩台都改過的任務'),300);
+      if(edited){dirty=true;statusUpd();clearTimeout(pushT);pushT=setTimeout(push,1500)}else markSynced()}
+    else if(r.wrote){setCV(r.cv);lastPushJson=r.js;if(!edited)markSynced()}
+    else if(r.idle&&!edited)markSynced();
+  }finally{txBusy=false;if(lsnLate){lsnLate=false;setTimeout(()=>{if(!txBusy&&hasTx())pushTx().catch(()=>{})},300)}}}
+async function push(){   // 先合併再推；有交易就走交易，沒有（舊版 firebase-init.js 還在快取）才退回舊作法
+  if(!hasTx())return pushLegacy();
+  try{if(navigator.onLine!==false)await pushTx()}catch(e){console.warn('[todo push]',e)}
+  statusUpd()}
+async function pull(){
+  if(!hasTx())return pullLegacy();
+  if(!(window._fbIsOwner&&window._fbUid))return false;
+  try{await pushTx();cloudReady=true;lastPullAt=Date.now();statusUpd();return true}catch(e){console.warn('[todo pull]',e);return false}}
 /* 即時監聽：別台裝置一推上雲端，這台馬上跟著更新（不用等切回前景或重新整理） */
 let unsubTodo=null;
 function listen(){
   if(unsubTodo||!(window._fbIsOwner&&window._fbUid&&window._fbDb&&window._fbOnSnapshot))return;
   unsubTodo=window._fbOnSnapshot(REF(),snap=>{
     if(!cloudReady||!snap.exists()||snap.metadata.hasPendingWrites||snap.metadata.fromCache)return;   // 自己剛寫的／還沒到伺服器的不理
+    if(txBusy){lsnLate=true;return}   // 交易進行中：交易自己會讀最新的，結束後再補看一次
     const d=snap.data();if((d.updatedAt||0)===getCV())return;   // 已經對過了
     lastPullAt=Date.now();
     if(reconcile(d)){dirty=true;statusUpd();clearTimeout(pushT);pushT=setTimeout(push,1500)}},
@@ -731,7 +777,7 @@ function startCloud(){
     clearInterval(t);
     const go=async()=>{if(await pull()){applyTok();listen();setTimeout(suggest,1500)}else if(++pullTries<6)setTimeout(go,8000)};go()},800);
   document.addEventListener('visibilitychange',()=>{   // 切回前景：有東西要送、或超過 10 分鐘沒對過才讀雲端（不再每次切回來都讀一次）
-    if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);pushRaw().catch(e=>console.warn('[todo push]',e))}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
+    if(document.hidden){if(dirty&&cloudReady){clearTimeout(pushT);(hasTx()?pushTx():pushRaw()).catch(e=>console.warn('[todo push]',e))}return}   // 離開前把還沒送的先送出（debounce 拉長後的保險）
     if(dirty||Date.now()-lastPullAt>15*1e3)syncNow()})}
 const OLD=['tree','tasks','sandbox','wishzone','stats'];
 let cur='today';

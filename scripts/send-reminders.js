@@ -4,7 +4,7 @@ const admin = require('firebase-admin');
 
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 const db = admin.firestore();
-const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30 分鐘
+const GRACE = 60 * 6e4;   // GitHub 排程常延遲 10～30 分鐘甚至整輪跳過：最晚還能補發到到期後 60 分鐘
 
 (async () => {
   const ref = db.doc('Aethelgard/todo');
@@ -21,6 +21,9 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
   const logRef = db.doc('Aethelgard/pushlog');
   const sent = ((await logRef.get()).data() || {}).sent || {};
   const now = Date.now();
+  const reset = typeof cfg.reset === 'number' ? cfg.reset : 4;   // 每日重置時間：跟 App 的 today() 一樣，過了這個鐘點才算新的一天
+  const todayStr = new Date(now + tzo * 6e4 - reset * 36e5).toISOString().slice(0, 10);
+  const isRep = t => !!(t.repeat || (t.wd && t.wd.length));
 
   const jobs = [];
   const add = (key, title, sub, time, date, tag) => {
@@ -31,8 +34,11 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
   };
   for (const t of S.tasks || []) {
     if (t.done) continue;
-    if (t.date && t.time && (t.rm === undefined ? def : t.rm) !== 0)
-      add(t.id + '|' + t.date + '|' + t.time + '|' + lead, t.name, '', t.time, t.date, 't-' + t.id + '-' + t.date + '-' + t.time);
+    // 重複任務漏做：App 開啟時才會順延成今天，沒開 App 的日子雲端日期還是舊的 → 這裡照 App 的規則（rollRep）算出「有效日期」，提醒才不會斷
+    let date = t.date;
+    if (date && isRep(t) && date < todayStr && !(t.until && t.until < todayStr)) date = todayStr;
+    if (date && t.time && (t.rm === undefined ? def : t.rm) !== 0)
+      add(t.id + '|' + date + '|' + t.time + '|' + lead, t.name, '', t.time, date, 't-' + t.id + '-' + date + '-' + t.time);
     for (const x of t.subs || []) {   // 小步驟自己的提醒：不受任務的提醒開關影響，設了就會提醒
       if (x.done || !x.rd || !x.rt) continue;
       add('s' + x.id + '|' + t.id + '|' + x.rd + '|' + x.rt + '|' + lead, t.name, x.text, x.rt, x.rd, 's-' + t.id + '-' + x.id + '-' + x.rd + '-' + x.rt);
@@ -45,13 +51,14 @@ const GRACE = 30 * 6e4;   // 排程延遲時，最晚還能補發到到期後 30
       tokens: devices.map(([, v]) => v.t),
       data: {
         title,
-        body: (sub ? sub + '｜' : '') + (left > 0 ? '還有 ' + left + ' 分鐘' : '時間到了') + '（' + time + '）',
+        body: (sub ? sub + '｜' : '') + (left > 0 ? '還有 ' + left + ' 分鐘' : left > -2 ? '時間到了' : '已過 ' + (-left) + ' 分鐘') + '（' + time + '）',
         tag,
         url: '/Aethelgard/',
       },
-      webpush: { headers: { Urgency: 'high', TTL: '1800' } },
+      webpush: { headers: { Urgency: 'high', TTL: '3600' } },
     });
     sent[key] = now;
+    await logRef.set({ sent });   // 送一則就記一則：中途出錯或被中斷時，下一輪不會重複發
     // 失效的 token（解除安裝、清除網站資料）順手清掉
     await Promise.all(res.responses.map((r, i) => {
       const c = r.error && r.error.code;

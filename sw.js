@@ -1,4 +1,4 @@
-const _swBuild = '202611111248'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
+const _swBuild = '202610210524'; // ← 由 .github/workflows/bump-sw-version.yml 每次 push 自動更新，不用手動跑腳本
 const CACHE_NAME = 'aethelgard-' + _swBuild;
 
 const ASSETS = [
@@ -78,10 +78,18 @@ async function extFetch(e) {
   return (await net) || Response.error();
 }
 
+// 這次載入的頁面（index.html）是不是直接從網路拿到的新版？是的話，同一次載入的 JS／CSS 也要等新版，
+// 不能因為某一支檔案慢了 5 秒就退回舊快取——否則會變成「新 index.html ＋ 舊 todo.js」的混搭
+let navFresh = false;
+const NET_TIMEOUT_FRESH_MS = 20000;
+
 function ownFetch(e) {
   const req = e.request;
+  const isNav = req.mode === 'navigate';
+  let timedOut = false;
   const net = fetch(req, { cache: 'no-store' }) // ★ 明確繞過瀏覽器 HTTP 快取，避免 network-first 被舊的 HTTP 快取回應擋下來
     .then(res => {
+      if (isNav && res.ok && !timedOut) navFresh = true;
       if (res.ok) {
         const copy = res.clone();
         e.waitUntil(caches.open(CACHE_NAME).then(c => c.put(req, copy)));
@@ -93,7 +101,8 @@ function ownFetch(e) {
     (await caches.match(req, { ignoreSearch: true })) ||
     (req.mode === 'navigate' ? (await caches.match('/Aethelgard/index.html')) || (await caches.match('/Aethelgard/')) : undefined);
   // 網路太慢（有訊號但沒資料）時，不要讓使用者等到天荒地老：超過時間且有快取就先用快取
-  const timer = new Promise(resolve => setTimeout(() => resolve(fallback()), NET_TIMEOUT_MS));
+  const wait = (!isNav && navFresh) ? NET_TIMEOUT_FRESH_MS : NET_TIMEOUT_MS;
+  const timer = new Promise(resolve => setTimeout(() => { timedOut = true; if (isNav) navFresh = false; resolve(fallback()); }, wait));
   return Promise.race([net.catch(() => null), timer])
     .then(r => r || net.catch(async () => (await fallback()) || Response.error()));
 }
