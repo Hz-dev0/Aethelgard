@@ -31,7 +31,7 @@ function mergeS(L,R){const lu=L.updatedAt||0,ru=R.updatedAt||0,dead=Object.assig
   const lm=new Map((L.tasks||[]).map(t=>[t.id,t])),rm=new Map((R.tasks||[]).map(t=>[t.id,t])),ids=[...lm.keys(),...[...rm.keys()].filter(k=>!lm.has(k))],out=[];
   let conf=0;
   ids.forEach(id=>{const a=lm.get(id),b=rm.get(id);if(a&&b&&tj(a)!==tj(b))conf++;let pick=a&&b?(((a.mod||0)!==(b.mod||0))?((a.mod||0)>(b.mod||0)?a:b):(lu>=ru?a:b)):(a||b);   // 沒有 mod 的舊任務視為「最舊」，不再借用整份文件的時間去贏過對方剛改的版本
-    if(dead[id]&&dead[id]>(pick.mod||(a?lu:ru)))return;   // 刪除比最後一次修改還新 → 維持刪除
+    if(dead[id]&&dead[id]>(pick.mod||0))return;   // 刪除比最後一次修改還新 → 維持刪除
     out.push(pick)});
   const base=lu>=ru?L:R,oth=lu>=ru?R:L;
   /* 設定逐項合併：每一項各自記修改時間，誰最後改誰贏（不再整包跟著「比較新的那份」走，另一台改的設定才不會被蓋掉） */
